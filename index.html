@@ -33,6 +33,15 @@
       border-radius: 999px; pointer-events: none;
       transition: opacity 0.5s; display: none;
     }
+    #interact {
+      position: fixed; bottom: 64px; left: 50%;
+      transform: translateX(-50%);
+      color: white; font: bold 15px Arial, sans-serif;
+      background: rgba(0,0,0,0.55); padding: 8px 22px;
+      border-radius: 999px; pointer-events: none;
+      border: 2px solid rgba(255,255,255,0.35);
+      display: none; white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -43,6 +52,7 @@
 </div>
 <div id="ui">WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)</div>
 <div id="hint">🖱️ Kliknij by sterować kamerą</div>
+<div id="interact">E — wsiądź</div>
 
 <script type="importmap">
 {

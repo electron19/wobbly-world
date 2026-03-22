@@ -93,6 +93,17 @@ export class PhysicsWorld {
 
   // ─── Loop ─────────────────────────────────────────────────────────────────
 
+  // ─── Pojazdy ──────────────────────────────────────────────────────────────
+
+  /** Kinematyczny box dla pojazdu. Zwraca RigidBody. */
+  addVehicleBox(x, y, z, hw, hh, hd) {
+    const body = this.world.createRigidBody(
+      R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z)
+    );
+    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    return body;
+  }
+
   step(dt) {
     this.world.timestep = Math.min(dt, 1 / 30);
     this.world.step();

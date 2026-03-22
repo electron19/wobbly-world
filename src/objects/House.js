@@ -27,26 +27,28 @@ export class House extends Building {
     // ─── Korpus ──────────────────────────────────────────────────────────────
     this._box(0, h / 2, 0, w, h, d, wallMat);
 
-    // ─── Dach spadzisty ──────────────────────────────────────────────────────
-    this._roof(0, h + h * 0.28, 0, w * 0.9, h * 0.55, roofMat);
+    // ─── Dach dwuspadowy — baza piramidy styka się z górną ścianą budynku ─────
+    // BufferGeometry: baza na y=0, wierzchołek na y=roofH → localY = h (top ściany)
+    const roofH = h * 0.35;
+    this._roof(0, h, 0, w, d, roofH, roofMat);
 
-    // ─── Drzwi (front) ───────────────────────────────────────────────────────
-    this._box(0, 1.1, d / 2 + 0.02, 1.0, 2.2, 0.05, doorMat, { outline: 0.02 });
+    // ─── Drzwi (front) — wbudowane w ścianę, minimalne wystanie ──────────────
+    this._box(0, 1.1, d / 2 + 0.01, 1.0, 2.2, 0.04, doorMat, { outline: 0.015 });
 
     // ─── Okna (front) ────────────────────────────────────────────────────────
     [[-w * 0.3, h * 0.62], [w * 0.3, h * 0.62]].forEach(([xOff, yOff]) => {
-      this._box(xOff, yOff, d / 2 + 0.02, 1.2, 1.0, 0.05, winMat, { outline: 0.02 });
+      this._box(xOff, yOff, d / 2 + 0.01, 1.2, 1.0, 0.04, winMat, { outline: 0.015 });
       // Krzyż okienny
-      this._box(xOff, yOff, d / 2 + 0.04, 0.07, 1.0, 0.04, crossMat, { outline: false, cast: false });
-      this._box(xOff, yOff, d / 2 + 0.04, 1.2, 0.07, 0.04, crossMat, { outline: false, cast: false });
+      this._box(xOff, yOff, d / 2 + 0.025, 0.07, 1.0, 0.03, crossMat, { outline: false, cast: false });
+      this._box(xOff, yOff, d / 2 + 0.025, 1.2, 0.07, 0.03, crossMat, { outline: false, cast: false });
     });
 
     // ─── Okna (tył) ──────────────────────────────────────────────────────────
     [[-w * 0.3, h * 0.62], [w * 0.3, h * 0.62]].forEach(([xOff, yOff]) => {
-      this._box(xOff, yOff, -d / 2 - 0.02, 1.2, 1.0, 0.05, winMat, { outline: 0.02 });
+      this._box(xOff, yOff, -d / 2 - 0.01, 1.2, 1.0, 0.04, winMat, { outline: 0.015 });
     });
 
     // ─── Okno boczne ─────────────────────────────────────────────────────────
-    this._box(w / 2 + 0.02, h * 0.62, 0, 0.05, 1.0, 1.2, winMat, { outline: 0.02 });
+    this._box(w / 2 + 0.01, h * 0.62, 0, 0.04, 1.0, 1.2, winMat, { outline: 0.015 });
   }
 }

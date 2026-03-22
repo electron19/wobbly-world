@@ -50,14 +50,52 @@ export class Building extends WorldObject {
     return mesh;
   }
 
-  /** Dodaj dach w kształcie piramidy (4-boczna). */
-  _roof(localX, localY, localZ, w, h, mat) {
-    const mesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0, w * 0.72, h, 4),
-      mat
-    );
+  /**
+   * Dach — piramida 4-boczna zbudowana ręcznie jako BufferGeometry.
+   *
+   * Zalety nad CylinderGeometry:
+   *   - narożniki podstawy dokładnie pokrywają narożniki budynku (× 1.1)
+   *   - krawędzie podstawy równoległe do ścian budynku (brak skręcenia)
+   *   - brak zniekształceń z nierównomiernego skalowania scale.z
+   *
+   * Wierzchołki:
+   *   0: (+hw, 0, +hd) — prawy-przód
+   *   1: (-hw, 0, +hd) — lewy-przód
+   *   2: (-hw, 0, -hd) — lewy-tył
+   *   3: (+hw, 0, -hd) — prawy-tył
+   *   4: (0,   h,   0) — wierzchołek
+   *
+   * @param {number} w  szerokość budynku (oś X)
+   * @param {number} d  głębokość budynku (oś Z)
+   * @param {number} h  wysokość dachu
+   */
+  _roof(localX, localY, localZ, w, d, h, mat) {
+    const hw = (w * 1.1) / 2;
+    const hd = (d * 1.1) / 2;
+
+    const positions = new Float32Array([
+       hw, 0,  hd,  // 0
+      -hw, 0,  hd,  // 1
+      -hw, 0, -hd,  // 2
+       hw, 0, -hd,  // 3
+        0, h,   0,  // 4 wierzchołek
+    ]);
+
+    // Kolejność winding CCW widziana z zewnątrz każdej ściany
+    const indices = [
+      1, 0, 4,  // przód  (+Z)
+      2, 1, 4,  // lewo   (-X)
+      3, 2, 4,  // tył    (-Z)
+      0, 3, 4,  // prawo  (+X)
+    ];
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(localX, localY, localZ);
-    mesh.rotation.y = Math.PI / 4;
     mesh.castShadow = true;
     this.root.add(mesh);
     return mesh;
