@@ -42,7 +42,7 @@ export class VehiclePhysics {
   createVehicle(x, y, z, facing = 0) {
     const chassis = new CANNON.Body({
       mass:           2500,  // cięższa karoseria → więcej bezwładności
-      angularDamping: 0.72,  // tłumienie obrotów (stabilny tor jazdy)
+      angularDamping: 0.40,  // mniejsze tłumienie → tylny koniec może wychodzić (oversteer)
       linearDamping:  0.14,  // większy opór powietrza → płynne zatrzymywanie
     });
 
@@ -72,7 +72,7 @@ export class VehiclePhysics {
       maxSuspensionForce:   100000,
       dampingRelaxation:    3.2,    // wolniejszy powrót → "płynące" zawieszenie
       dampingCompression:   4.0,
-      frictionSlip:         2.0,    // przyczepność (niżej = bardziej ślizgawo)
+      frictionSlip:         1.9,    // bazowa przyczepność (nadpisywana per koło poniżej)
       rollInfluence:        0.03,   // prawie zerowe wywracanie
     };
 
@@ -86,6 +86,14 @@ export class VehiclePhysics {
     ].forEach(pos => vehicle.addWheel({ ...wheelOpts, chassisConnectionPointLocal: pos }));
 
     vehicle.addToWorld(this.world);
+
+    // Przednie koła: wyższa przyczepność → precyzyjne skręcanie
+    vehicle.wheelInfos[0].frictionSlip = 2.0;  // FL
+    vehicle.wheelInfos[1].frictionSlip = 2.0;  // FR
+    // Tylne koła: niższa przyczepność → naturalny oversteer RWD (GTA5-style)
+    vehicle.wheelInfos[2].frictionSlip = 1.3;  // RL
+    vehicle.wheelInfos[3].frictionSlip = 1.3;  // RR
+
     return { vehicle, chassis };
   }
 

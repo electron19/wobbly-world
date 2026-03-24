@@ -617,22 +617,12 @@ export class Car extends Entity {
         }
       }
 
-      // Dyferencjał Ackermanna — tylna oś (napęd RWD)
-      // Koło wewnętrzne (mniejszy promień) dostaje mniej momentu niż zewnętrzne
-      const WHEELBASE  = AXLE_ZF - AXLE_ZR;  // 3.04 m
-      const absSteer   = Math.abs(this._steer);
-      let rlForce = engineForce;
-      let rrForce = engineForce;
-      if (absSteer > 0.01) {
-        const R    = WHEELBASE / Math.tan(absSteer);   // promień skrętu
-        const k    = Math.max(0.1, (R - WHEEL_X) / (R + WHEEL_X)); // 0.1..1
-        if (this._steer > 0) { rlForce = engineForce * k; }  // skręt w lewo  → RL wewnętrzne
-        else                 { rrForce = engineForce * k; }  // skręt w prawo → RR wewnętrzne
-      }
-      this._vehicle.applyEngineForce(0,       0);  // FL — brak napędu (FWD off)
-      this._vehicle.applyEngineForce(0,       1);  // FR — brak napędu (FWD off)
-      this._vehicle.applyEngineForce(rlForce, 2);  // RL
-      this._vehicle.applyEngineForce(rrForce, 3);  // RR
+      // Otwarty dyferencjał tylny — oba koła dostają równy moment (GTA5-style)
+      // Oversteer pochodzi naturalnie z mniejszej przyczepności tylnych kół (VehiclePhysics.js)
+      this._vehicle.applyEngineForce(0,           0);  // FL — brak napędu
+      this._vehicle.applyEngineForce(0,           1);  // FR — brak napędu
+      this._vehicle.applyEngineForce(engineForce, 2);  // RL
+      this._vehicle.applyEngineForce(engineForce, 3);  // RR
       for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
     }
 
