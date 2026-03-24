@@ -748,40 +748,46 @@ export class WorldBuilder {
   // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────
 
   _addHills() {
-    // Narożnik NW
+    // ── Wzgórza w narożnikach świata ─────────────────────────────────────────
+    // Zasada: dist(cx, każda_droga) > radius + ROAD_CLEAR(4.5) + 2.0
+    // Drogi N-S: x=0,±65,±130 | Drogi E-W: z=0,±50,±100
+    //
+    // NW (-175,-175, r=30): od x=-130 → 45 > 36.5 ✓, od z=-100 → 75 > 36.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 30, height: 16, color: 0x3a8a15, shape: 'round' },
       this.vehiclePhysics,
-    ).placeAt(-145, 0, -145));
+    ).placeAt(-175, 0, -175));
 
-    // Narożnik SE
+    // SE (175,175, r=24): od x=130 → 45 > 30.5 ✓, od z=100 → 75 > 30.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 24, height: 11, color: 0x4a9a25, shape: 'mesa' },
       this.vehiclePhysics,
-    ).placeAt(148, 0, 148));
+    ).placeAt(175, 0, 175));
 
-    // Narożnik NE (nowy)
+    // NE (195,-195, r=28): od x=130 → 65 > 34.5 ✓, od z=-100 → 95 > 34.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 28, height: 14, color: 0x3d9020, shape: 'round' },
       this.vehiclePhysics,
     ).placeAt(195, 0, -195));
 
-    // Narożnik SW (nowy)
+    // SW (-195,195, r=26): od x=-130 → 65 > 32.5 ✓, od z=100 → 95 > 32.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 26, height: 12, color: 0x509525, shape: 'mesa' },
       this.vehiclePhysics,
     ).placeAt(-195, 0, 195));
 
-    // Dodatkowe wzgórza w skrajnych narożnikach świata
+    // Dodatkowe — głęboko w narożnikach, daleko od wszystkich dróg
+    // (-220,220, r=22): od x=-130 → 90 > 28.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 22, height: 10, color: 0x4a8a1a, shape: 'round' },
       this.vehiclePhysics,
-    ).placeAt(-210, 0, 210));
+    ).placeAt(-220, 0, 220));
 
+    // (220,-220, r=20): od x=130 → 90 > 26.5 ✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 20, height: 9, color: 0x558a2a, shape: 'mesa' },
       this.vehiclePhysics,
-    ).placeAt(210, 0, -210));
+    ).placeAt(220, 0, -220));
   }
 
   // ─── Drzewa ─────────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE = 5400;   // N na koło tylne
+const MAX_ENGINE_FORCE = 6750;   // N na koło tylne
 const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
 const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
 const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)

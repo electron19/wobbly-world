@@ -91,12 +91,9 @@ export class Hill extends WorldObject {
     const indices = new Uint32Array(physGeo.index.array);
     this._bodies.push(this.physics.addStaticTrimesh(verts, indices));
 
-    // ── Cannon-es: box aproksymacja dla pojazdów ──────────────────────────
+    // ── Cannon-es: dokładny trimesh — auto może wjeżdżać na stok ─────────
     if (this.vehiclePhysics) {
-      this.vehiclePhysics.addStaticBox(
-        wx, wy + height * 0.3, wz,
-        radius * sx * 0.5, height * 0.4, radius * sz * 0.5, 'ground',
-      );
+      this.vehiclePhysics.addStaticTrimesh(verts, indices);
     }
   }
 }

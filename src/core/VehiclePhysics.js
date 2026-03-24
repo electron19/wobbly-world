@@ -97,6 +97,16 @@ export class VehiclePhysics {
     return { vehicle, chassis };
   }
 
+  /**
+   * Statyczny trimesh — dokładna kolizja ze stokiem wzgórza dla pojazdów.
+   * Wierzchołki muszą być już w koordynatach świata (body siedzi w 0,0,0).
+   */
+  addStaticTrimesh(vertices, indices) {
+    const body = new CANNON.Body({ mass: 0 });
+    body.addShape(new CANNON.Trimesh(Array.from(vertices), Array.from(indices)));
+    this.world.addBody(body);
+  }
+
   /** Statyczny box (budynek, mur) — taki sam interfejs jak Rapier.addStaticBox */
   addStaticBox(x, y, z, hw, hh, hd, material = 'wall') {
     const body = new CANNON.Body({ mass: 0 });
