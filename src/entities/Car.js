@@ -47,6 +47,7 @@ export class Car extends Entity {
     this._prevHandbrake = false;
     // Wydech
     this._exhaust       = null;   // inicjalizowany w initPhysics()
+    this._rpmFactor     = 0;      // 0=jałowy, 1=pełne obroty (ustawiany w update)
     // Materiały świateł (do dynamicznej zmiany koloru)
     this._tailMat       = null;   // stop + pozycyjne tylne
     this._revMat        = null;   // cofania
@@ -496,18 +497,24 @@ export class Car extends Entity {
     const ex = this._exhaust;
     if (!ex) return;
 
-    // Spawn: tylko gdy auto zajęte (silnik pracuje) — co 0.10s = ~10 kłębów/s
+    const rpm = this._rpmFactor ?? 0.05;
+
+    // Spawn: interwał maleje przy wyższych obrotach (0.22s jałowy → 0.03s pełny gaz)
+    // Przy rpm > 0.65 spawnjemy dwa kłęby naraz
+    const interval = 0.22 - rpm * 0.19;
     ex.timer += dt;
-    if (this.isOccupied && ex.timer > 0.10) {
+    if (this.isOccupied && ex.timer > interval) {
       ex.timer = 0;
-      this._spawnExhaustParticle();
+      this._spawnExhaustParticle(rpm);
+      if (rpm > 0.65) this._spawnExhaustParticle(rpm);
     }
 
     // Aktualizuj istniejące cząsteczki
+    const maxLife = 2.2 - rpm * 0.8;   // krótsze życie przy dużym rpm (mniej bałaganu)
     for (let i = ex.particles.length - 1; i >= 0; i--) {
       const p = ex.particles[i];
       p.life += dt;
-      const t = p.life / 2.2;   // dłużej unosi się w powietrzu
+      const t = p.life / maxLife;
       if (t >= 1) {
         this._scene.remove(p.mesh);
         p.mesh.geometry.dispose();
@@ -518,34 +525,43 @@ export class Car extends Entity {
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.mesh.scale.setScalar(0.4 + t * 2.2);          // rośnie szybciej i większa
-      p.mesh.material.opacity = 0.40 * (1 - t * t);
+      p.mesh.scale.setScalar(0.3 + t * (1.5 + rpm * 1.2));
+      p.mesh.material.opacity = p.maxOpacity * (1 - t * t);
     }
   }
 
-  _spawnExhaustParticle() {
-    // Rura wydechowa jest w lokalnym (0.65, ~0.77, ~-2.31)
-    // Transformacja Y-rotacją (facing = root.rotation.y)
+  _spawnExhaustParticle(rpm = 0.05) {
     const f  = this.facing;
     const lx = 0.65, ly = 0.77, lz = -2.31;
     const wx = this.root.position.x + lx * Math.cos(f) + lz * Math.sin(f);
     const wy = this.root.position.y + ly;
     const wz = this.root.position.z - lx * Math.sin(f) + lz * Math.cos(f);
 
-    const geo = new THREE.SphereGeometry(0.13, 5, 4);
+    // Rozmiar i kolor cząsteczki skalowane przez obroty
+    // Jałowy: mały jasnoszary; pełny gaz: duży ciemnoszary
+    const radius  = 0.09 + rpm * 0.14;                      // 0.09..0.23
+    const opacity = 0.18 + rpm * 0.38;                      // 0.18..0.56
+    const grey    = Math.round(180 - rpm * 80);              // 180..100 (ciemnieje)
+    const color   = (grey << 16) | (grey << 8) | grey;
+
+    const geo = new THREE.SphereGeometry(radius, 5, 4);
     const mat = new THREE.MeshBasicMaterial({
-      color: 0xAAAAAA, transparent: true, opacity: 0.40, depthWrite: false,
+      color, transparent: true, opacity, depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(wx, wy, wz);
     mesh.renderOrder = 1;
     this._scene.add(mesh);
 
+    // Przy wysokich obrotach: kłąb wystrzelony ku tyłowi i górze
+    const backSpeed = rpm * 2.2;
     this._exhaust.particles.push({
-      mesh, life: 0,
-      vx: (Math.random() - 0.5) * 0.40,
-      vy: 1.1 + Math.random() * 0.7,
-      vz: (Math.random() - 0.5) * 0.40,
+      mesh,
+      life: 0,
+      maxOpacity: opacity,
+      vx: (Math.random() - 0.5) * 0.35 - Math.sin(f) * backSpeed,
+      vy: 0.7 + rpm * 1.4 + Math.random() * 0.4,
+      vz: (Math.random() - 0.5) * 0.35 - Math.cos(f) * backSpeed,
     });
   }
 
@@ -652,8 +668,13 @@ export class Car extends Entity {
     this._isHandbraking = handBrake && absSpd > 5;
     this._isBraking     = !handBrake && brakeForce > MAX_BRAKE_FORCE * 0.4 && absSpd > 6;
 
-    // ── Skręt kół przednich (wizualnie) — synkronizowany w lateUpdate ────────
-    // Nie robimy tu nic — obrót kół pobierany z cannon-es w lateUpdate()
+    // ── RPM factor — używany przez wydech i inne efekty ──────────────────────
+    // 0 = jałowy, 1 = pełne obroty; kombinacja prędkości i gazu
+    const speedNorm = Math.min(1, Math.abs(speedKmh) / 120);
+    this._rpmFactor  = Math.min(1, speedNorm * 0.5 + Math.max(0, gasIn) * 0.8);
+    // Zachowaj prędkość i gaz dla lateUpdate (obrót kół)
+    this._speedKmh   = speedKmh;
+    this._gasIn      = gasIn;
   }
 
   /**
@@ -679,23 +700,25 @@ export class Car extends Entity {
     this.root.position.set(pos.x, this._rootY, pos.z);
     this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);
 
-    // Per-koło: zawieszenie (Y względem roota) + obrót + skręt
-    // avgSuspLen = podstawa do wyrównania — koła oscylują symetrycznie względem rootY
+    // Per-koło: zawieszenie + obrót + skręt
     const avgSuspLen = (wi[0].suspensionLength + wi[1].suspensionLength
                       + wi[2].suspensionLength + wi[3].suspensionLength) / 4;
+
+    // Obrót kół: speed-based, oś lokalna X pojazdu (bez wpływu kierunku geograficznego)
+    // speedKmh > 0 = jedzie do przodu → inner.rotation.x maleje (obrót zgodny z ruchem)
+    // Geometria: tire.rotation.z=PI/2 → oś cylindra leży wzdłuż X pojazdu
+    //            ujemny przyrost rotation.x = zgodny z ruchem do przodu (prawidłowy kierunek)
+    const dt        = this._dt ?? (1 / 60);
+    const speedKmh  = this._speedKmh ?? 0;
+    const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
+
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
       const w = wi[i];
-
-      // Zawieszenie: koło wyżej gdy bardziej ściśnięte niż przeciętne (np. przeszkoda)
+      // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
-
-      // Obrót koła z cannon-es — wi.rotation to kąt skumulowany wokół osi -X koła
-      // Znak: axleLocal=(-1,0,0) → obrót w cannon-es = obrót wokół -X
-      //        → Three.js rotation.x = -wi.rotation
-      // Efekt: tylne koła spinują się szybciej niż przednie przy gazie (burnout)
-      inner.rotation.x = -w.rotation;
-
-      // Skręt kół przednich z cannon-es (źródło prawdy)
+      // Obrót: -= bo obrót do przodu to ujemna rotacja wokół lokalnej +X
+      inner.rotation.x -= rollDelta;
+      // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
     });
 
