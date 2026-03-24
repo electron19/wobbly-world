@@ -72,10 +72,10 @@ export class Car extends Entity {
     const chromeMat= toonMat(0xDEDEDE);
     const blackMat = toonMat(0x111111);
     const sillMat  = toonMat(0x222222);
-    const headMat  = toonMat(0xFFFDE0);   // reflektory — biało-żółte
-    const drlMat   = toonMat(0xFFFFFF);   // DRL strip
-    this._tailMat  = toonMat(0x550000);    // stop — domyślnie przyciemnione (parking)
-    this._revMat   = toonMat(0x1A1000);   // cofania — domyślnie wyłączone
+    const headMat  = new THREE.MeshBasicMaterial({ color: 0xFFFDE0 }); // reflektory — zawsze jasne
+    const drlMat   = new THREE.MeshBasicMaterial({ color: 0xFFFFFF }); // DRL strip
+    this._tailMat  = new THREE.MeshBasicMaterial({ color: 0x330000 }); // stop — przyciemnione (off)
+    this._revMat   = new THREE.MeshBasicMaterial({ color: 0x0A0800 }); // cofania — wyłączone
     const tailMat  = this._tailMat;
     const indMat   = toonMat(0xFF8800);   // kierunkowskazy
     const revMat   = this._revMat;
@@ -685,8 +685,8 @@ export class Car extends Entity {
     if (!this._tailMat || !this._revMat) return;
     const braking   = this._isBraking || this._isHandbraking;
     const reversing = this.speedKmh < -1;
-    this._tailMat.color.setHex(braking   ? 0xFF1100 : 0x550000);
-    this._revMat.color.setHex( reversing ? 0xFFFFFF : 0x1A1000);
+    this._tailMat.color.setHex(braking   ? 0xFF1100 : 0x330000);  // ON: jaskrawo czerwony
+    this._revMat.color.setHex( reversing ? 0xFFFFFF : 0x0A0800);  // ON: biały
   }
 
   /**
