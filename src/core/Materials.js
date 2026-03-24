@@ -6,13 +6,22 @@ const _toonGrad = new THREE.DataTexture(_gradData, 4, 1, THREE.RedFormat);
 _toonGrad.minFilter = _toonGrad.magFilter = THREE.NearestFilter;
 _toonGrad.needsUpdate = true;
 
+// Cache materiałów — wielokrotne wywołania z tym samym kolorem zwracają TEN SAM obiekt.
+// Dzięki temu WebGL może batchować draw calls (jeden shader state = wiele mesh).
+const _matCache = new Map();
+
 /**
- * Tworzy MeshToonMaterial z globalnym gradientem.
+ * Tworzy (lub zwraca z cache) MeshToonMaterial z globalnym gradientem.
  * @param {number} color hex color
  */
 export function toonMat(color) {
-  return new THREE.MeshToonMaterial({ color, gradientMap: _toonGrad });
+  if (_matCache.has(color)) return _matCache.get(color);
+  const mat = new THREE.MeshToonMaterial({ color, gradientMap: _toonGrad });
+  _matCache.set(color, mat);
+  return mat;
 }
+
+export { _toonGrad as toonGrad };
 
 /**
  * Dodaje czarny outline do meshu (technika BackSide).

@@ -7,8 +7,10 @@ const SPEED    = 5.5;
 const JUMP_VEL = 9.5;
 const GRAVITY  = 22;
 
-// Kapsuła: halfH=0.4, radius=0.3 → środek kapsuły jest 0.7 nad stopami
-const CAPSULE_OFFSET_Y = 0.7;
+// Kapsuła: halfH=0.4, radius=0.3 → środek kapsuły 0.7 nad dołem kapsuły.
+// Buty MM są w lokalnym y≈−0.23, więc root musi być 0.23 wyżej niż ziemia:
+// root = body.y − 0.47  →  buty wychodzą na y≈0 (poziom podłogi).
+const CAPSULE_OFFSET_Y = 0.47;
 
 // ─── Spring (sprężyna do efektu wobbly) ───────────────────────────────────────
 class Spring {
@@ -32,6 +34,7 @@ export class Player extends Entity {
     this.velocityY = 0;
     this.facing    = 0;
 
+    this._walkPhase = 0;
     this.spSquishY = new Spring(22, 0.80);
     this.spSquishX = new Spring(16, 0.70);
     this.spLean    = new Spring(12, 0.70);
@@ -113,13 +116,16 @@ export class Player extends Entity {
    * Oblicza ruch i ustawia nextKinematicTranslation w Rapier.
    * Wywołaj PRZED physics.step().
    */
-  update(dt, input, camera, physics) {
+  update(dt, input, camera, physics, audio, onRoad = false) {
     // Kierunek ruchu z klawiatury (względem kamery)
     let mx = 0, mz = 0;
     if (input.isDown('KeyW') || input.isDown('ArrowUp'))    mz -= 1;
     if (input.isDown('KeyS') || input.isDown('ArrowDown'))  mz += 1;
     if (input.isDown('KeyA') || input.isDown('ArrowLeft'))  mx -= 1;
     if (input.isDown('KeyD') || input.isDown('ArrowRight')) mx += 1;
+    // Lewy analog pada
+    if (Math.abs(input.pad.leftX) > 0.12) mx += input.pad.leftX;
+    if (Math.abs(input.pad.leftY) > 0.12) mz += input.pad.leftY;
 
     const fwd   = camera.getForwardDir();
     const right = camera.getRightDir();
@@ -130,11 +136,12 @@ export class Player extends Entity {
     const isMoving = move.lengthSq() > 0.01;
 
     // Skok
-    if ((input.isDown('Space') || input.isDown('KeyZ')) && this.grounded) {
+    if ((input.isDown('Space') || input.isDown('KeyZ') || input.isPadButtonPressed(0)) && this.grounded) {
       this.velocityY = JUMP_VEL;
       this.grounded  = false;
       this.spSquishY.kick(-0.4);
       this.spSquishX.kick(0.2);
+      audio?.playJump();
     }
 
     // Grawitacja (ręczna dla kinematic body)
@@ -160,6 +167,7 @@ export class Player extends Entity {
       if (this.velocityY < -4) {
         this.spSquishY.kick(-0.5);
         this.spSquishX.kick(0.3);
+        audio?.playLand();
       }
       this.velocityY = 0;
     }
@@ -183,10 +191,13 @@ export class Player extends Entity {
     const sx = 1 + this.spSquishX.pos;
     this.bodyMesh.scale.set(sx, sy, sx);
 
-    // ─── Animacja kończyn ──────────────────────────────────────────────────
-    const t = performance.now() / 1000;
+    // ─── Kroki (dźwięk) ────────────────────────────────────────────────────────
+    audio?.checkFootstep(this._walkPhase, isMoving, this.grounded, onRoad);
+
+    // ─── Animacja kończyn — faza proporcjonalna do przebytej drogi ────────────
+    if (isMoving) this._walkPhase += SPEED * dt * 5.5; // 5.5 rad/jednostkę ≈ krok co ~1.1 m
     if (isMoving) {
-      const swing = Math.sin(t * 10) * 0.35;
+      const swing = Math.sin(this._walkPhase) * 0.50;
       this.lLeg.rotation.x =  swing;
       this.rLeg.rotation.x = -swing;
       this.lArm.rotation.x = -swing * 0.6;

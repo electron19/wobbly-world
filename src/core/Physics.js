@@ -14,7 +14,7 @@
 let R = null; // Rapier module
 
 export async function initRapier() {
-  R = await import('https://cdn.skypack.dev/@dimforge/rapier3d-compat');
+  R = await import('/lib/rapier3d-compat.mjs');
   await R.init();
 }
 
@@ -42,6 +42,13 @@ export class PhysicsWorld {
       R.RigidBodyDesc.fixed().setTranslation(x, y, z)
     );
     this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    return body;
+  }
+
+  /** Statyczny trimesh — dokładna kolizja z geometrią siatki (wzgórza itp.) */
+  addStaticTrimesh(vertices, indices) {
+    const body = this.world.createRigidBody(R.RigidBodyDesc.fixed());
+    this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices), body);
     return body;
   }
 
@@ -95,13 +102,46 @@ export class PhysicsWorld {
 
   // ─── Pojazdy ──────────────────────────────────────────────────────────────
 
-  /** Kinematyczny box dla pojazdu. Zwraca RigidBody. */
+  /** Kinematyczny box dla pojazdu. Zwraca { body, collider }. */
   addVehicleBox(x, y, z, hw, hh, hd) {
     const body = this.world.createRigidBody(
       R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z)
     );
-    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
-    return body;
+    const collider = this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    return { body, collider };
+  }
+
+  /**
+   * Tworzy CharacterController dla pojazdu.
+   * Każde auto ma swój własny CC (inne ustawienia niż gracz).
+   */
+  createVehicleCC() {
+    const cc = this.world.createCharacterController(0.01);
+    cc.setSlideEnabled(true);
+    cc.setMaxSlopeClimbAngle(18 * Math.PI / 180);  // auta nie wspinają się
+    cc.setMinSlopeSlideAngle(12 * Math.PI / 180);
+    cc.enableAutostep(0.15, 0.25, false);           // mały skok na krawężnik
+    cc.enableSnapToGround(0.25);                    // trzyma auto przy ziemi
+    cc.setApplyImpulsesToDynamicBodies(true);
+    return cc;
+  }
+
+  /**
+   * Przesuwa pojazd przez Rapier z collision detection.
+   * Analogiczne do movePlayer() — używaj PRZED physics.step().
+   *
+   * @returns {{ movement: {x,y,z}, grounded: boolean }}
+   */
+  moveVehicle(cc, body, collider, desired) {
+    cc.computeColliderMovement(collider, desired);
+    const mv  = cc.computedMovement();
+    const pos = body.translation();
+    body.setNextKinematicTranslation({
+      x: pos.x + mv.x,
+      y: pos.y + mv.y,
+      z: pos.z + mv.z,
+    });
+    return { movement: mv, grounded: cc.computedGrounded() };
   }
 
   step(dt) {

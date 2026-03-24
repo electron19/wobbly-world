@@ -2,165 +2,216 @@ import * as THREE from 'three';
 import { Player } from './Player.js';
 import { toonMat, addOutline } from '../core/Materials.js';
 
-// ─── Kolory Michael Myers ──────────────────────────────────────────────────
-const COV   = 0x1C2340;  // granatowy kombinezon
-const MASK  = 0xEEE8D8;  // kremowo-biała maska
-const HAIR  = 0x1A1008;  // ciemne włosy
-const BOOT  = 0x111111;  // czarne buty
-const BLADE = 0xDDDDCC;  // stal noża
-const HNDL  = 0x3A2510;  // drewniana rękojeść
+// ─── Kolory ────────────────────────────────────────────────────────────────
+const YELLOW  = 0xFFE040;   // żółte ciało
+const YELLOW_D = 0xC8A800;  // ciemniejszy akcent / stawy
+const VISOR   = 0x0D1A30;   // ciemna przyłbica (beztwarzowy manekin)
+const BOOT    = 0x1A1A2E;   // ciemne buty
+const PACK    = 0x1C1C2A;   // GrabPack korpus
+const HAND_L  = 0xFF3311;   // lewa łapka  — czerwona
+const HAND_R  = 0x2266FF;   // prawa łapka — niebieska
 
 /**
- * Michael Myers — nadpisuje wygląd gracza.
- * Fizyka, ruch, sprężyny i animacja kończyn bez zmian.
+ * The Player (Poppy Playtime) — szczupły, wysoki, żółty manekin.
+ * Okrągły tułów, beztwarzowa głowa, GrabPack z dłońmi i palcami DO PRZODU.
+ *
+ * inner.rotation.x = +π/2 → oś Y kapsuły → +Z w świecie (do przodu) ✓
+ * Układ inner:  inner-X = świat-X,  inner-Y → świat+Z,  inner-Z → świat-Y
+ * Palce w inner: rotation.x = -π/2 → wskazują inner-Z → świat+Y (góra) ✓
  */
 export class PlayerMichaelMyers extends Player {
 
-  // ─── Body = korpus kombinezonu (spring squish tu działa) ─────────────────
+  // ─── Ciało ────────────────────────────────────────────────────────────────
   _buildBody() {
-    // Korpus — prostopadłościan kombinezonu
-    this.bodyGeo  = new THREE.BoxGeometry(0.82, 0.68, 0.50);
+    // Tułów — okrągła sfera (smukła: mały promień)
+    this.bodyGeo  = new THREE.SphereGeometry(0.28, 20, 14);
     this.bodyOrig = this.bodyGeo.attributes.position.array.slice();
-    this.bodyMesh = new THREE.Mesh(this.bodyGeo, toonMat(COV));
-    this.bodyMesh.position.y = 0.55;
+    this.bodyMesh = new THREE.Mesh(this.bodyGeo, toonMat(YELLOW));
+    this.bodyMesh.scale.set(1, 1.45, 0.85);   // rozciągnięta w górę, spłaszczona w głąb
+    this.bodyMesh.position.y = 0.54;
     this.bodyMesh.castShadow = true;
-    addOutline(this.bodyMesh, 0.06);
+    addOutline(this.bodyMesh, 0.04);
     this.root.add(this.bodyMesh);
 
-    // Głowa — biała maska
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.30, 16, 12), toonMat(MASK));
-    head.scale.set(1, 1.12, 0.95);
-    head.position.y = 1.02;
+    // Plakietka pracownika
+    const badge = new THREE.Mesh(
+      new THREE.BoxGeometry(0.14, 0.08, 0.05), toonMat(0xFFFFAA),
+    );
+    badge.position.set(-0.10, 0.60, 0.155);
+    this.root.add(badge);
+
+    // Szyja
+    const neck = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.11, 0.13, 10), toonMat(YELLOW_D),
+    );
+    neck.position.y = 0.97;
+    this.root.add(neck);
+
+    // Głowa — duża okrągła sfera
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 20, 16), toonMat(YELLOW),
+    );
+    head.position.y = 1.20;
     head.castShadow = true;
-    addOutline(head, 0.05);
+    addOutline(head, 0.04);
     this.root.add(head);
 
-    // Włosy (ciemna kalota z tyłu głowy)
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(0.31, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.48), toonMat(HAIR));
-    hair.scale.set(1, 1.1, 0.95);
-    hair.position.y = 1.05;
-    hair.rotation.x = -0.15;
-    this.root.add(hair);
+    // Przyłbica — beztwarzowa (jak w oryginale)
+    const visorGeo = new THREE.SphereGeometry(
+      0.258, 18, 10, 0, Math.PI * 2, 0.45, Math.PI * 0.60,
+    );
+    const visor = new THREE.Mesh(
+      visorGeo, new THREE.MeshBasicMaterial({ color: VISOR }),
+    );
+    visor.rotation.x = 0.20;
+    visor.position.set(0, 1.21, 0.09);
+    this.root.add(visor);
 
-    // Kołnierz kombinezonu
-    const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.22, 0.12, 10), toonMat(COV));
-    collar.position.y = 0.91;
-    this.root.add(collar);
+    // ── GrabPack na plecach ───────────────────────────────────────────────
+    const packBox = new THREE.Mesh(
+      new THREE.BoxGeometry(0.40, 0.35, 0.16), toonMat(PACK),
+    );
+    packBox.position.set(0, 0.58, -0.23);
+    addOutline(packBox, 0.025);
+    this.root.add(packBox);
+
+    // Wyloty kabli (lewa=czerwona, prawa=niebieska)
+    [[-0.10, HAND_L], [0.10, HAND_R]].forEach(([ox, col]) => {
+      const nozzle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.042, 0.042, 0.08, 8), toonMat(col),
+      );
+      nozzle.rotation.x = Math.PI / 2;
+      nozzle.position.set(ox, 0.64, -0.16);
+      this.root.add(nozzle);
+    });
   }
 
-  // ─── Oczy — ciemne wgłębienia w masce ────────────────────────────────────
-  _buildEyes() {
-    const eyeMat  = new THREE.MeshBasicMaterial({ color: 0x0D0D0D });
-    const eyeMat2 = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  // Brak twarzy — zastąpiona przyłbicą w _buildBody
+  _buildEyes() {}
 
-    [-1, 1].forEach(side => {
-      // Owal oka
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6), eyeMat);
-      eye.scale.set(1.4, 0.9, 0.5);
-      eye.position.set(side * 0.115, 1.04, 0.27);
-      this.root.add(eye);
+  // ─── Kończyny ─────────────────────────────────────────────────────────────
+  _buildLimbs() {
+    this.lArm = this._makeGrabArm(-1, HAND_L);   // lewa  — czerwona
+    this.rArm = this._makeGrabArm( 1, HAND_R);   // prawa — niebieska
+    this.lLeg = this._makePlayerLeg(-1);
+    this.rLeg = this._makePlayerLeg( 1);
+  }
 
-      // Głębszy środek
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), eyeMat2);
-      pupil.scale.set(1.3, 0.8, 0.5);
-      pupil.position.set(side * 0.115, 1.04, 0.30);
-      this.root.add(pupil);
+  /**
+   * Mechaniczne ramię GrabPacka z dłonią i palcami.
+   *
+   * Układ współrzędnych inner (po obrocie +π/2 wokół X):
+   *   inner +X  →  świat +X  (lewo/prawo)
+   *   inner +Y  →  świat +Z  (do przodu)       ← kabel wzdłuż tej osi
+   *   inner +Z  →  świat −Y  (w dół)
+   *   inner −Z  →  świat +Y  (w górę)
+   *
+   * Palce: rotation.x = −π/2  →  oś Y palca → inner −Z → świat +Y (do góry) ✓
+   * Kciuk: rotation.z = −side·π/2  →  oś Y kciuka → side·inner+X → świat side·X (na bok) ✓
+   */
+  _makeGrabArm(side, handColor) {
+    const outer = new THREE.Group();
+    const inner = new THREE.Group();
+    const mat   = toonMat(handColor);
+
+    // ── Kabel ────────────────────────────────────────────────────────────
+    const cable = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.034, 0.44, 4, 8), toonMat(PACK),
+    );
+    cable.castShadow = true;
+    inner.add(cable);
+
+    // Złącze kabel→dłoń
+    const wrist = new THREE.Mesh(
+      new THREE.SphereGeometry(0.058, 8, 6), toonMat(PACK),
+    );
+    wrist.position.y = 0.27;
+    inner.add(wrist);
+
+    // ── Dłoń ─────────────────────────────────────────────────────────────
+    const hand = new THREE.Group();
+    hand.position.y = 0.34;   // = 0.34 jednostki DO PRZODU (inner-Y → świat+Z)
+    inner.add(hand);
+
+    // Śródręcze
+    const palm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.20, 0.052, 0.13), mat,
+    );
+    addOutline(palm, 0.014);
+    hand.add(palm);
+
+    // 4 palce (wskazujące DO GÓRY w świecie):
+    //   rotation.x = −π/2 → Y palca → inner −Z → świat +Y ✓
+    //   position.z  < 0   → przesunięcie w górę (inner −Z = świat +Y)
+    const fDefs = [
+      { x: -0.072, len: 0.092 },   // wskazujący
+      { x: -0.024, len: 0.110 },   // środkowy (najdłuższy)
+      { x:  0.024, len: 0.100 },   // serdeczny
+      { x:  0.072, len: 0.076 },   // mały
+    ];
+    fDefs.forEach(({ x, len }) => {
+      const seg = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.020, len, 3, 6), mat,
+      );
+      seg.rotation.x   = -Math.PI / 2;           // wskazuje w górę
+      seg.position.set(x, 0.03, -(0.065 + len / 2)); // ponad dłonią
+      hand.add(seg);
+
+      // Staw — mała sfera przy nasadzie palca
+      const knuckle = new THREE.Mesh(
+        new THREE.SphereGeometry(0.024, 6, 5), toonMat(YELLOW_D),
+      );
+      knuckle.position.set(x, 0.03, -0.068);
+      hand.add(knuckle);
     });
 
-    // Nos — mały trójkąt cieniu
-    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.032, 6, 5), toonMat(0xC8C2B0));
-    nose.scale.set(0.9, 0.6, 0.5);
-    nose.position.set(0, 0.985, 0.295);
-    this.root.add(nose);
+    // Kciuk (wskazuje na bok):
+    //   rotation.z = −side·π/2 → Y kciuka → side·inner+X → świat side·X ✓
+    const thumb = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.024, 0.072, 3, 6), mat,
+    );
+    thumb.rotation.z = -side * Math.PI / 2;
+    thumb.position.set(-side * 0.11, 0.01, -0.022);
+    hand.add(thumb);
+
+    // ── Obrót inner: kabel/dłoń wskazują DO PRZODU (+Z w świecie) ─────────
+    inner.rotation.x = Math.PI / 2;
+    outer.add(inner);
+
+    outer.position.set(side * 0.26, 0.70, 0.05);
+    outer.rotation.z = side * 0.06;
+    this.root.add(outer);
+    return outer;
   }
 
-  // ─── Kończyny — kombinezon + but + nóż w prawej ręce ─────────────────────
-  _buildLimbs() {
-    const covMat  = toonMat(COV);
-    const bootMat = toonMat(BOOT);
-
-    this.lArm = this._makeMMArm(-1, covMat, false);
-    this.rArm = this._makeMMArm( 1, covMat, true);
-    this.lLeg = this._makeMMleg(-1, covMat, bootMat);
-    this.rLeg = this._makeMMleg( 1, covMat, bootMat);
-  }
-
-  _makeMMArm(side, mat, hasKnife) {
+  // ─── Nogi ─────────────────────────────────────────────────────────────────
+  _makePlayerLeg(side) {
     const g = new THREE.Group();
 
-    const arm = new THREE.Mesh(new THREE.CapsuleGeometry(0.095, 0.30, 4, 8), mat);
-    arm.castShadow = true;
-    g.add(arm);
+    const leg = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.088, 0.28, 4, 8), toonMat(YELLOW),
+    );
+    leg.position.y = -0.12;
+    leg.castShadow = true;
+    addOutline(leg, 0.025);
+    g.add(leg);
 
-    // Rękawica (ciemna)
-    const glove = new THREE.Mesh(new THREE.SphereGeometry(0.10, 8, 6), toonMat(BOOT));
-    glove.scale.set(1, 0.85, 1);
-    glove.position.y = -0.23;
-    g.add(glove);
+    // Staw kolanowy
+    const knee = new THREE.Mesh(
+      new THREE.SphereGeometry(0.096, 8, 6), toonMat(YELLOW_D),
+    );
+    knee.position.y = -0.22;
+    g.add(knee);
 
-    if (hasKnife) this._addKnife(g);
-
-    g.position.set(side * 0.52, 0.60, 0);
-    g.rotation.z = side * -0.20;
-    this.root.add(g);
-    return g;
-  }
-
-  _makeMMleg(side, legMat, bootMat) {
-    const g = new THREE.Group();
-
-    const thigh = new THREE.Mesh(new THREE.CapsuleGeometry(0.125, 0.26, 4, 8), legMat);
-    thigh.position.y = -0.12;
-    thigh.castShadow = true;
-    g.add(thigh);
-
-    const boot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.30), bootMat);
-    boot.position.set(side * 0.01, -0.32, 0.04);
-    addOutline(boot, 0.025);
+    const boot = new THREE.Mesh(
+      new THREE.BoxGeometry(0.17, 0.13, 0.26), toonMat(BOOT),
+    );
+    boot.position.set(side * 0.01, -0.30, 0.04);
+    addOutline(boot, 0.018);
     g.add(boot);
 
-    g.position.set(side * 0.22, 0.18, 0);
+    g.position.set(side * 0.17, 0.18, 0);
     this.root.add(g);
     return g;
-  }
-
-  _addKnife(armGroup) {
-    const bladeMat = toonMat(BLADE);
-    const hndlMat  = toonMat(HNDL);
-
-    // Rękojeść
-    const hndl = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.032, 0.18, 7), hndlMat);
-    hndl.position.set(0.04, -0.38, 0.06);
-    hndl.rotation.z = 0.35;
-    armGroup.add(hndl);
-
-    // Klinga (spłaszczony ostry kształt z BufferGeometry)
-    const bladeGeo = new THREE.BufferGeometry();
-    const v = new Float32Array([
-      // przód klingi (dwa trójkąty)
-       0.00,  0.32, 0.00,   // wierzchołek
-      -0.015, 0.00, 0.012,  // lewy dół
-       0.015, 0.00, 0.012,  // prawy dół
-
-       0.00,  0.32, 0.00,
-       0.015, 0.00, 0.012,
-      -0.015, 0.00,-0.010,
-
-       0.00,  0.32, 0.00,
-      -0.015, 0.00,-0.010,
-      -0.015, 0.00, 0.012,
-
-       0.00,  0.32, 0.00,
-      -0.015, 0.00,-0.010,
-       0.015, 0.00, 0.012,
-    ]);
-    bladeGeo.setAttribute('position', new THREE.BufferAttribute(v, 3));
-    bladeGeo.computeVertexNormals();
-
-    const blade = new THREE.Mesh(bladeGeo, bladeMat);
-    blade.position.set(0.04, -0.22, 0.06);
-    blade.rotation.z = 0.35;
-    blade.castShadow = true;
-    armGroup.add(blade);
   }
 }

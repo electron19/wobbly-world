@@ -19,9 +19,10 @@ import * as THREE from 'three';
  *   - Drzwi jako trigger (Rapier sensor collider) → transition do interior zone
  */
 export class WorldObject {
-  constructor(scene, physics) {
-    this.scene   = scene;
-    this.physics = physics;
+  constructor(scene, physics, vehiclePhysics = null) {
+    this.scene          = scene;
+    this.physics        = physics;
+    this.vehiclePhysics = vehiclePhysics;
     this.root    = new THREE.Group();
     this._bodies = []; // Rapier static RigidBodies
     this.scene.add(this.root);

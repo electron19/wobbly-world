@@ -1,9 +1,13 @@
 import * as THREE from 'three';
 import { initRapier, PhysicsWorld } from './core/Physics.js';
+import { VehiclePhysics }           from './core/VehiclePhysics.js';
 import { InputManager }             from './core/InputManager.js';
 import { ThirdPersonCamera }        from './core/Camera.js';
 import { PlayerMichaelMyers }       from './entities/PlayerMichaelMyers.js';
 import { WorldBuilder }             from './world/WorldBuilder.js';
+import { SEED }                     from './core/RNG.js';
+import { AudioManager }             from './core/AudioManager.js';
+import { isOnRoad }                 from './world/zones.js';
 
 const PLAYER_SPAWN  = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST    = 3.8;   // max odległość do wejścia do auta
@@ -30,38 +34,44 @@ const CAM_DIST_CAR  = 12;    // dystans kamery w aucie
  */
 export class Game {
   constructor() {
-    this.scene       = null;
-    this.renderer    = null;
-    this.camera3     = null;
-    this.physics     = null;
-    this.input       = null;
-    this.camCtrl     = null;
-    this.player      = null;
-    this.cars        = [];
-    this._drivingCar = null;   // aktualnie prowadzone auto
-    this._eWasDown   = false;  // edge detection klawisza E
-    this._lastTs     = 0;
-    this._interactEl      = null;
-    this._uiEl            = null;
+    this.scene          = null;
+    this.renderer       = null;
+    this.camera3        = null;
+    this.physics        = null;
+    this.vehiclePhysics = null;
+    this.input          = null;
+    this.camCtrl        = null;
+    this.player         = null;
+    this.cars           = [];
+    this.audio          = new AudioManager();
+    this._drivingCar    = null;
+    this._eWasDown      = false;
+    this._lastTs        = 0;
+    this._interactEl       = null;
+    this._uiEl             = null;
     this._exitCarThisFrame = false;
+    this._worldObjects     = [];
+    this._cullFrame        = 0;
   }
 
   async init() {
     // ─── 1. Fizyka ─────────────────────────────────────────────────────────
     await initRapier();
-    this.physics = new PhysicsWorld();
+    this.physics        = new PhysicsWorld();
+    this.vehiclePhysics = new VehiclePhysics();
 
     // ─── 2. Renderer + scena ───────────────────────────────────────────────
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7EC8F5);
-    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.012);
+    // Gęstość mgły: 0.006 = widok ~200j, 0.008 = ~130j; miasto jest większe więc luzujemy
+    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.006);
 
-    this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 300);
+    this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 200);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));  // max 1.5 zamiast 2
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;  // gładkie krawędzie cieni
     document.body.appendChild(this.renderer.domElement);
 
     // ─── 3. Oświetlenie ────────────────────────────────────────────────────
@@ -72,9 +82,10 @@ export class Game {
     this.camCtrl = new ThirdPersonCamera(this.camera3);
 
     // ─── 5. Świat + auta ───────────────────────────────────────────────────
-    const wb  = new WorldBuilder(this.scene, this.physics);
+    const wb  = new WorldBuilder(this.scene, this.physics, this.vehiclePhysics);
     wb.build();
-    this.cars = wb.cars;
+    this.cars          = wb.cars;
+    this._worldObjects = wb.objects;
 
     // ─── 6. Gracz ──────────────────────────────────────────────────────────
     this.player = new PlayerMichaelMyers(this.scene);
@@ -98,6 +109,8 @@ export class Game {
     this._interactEl = document.getElementById('interact');
     this._uiEl.style.display = 'block';
     document.getElementById('hint').style.display = 'block';
+    const seedEl = document.getElementById('seed-display');
+    if (seedEl) seedEl.textContent = `🌱 seed: ${SEED}`;
   }
 
   _setupLighting() {
@@ -105,13 +118,27 @@ export class Game {
     const sun = new THREE.DirectionalLight(0xfff5e0, 1.1);
     sun.position.set(20, 40, 15);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(2048, 2048);  // 2048: wystarczająca rozdzielczość dla gładkich cieni
     sun.shadow.camera.near   = 1;
-    sun.shadow.camera.far    = 180;
-    sun.shadow.camera.top    = sun.shadow.camera.right  =  80;
-    sun.shadow.camera.bottom = sun.shadow.camera.left   = -80;
+    sun.shadow.camera.far    = 120;
+    sun.shadow.camera.top    = sun.shadow.camera.right  =  40;  // mały zasięg = większa precyzja
+    sun.shadow.camera.bottom = sun.shadow.camera.left   = -40;
     this.scene.add(sun);
     this.scene.add(new THREE.HemisphereLight(0x87CEEB, 0x5a9e35, 0.3));
+  }
+
+  // ─── Distance culling ────────────────────────────────────────────────────
+
+  /** Ukrywa obiekty dalej niż CULL_DIST jednostek od gracza. Sprawdza co 4 klatki. */
+  _updateCulling() {
+    if (++this._cullFrame % 4 !== 0) return;
+    const pp = this.player.root.position;
+    const DIST_SQ = 150 * 150;
+    for (const obj of this._worldObjects) {
+      const dx = obj.root.position.x - pp.x;
+      const dz = obj.root.position.z - pp.z;
+      obj.root.visible = (dx * dx + dz * dz) < DIST_SQ;
+    }
   }
 
   // ─── Interakcja z autem ───────────────────────────────────────────────────
@@ -132,35 +159,39 @@ export class Game {
     this._drivingCar = car;
     car.isOccupied   = true;
     this.player.root.visible = false;
+    car._audio = this.audio;
+    this.audio.playEngineStart();
     // Kamera ustawia się za autem od razu
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – hamulec ręczny &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
     const car = this._drivingCar;
-    const pos = car._body.translation();
+    const pos = car.root.position;   // pozycja z cannon-es (synced w lateUpdate)
     // Wysiądź z boku (prostopadle do kierunku jazdy)
     const sideX = pos.x + Math.cos(car.facing) * 2.8;
     const sideZ = pos.z - Math.sin(car.facing) * 2.8;
     this.player._body.setNextKinematicTranslation({
-      x: sideX, y: pos.y + 0.2, z: sideZ,
+      x: sideX, y: pos.y + 1.2, z: sideZ,
     });
     this.player.root.visible = true;
+    car._audio    = null;
+    this.audio.stopEngine();
     car.isOccupied        = false;
     this._drivingCar      = null;
     this._exitCarThisFrame = true;
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)';
+      'WASD / L‑Stick – ruch &nbsp;|&nbsp; SPACJA / ✕ – skok &nbsp;|&nbsp; Mysz / R‑Stick – kamera';
   }
 
   /** Obsługa wejścia/wyjścia z auta + hint UI. */
   _updateInteraction() {
     const eDown    = this.input.isDown('KeyE');
-    const ePressed = eDown && !this._eWasDown;
+    const ePressed = (eDown && !this._eWasDown) || this.input.isPadButtonPressed(2);
     this._eWasDown = eDown;
 
     if (ePressed) {
@@ -197,35 +228,52 @@ export class Game {
     this._lastTs = ts;
 
     this.input.flush();
+    this._updateCulling();
     this._updateInteraction();
 
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
 
+    // ── 1. Wejście → cannon-es (siły pojazdu) ────────────────────────────
     if (this._drivingCar) {
-      // ── Tryb jazdy ─────────────────────────────────────────────────────
-      this._drivingCar.update(dt, this.input);
-      this.physics.step(dt);
-      this._drivingCar.lateUpdate();
-
-      // Gracz (niewidoczny) jedzie z autem — żeby nie wypadł przez podłogę
-      const cp = this._drivingCar._body.translation();
-      this.player._body.setNextKinematicTranslation(cp);
-
-      this.camCtrl.update(this._drivingCar.root.position, this.input.mouse);
-
-    } else {
-      // ── Tryb pieszy ────────────────────────────────────────────────────
-      // Jeśli właśnie wysiedliśmy — pomiń player.update() w tej klatce
-      // (teleport setNextKinematicTranslation nie może być nadpisany)
-      if (!exitedThisFrame) {
-        this.player.update(dt, this.input, this.camCtrl, this.physics);
-      }
-      this.physics.step(dt);
-      this.player.lateUpdate();
-
-      this.camCtrl.update(this.player.root.position, this.input.mouse);
+      this._drivingCar.update(dt, this.input, this.audio);
     }
+
+    // ── 2. Krok cannon-es (fizyka pojazdów) ──────────────────────────────
+    this.vehiclePhysics.step(dt);
+
+    // ── 3. Sync: cannon-es → Three.js + Rapier body (wszystkie auta) ─────
+    for (const car of this.cars) car.lateUpdate();
+
+    // ── 4. Krok Rapier (gracz + kolizje świata) ───────────────────────────
+    if (this._drivingCar) {
+      // Gracz niewidoczny jedzie razem z autem
+      const cp = this._drivingCar.root.position;
+      this.player._body.setNextKinematicTranslation({
+        x: cp.x, y: cp.y + 0.7, z: cp.z,
+      });
+      // Dźwięk opon + poślizgu
+      const carOnRoad = isOnRoad(cp.x, cp.z);
+      this.audio.updateTires(this._drivingCar.speedKmh, carOnRoad);
+      this.audio.updateSkid(this._drivingCar.isSkidding, carOnRoad);
+    } else {
+      if (!exitedThisFrame) {
+        const pp = this.player.root.position;
+        this.player.update(dt, this.input, this.camCtrl, this.physics,
+                           this.audio, isOnRoad(pp.x, pp.z));
+      }
+    }
+    this.physics.step(dt);
+    this.player.lateUpdate();
+
+    // ── 5. Kamera + render ────────────────────────────────────────────────
+    const followPos = this._drivingCar
+      ? this._drivingCar.root.position
+      : this.player.root.position;
+    const autoFacing = this._drivingCar
+      ? this._drivingCar.facing
+      : this.player.facing;
+    this.camCtrl.update(followPos, this.input.mouse, dt, autoFacing);
 
     this.renderer.render(this.scene, this.camera3);
   }

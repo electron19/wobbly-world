@@ -1,196 +1,666 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
 import { toonMat, addOutline } from '../core/Materials.js';
+import { CANNON_CHASSIS_OFFSET } from '../core/VehiclePhysics.js';
+import { isOnRoad, isOnHardSurface } from '../world/zones.js';
 
-// ─── Fizyczne wymiary boxa (world units) ─────────────────────────────────────
-export const CAR_BOX_HH = 0.65;  // half-height (środek ciała nad ziemią)
-export const CAR_BOX_HW = 1.05;  // half-width  (oś X)
-export const CAR_BOX_HD = 2.05;  // half-depth  (oś Z, kierunek jazdy)
+// ─── Rozmiar Rapier collidera (kinematic box, dla kolizji gracza z autem) ─────
+export const CAR_BOX_HH = 0.70;   // half-height
+export const CAR_BOX_HW = 1.07;   // half-width
+export const CAR_BOX_HD = 2.20;   // half-depth
 
-const WHEEL_R       = 0.34;
+// ─── Stałe geometrii kół ──────────────────────────────────────────────────────
+const WHEEL_R  = 0.40;   // promień opony
+const WHEEL_W  = 0.26;   // szerokość opony
+const WHEEL_X  = 1.12;   // half-track
+const AXLE_ZF  =  1.52;  // Z osi przedniej
+const AXLE_ZR  = -1.52;  // Z osi tylnej
 
-const CAR_ACCEL     = 13;
-const CAR_MAX_FWD   = 15;
-const CAR_MAX_REV   = 5;
-const CAR_BRAKE     = 22;
-const CAR_DECEL     = 5;
-const CAR_STEER_SPD = 2.0;   // rad/s obrotu przy pełnej prędkości
-const MAX_STEER_VIS = 0.42;  // kąt wizualny przednich kół
+// ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
+const MAX_ENGINE_FORCE = 2000;   // N na koło tylne
+const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
+const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
+const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
+const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
+const STEER_SPEED      = 5;      // szybkość rampy kierownicy (1/s)
+const MAX_SPEED_KMH    = 200;    // limit prędkości do przodu
+const MAX_REV_KMH      = 35;     // limit cofania
 
 export class Car extends Entity {
   constructor(scene, color = 0xFF4444) {
     super(scene);
+    this._scene     = scene;
     this.color      = color;
-    this.speed      = 0;
-    this.facing     = 0;   // kąt Y (rad), 0 = jedziemy w +Z
+    this.facing     = 0;
     this.isOccupied = false;
-    this._wheels    = [];  // { outer, inner, isFront }
+    this._wheels    = [];
+    // cannon-es
+    this._vehicle   = null;   // CANNON.RaycastVehicle
+    this._chassis   = null;   // CANNON.Body
+    this._steer     = 0;      // wygładzona wartość kierownicy [-1..1]
+    // Rapier kinematic body (kolizja gracza z autem)
+    this._body      = null;
+    // Ślady hamowania
+    this._skidState     = null;   // inicjalizowany w initPhysics()
+    // Dźwięki
+    this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
+    this._prevHandbrake = false;
+    // Wydech
+    this._exhaust       = null;   // inicjalizowany w initPhysics()
     this._build();
   }
 
-  // ─── Siatka 3D ────────────────────────────────────────────────────────────
+  /** Przyciemnia kolor o współczynnik f (0–1). */
+  _shade(hex, f) {
+    return (Math.round(((hex >> 16) & 0xff) * f) << 16)
+         | (Math.round(((hex >>  8) & 0xff) * f) <<  8)
+         |  Math.round(( hex        & 0xff) * f);
+  }
+
+  // ─── Budowanie siatki 3D ───────────────────────────────────────────────────
 
   _build() {
-    const bodyMat   = toonMat(this.color);
-    const glassMat  = toonMat(0xAADDFF);
-    const tireMat   = toonMat(0x111111);
-    const rimMat    = toonMat(0xCCCCCC);
-    const headMat   = toonMat(0xFFFF88);
-    const tailMat   = toonMat(0xFF2020);
-    const bumperMat = toonMat(0xDDDDDD);
+    const col      = this.color;
+    const bodyMat  = toonMat(col);
+    const darkMat  = toonMat(this._shade(col, 0.68));
+    const glassMat = new THREE.MeshToonMaterial({ color: 0x6EC6E0, transparent: true, opacity: 0.70 });
+    const tireMat  = toonMat(0x1A1A1A);
+    const rimMat   = toonMat(0xC8C8C8);
+    const chromeMat= toonMat(0xDEDEDE);
+    const blackMat = toonMat(0x111111);
+    const sillMat  = toonMat(0x222222);
+    const headMat  = toonMat(0xFFFDE0);   // reflektory — biało-żółte
+    const drlMat   = toonMat(0xFFFFFF);   // DRL strip
+    const tailMat  = toonMat(0xFF1A1A);   // światła stop
+    const indMat   = toonMat(0xFF8800);   // kierunkowskazy
+    const revMat   = toonMat(0xFFEECC);   // cofania
+    const fogMat   = toonMat(0xFFFACC);   // lampy przeciwmgielne
 
-    // Podwozie — front = +Z
-    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.55, 4.2), bodyMat);
-    chassis.position.y = 0.275;
-    chassis.castShadow = true;
-    addOutline(chassis, 0.04);
-    this.root.add(chassis);
+    // Pomocnik: dodaj box do this.root
+    const B = (x, y, z, w, h, d, mat, ol = 0, shadow = true) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      if (shadow) m.castShadow = true;
+      if (ol > 0) addOutline(m, ol);
+      this.root.add(m);
+      return m;
+    };
 
-    // Kabina (lekko ku przodowi)
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.85, 0.92, 2.4), bodyMat);
-    cabin.position.set(0, 0.55 + 0.46, 0.3);
-    cabin.castShadow = true;
-    addOutline(cabin, 0.04);
-    this.root.add(cabin);
+    // ─── Y-landmarks (od y=0 = powierzchnia drogi) ──────────────────────────
+    const SUSP_BOT  = WHEEL_R + 0.10;             // 0.50  dół podwozia
+    const CHASS_H   = 0.18;
+    const CHASS_Y   = SUSP_BOT + CHASS_H / 2;     // 0.59
+    const BODY_BOT  = SUSP_BOT + CHASS_H;         // 0.68
+    const BODY_H    = 0.54;
+    const BODY_Y    = BODY_BOT + BODY_H / 2;      // 0.95
+    const CAB_BOT   = BODY_BOT + BODY_H;          // 1.22
+    const CAB_H     = 0.68;
+    const CAB_Y     = CAB_BOT + CAB_H / 2;        // 1.56
+    const CAB_ZOff  = 0.10;                        // kabina lekko ku przodowi
+    const CAB_HL    = 1.25;                        // half-length kabiny
+    const CAB_ZF    = CAB_ZOff + CAB_HL;          // 1.35  przednia ściana kabiny
+    const CAB_ZR    = CAB_ZOff - CAB_HL;          // -1.15 tylna ściana kabiny
+    const ROOF_BOT  = CAB_BOT + CAB_H;            // 1.90
 
-    // Dach (okapy)
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.08, 2.5), bodyMat);
-    roof.position.set(0, 0.55 + 0.92 + 0.04, 0.3);
-    this.root.add(roof);
+    // Stałe Z dla całego nadwozia
+    const BODY_HLZ  = 2.20;   // half-length dolnego nadwozia
+    const BODY_ZF   = BODY_HLZ;                  //  2.20  przód nadwozia
+    const BODY_ZR   = -BODY_HLZ;                 // -2.20  tył nadwozia
 
-    // Zderzaki
-    [2.17, -2.17].forEach((z, i) => {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(2.08, 0.3, 0.14), bumperMat);
-      b.position.set(0, 0.18, z);
-      addOutline(b, 0.025);
-      this.root.add(b);
-    });
-
-    // Szyba przednia i tylna
-    const cabinY = 0.55 + 0.46;
-    [[0.3 + 1.2 + 0.025, 1.62, 0.74], [0.3 - 1.2 - 0.025, 1.55, 0.66]].forEach(([z, w, h]) => {
-      const win = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.05), glassMat);
-      win.position.set(0, cabinY, z);
-      this.root.add(win);
-    });
-
-    // Szyby boczne
-    [-0.928, 0.928].forEach(x => {
-      const ws = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.7, 2.05), glassMat);
-      ws.position.set(x, cabinY, 0.3);
-      this.root.add(ws);
-    });
-
-    // Reflektory
-    [-0.62, 0.62].forEach(x => {
-      const hl = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.22, 0.06), headMat);
-      hl.position.set(x, 0.42, 2.13);
-      addOutline(hl, 0.025);
-      this.root.add(hl);
-    });
-
-    // Tylne światła
-    [-0.62, 0.62].forEach(x => {
-      const tl = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.22, 0.06), tailMat);
-      tl.position.set(x, 0.42, -2.13);
-      addOutline(tl, 0.025);
-      this.root.add(tl);
-    });
-
-    // Koła — outer = skręt (przednie), inner = toczenie
-    [
-      { x: -1.12, z:  1.38, isFront: true  },
-      { x:  1.12, z:  1.38, isFront: true  },
-      { x: -1.12, z: -1.38, isFront: false },
-      { x:  1.12, z: -1.38, isFront: false },
-    ].forEach(({ x, z, isFront }) => {
+    // ── 1. KOŁA ─────────────────────────────────────────────────────────────
+    const wheelDefs = [
+      { x: -WHEEL_X, z: AXLE_ZF, isFront: true  },
+      { x:  WHEEL_X, z: AXLE_ZF, isFront: true  },
+      { x: -WHEEL_X, z: AXLE_ZR, isFront: false },
+      { x:  WHEEL_X, z: AXLE_ZR, isFront: false },
+    ];
+    wheelDefs.forEach(({ x, z, isFront }) => {
       const outer = new THREE.Group();
       const inner = new THREE.Group();
 
+      // Opona (czarny cylinder)
       const tire = new THREE.Mesh(
-        new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.24, 14), tireMat
+        new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, WHEEL_W, 16), tireMat,
       );
       tire.rotation.z = Math.PI / 2;
       tire.castShadow = true;
       addOutline(tire, 0.04);
       inner.add(tire);
 
+      // Obręcz (jasny cylinder wewnątrz opony)
       const rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(WHEEL_R * 0.55, WHEEL_R * 0.55, 0.26, 8), rimMat
+        new THREE.CylinderGeometry(WHEEL_R * 0.62, WHEEL_R * 0.62, WHEEL_W + 0.04, 12), rimMat,
       );
       rim.rotation.z = Math.PI / 2;
       inner.add(rim);
+
+      // 3 szprychy felgi — 6-ramienny wzór (każda przez centrum ×2 strony)
+      for (let s = 0; s < 3; s++) {
+        const spoke = new THREE.Mesh(
+          new THREE.BoxGeometry(WHEEL_W + 0.06, WHEEL_R * 1.48, 0.09), rimMat,
+        );
+        spoke.rotation.x = (s / 3) * Math.PI;
+        inner.add(spoke);
+      }
+
+      // Piasta (czarny środek)
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(WHEEL_R * 0.16, WHEEL_R * 0.16, WHEEL_W + 0.08, 8), blackMat,
+      );
+      hub.rotation.z = Math.PI / 2;
+      inner.add(hub);
 
       outer.add(inner);
       outer.position.set(x, WHEEL_R, z);
       this.root.add(outer);
       this._wheels.push({ outer, inner, isFront });
     });
+
+    // ── 2. OSIE (cylindry łączące L↔R koła) ─────────────────────────────────
+    [AXLE_ZF, AXLE_ZR].forEach(az => {
+      const axle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, WHEEL_X * 2 + WHEEL_W + 0.10, 8), blackMat,
+      );
+      axle.rotation.z = Math.PI / 2;
+      axle.position.set(0, WHEEL_R, az);
+      this.root.add(axle);
+    });
+
+    // ── 3. PODWOZIE (floating — nie dotyka drogi) ────────────────────────────
+    B(0, CHASS_Y, 0, 1.82, CHASS_H, 3.60, bodyMat, 0.03);
+
+    // Boczne progi ramy podwozia
+    [-0.76, 0.76].forEach(x =>
+      B(x, CHASS_Y, 0, 0.14, CHASS_H + 0.04, 3.70, darkMat, 0, false),
+    );
+
+    // ── 4. NADWOZIE DOLNE (drzwi, boki) ─────────────────────────────────────
+    B(0, BODY_Y, 0, 2.14, BODY_H, 4.40, bodyMat, 0.04);
+
+    // Progi boczne (sill) — czarna listwa pod drzwiami
+    [-1.08, 1.08].forEach(x =>
+      B(x, BODY_BOT + 0.07, 0, 0.10, 0.14, 3.80, sillMat, 0, false),
+    );
+
+    // ── 5. MASKA SILNIKA ─────────────────────────────────────────────────────
+    const HOOD_Z  = (CAB_ZF + BODY_ZF) / 2;   // centrum maski
+    const HOOD_L  = BODY_ZF - CAB_ZF;          // długość maski = 0.85
+    B(0, CAB_BOT - 0.03, HOOD_Z, 2.10, 0.14, HOOD_L, bodyMat, 0.03);
+
+    // Linia przetłoczenia na masce (ozdoba)
+    B(0, CAB_BOT + 0.04, HOOD_Z, 0.60, 0.06, HOOD_L - 0.10, darkMat, 0, false);
+
+    // ── 6. POKRYWA BAGAŻNIKA ─────────────────────────────────────────────────
+    const TRUNK_Z = (CAB_ZR + BODY_ZR) / 2;
+    const TRUNK_L = Math.abs(BODY_ZR - CAB_ZR);
+    B(0, CAB_BOT - 0.03, TRUNK_Z, 2.10, 0.14, TRUNK_L, bodyMat, 0.03);
+
+    // ── 7. ZDERZAK PRZEDNI ───────────────────────────────────────────────────
+    // Górna belka (chrom)
+    B(0, BODY_BOT + BODY_H * 0.68, BODY_ZF + 0.10, 2.12, 0.30, 0.18, chromeMat, 0.025);
+    // Dolna warga (czarna)
+    B(0, BODY_BOT + 0.08, BODY_ZF + 0.09, 1.88, 0.18, 0.14, blackMat, 0, false);
+    // Kratka wlotowa
+    B(0, BODY_BOT + 0.22, BODY_ZF + 0.08, 1.38, 0.16, 0.08, blackMat, 0, false);
+    [-0.46, 0, 0.46].forEach(x =>
+      B(x, BODY_BOT + 0.22, BODY_ZF + 0.09, 0.07, 0.20, 0.10, chromeMat, 0, false),
+    );
+    // Lampy przeciwmgielne (przednie, w zderzaku)
+    [-0.74, 0.74].forEach(x =>
+      B(x, BODY_BOT + 0.14, BODY_ZF + 0.10, 0.24, 0.14, 0.08, fogMat, 0, false),
+    );
+
+    // ── 8. ZDERZAK TYLNY ─────────────────────────────────────────────────────
+    B(0, BODY_BOT + BODY_H * 0.58, BODY_ZR - 0.09, 2.12, 0.28, 0.16, chromeMat, 0.025);
+    B(0, BODY_BOT + 0.07, BODY_ZR - 0.08, 1.88, 0.16, 0.12, blackMat, 0, false);
+
+    // ── 9. REFLEKTORY PRZEDNIE ───────────────────────────────────────────────
+    [-0.73, 0.73].forEach(x => {
+      // Obudowa
+      B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.05, 0.56, 0.30, 0.10, darkMat, 0.025);
+      // Soczewka główna
+      B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10, 0.42, 0.22, 0.06, headMat, 0, false);
+      // Pasek DRL (nad reflektorem)
+      B(x, BODY_BOT + BODY_H * 0.92, BODY_ZF + 0.09, 0.54, 0.07, 0.07, drlMat, 0, false);
+      // Kierunkowskaz przedni (pod reflektorem)
+      B(x, BODY_BOT + BODY_H * 0.42, BODY_ZF + 0.09, 0.34, 0.12, 0.07, indMat, 0, false);
+    });
+
+    // ── 10. TYLNE ŚWIATŁA ────────────────────────────────────────────────────
+    [-0.73, 0.73].forEach(x => {
+      // Obudowa
+      B(x, BODY_BOT + BODY_H * 0.68, BODY_ZR - 0.05, 0.56, 0.38, 0.10, darkMat, 0.025);
+      // Światło stop
+      B(x, BODY_BOT + BODY_H * 0.82, BODY_ZR - 0.10, 0.42, 0.16, 0.06, tailMat, 0, false);
+      // Kierunkowskaz tylny
+      B(x, BODY_BOT + BODY_H * 0.60, BODY_ZR - 0.10, 0.42, 0.12, 0.06, indMat, 0, false);
+      // Cofania
+      B(x, BODY_BOT + BODY_H * 0.40, BODY_ZR - 0.10, 0.22, 0.12, 0.06, revMat, 0, false);
+    });
+
+    // Środkowa naklejka rejestracyjna (wizual)
+    B(0, BODY_BOT + 0.22, BODY_ZR - 0.10, 0.70, 0.16, 0.04, chromeMat, 0, false);
+
+    // ── 11. KABINA ───────────────────────────────────────────────────────────
+    B(0, CAB_Y, CAB_ZOff, 1.92, CAB_H, CAB_HL * 2, bodyMat, 0.04);
+
+    // ── 12. DACH ─────────────────────────────────────────────────────────────
+    B(0, ROOF_BOT + 0.05, CAB_ZOff, 1.98, 0.10, CAB_HL * 2 + 0.08, bodyMat, 0.025);
+
+    // Reling dachowy (ozdoba)
+    [-0.70, 0.70].forEach(x =>
+      B(x, ROOF_BOT + 0.09, CAB_ZOff, 0.06, 0.06, CAB_HL * 1.70, darkMat, 0, false),
+    );
+
+    // ── 13. SZYBA PRZEDNIA ───────────────────────────────────────────────────
+    // Ramka (czarna, nieco większa)
+    B(0, CAB_Y + 0.02, CAB_ZF + 0.02, 1.84, CAB_H * 0.84, 0.06, blackMat, 0, false);
+    // Szkło
+    B(0, CAB_Y + 0.02, CAB_ZF + 0.05, 1.68, CAB_H * 0.76, 0.05, glassMat, 0, false);
+    // Wycieraczki
+    [-0.40, 0.40].forEach(x =>
+      B(x, CAB_BOT + 0.10, CAB_ZF + 0.07, 0.06, 0.38, 0.04, blackMat, 0, false),
+    );
+
+    // ── 14. SZYBA TYLNA ──────────────────────────────────────────────────────
+    B(0, CAB_Y,       CAB_ZR - 0.02, 1.72, CAB_H * 0.78, 0.06, blackMat, 0, false);
+    B(0, CAB_Y,       CAB_ZR - 0.05, 1.58, CAB_H * 0.70, 0.05, glassMat, 0, false);
+
+    // ── 15. SZYBY BOCZNE ─────────────────────────────────────────────────────
+    const CAB_HW = 1.92 / 2;  // half-width kabiny
+    [-CAB_HW - 0.01, CAB_HW + 0.01].forEach(x => {
+      // Szyba drzwi przednich
+      B(x, CAB_Y + 0.03, CAB_ZOff + 0.58, 0.05, CAB_H * 0.74, 0.94, glassMat, 0, false);
+      // Słupek B (czarny pasek między szybami)
+      B(x, CAB_Y, CAB_ZOff + 0.06, 0.05, CAB_H * 0.84, 0.10, blackMat, 0, false);
+      // Szyba drzwi tylnych
+      B(x, CAB_Y + 0.03, CAB_ZOff - 0.52, 0.05, CAB_H * 0.68, 0.76, glassMat, 0, false);
+    });
+
+    // ── 16. LUSTERKA BOCZNE ──────────────────────────────────────────────────
+    [-1, 1].forEach(side => {
+      const mx = side * (CAB_HW + 0.08);
+      // Ramię
+      B(mx + side * 0.05, CAB_BOT + 0.30, CAB_ZF - 0.18,
+        0.16, 0.06, 0.10, bodyMat, 0, false);
+      // Obudowa lusterka
+      B(mx + side * 0.12, CAB_BOT + 0.30, CAB_ZF - 0.18,
+        0.10, 0.18, 0.24, darkMat, 0.020);
+    });
+
+    // ── 17. LINIA PODZIAŁU DRZWI ─────────────────────────────────────────────
+    [-1.08, 1.08].forEach(x => {
+      // Pionowy podział przód/tył
+      B(x, BODY_Y + 0.05, CAB_ZOff + 0.08, 0.04, BODY_H * 0.80, 0.05, blackMat, 0, false);
+      // Dolna klamka (mała prostokątna wypukłość)
+      B(x + (x > 0 ? -0.02 : 0.02), BODY_BOT + BODY_H * 0.52,
+        CAB_ZOff + 0.38, 0.06, 0.08, 0.22, chromeMat, 0, false);
+    });
+
+    // ── 18. WLEW PALIWA ──────────────────────────────────────────────────────
+    const fuelCap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.09, 0.05, 10), chromeMat,
+    );
+    fuelCap.rotation.z = Math.PI / 2;
+    fuelCap.position.set(1.09, BODY_BOT + BODY_H * 0.55, -0.85);
+    this.root.add(fuelCap);
+    // Wgłębienie wlewu
+    B(1.09, BODY_BOT + BODY_H * 0.55, -0.85, 0.04, 0.22, 0.22, darkMat, 0, false);
+
+    // ── 19. RURA WYDECHOWA ───────────────────────────────────────────────────
+    const exhaust = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.075, 0.065, 0.20, 10), chromeMat,
+    );
+    exhaust.rotation.x = Math.PI / 2;
+    exhaust.position.set(0.65, BODY_BOT + 0.09, BODY_ZR - 0.11);
+    this.root.add(exhaust);
+    // Czarna dziura rury
+    const exhaustInner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.046, 0.046, 0.22, 8), blackMat,
+    );
+    exhaustInner.rotation.x = Math.PI / 2;
+    exhaustInner.position.set(0.65, BODY_BOT + 0.09, BODY_ZR - 0.12);
+    this.root.add(exhaustInner);
+
+    // ── 20. ANTENA ───────────────────────────────────────────────────────────
+    const antenna = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.014, 0.014, 0.40, 5), blackMat,
+    );
+    antenna.position.set(0.52, ROOF_BOT + 0.20, CAB_ZOff - 0.55);
+    this.root.add(antenna);
   }
 
   // ─── Fizyka ───────────────────────────────────────────────────────────────
 
   /**
-   * Stwórz fizyczne ciało (box collider, kinematic).
-   * Wywołaj po new Car(), przed game.start().
+   * Inicjalizuje fizykę pojazdu.
+   * @param {VehiclePhysics} vehiclePhysics  cannon-es świat pojazdów
+   * @param {PhysicsWorld}   rapierPhysics   Rapier świat (dla kolizji gracza z autem)
    */
-  initPhysics(physics, x, y, z) {
-    this._body = physics.addVehicleBox(
-      x, y + CAR_BOX_HH, z,
-      CAR_BOX_HW, CAR_BOX_HH, CAR_BOX_HD
+  initPhysics(vehiclePhysics, rapierPhysics, x, y, z) {
+    const { vehicle, chassis } = vehiclePhysics.createVehicle(x, y, z, this.facing);
+    this._vehicle = vehicle;
+    this._chassis = chassis;
+
+    // Rapier kinematic body — tylko dla kolizji gracza z autem
+    const { body } = rapierPhysics.addVehicleBox(
+      x, CANNON_CHASSIS_OFFSET, z,
+      CAR_BOX_HW, CAR_BOX_HH, CAR_BOX_HD,
     );
+    this._body = body;
+
+    // Zaparkowane auto stoi w miejscu (hamulec)
+    for (let i = 0; i < 4; i++) this._vehicle.setBrake(MAX_BRAKE_FORCE, i);
+
+    // Listener kolizji — dźwięk zależny od materiału przeszkody
+    this._chassis.addEventListener('collide', (event) => {
+      const mat = event.body?._material;
+      if (!mat || mat === 'ground') return;
+      const vel = Math.abs(event.contact.getImpactVelocityAlongNormal?.() ?? 0);
+      this._audio?.playCollision(mat, vel);
+    });
+
     this.root.position.set(x, y, z);
     this.root.rotation.y = this.facing;
+
+    this._initSkidMarks();
+    this._initExhaust();
   }
 
-  // ─── Cykl klatki ─────────────────────────────────────────────────────────
+  // ─── Gettery ──────────────────────────────────────────────────────────────
 
-  /** Wywołaj PRZED physics.step(). */
-  update(dt, input) {
-    const steerIn = (input.isDown('KeyA') ? 1 : 0) - (input.isDown('KeyD') ? 1 : 0);
-    const accelIn = (input.isDown('KeyW') ? 1 : 0) - (input.isDown('KeyS') ? 1 : 0);
+  get speedKmh() {
+    return this._vehicle ? this._vehicle.currentVehicleSpeedKmHour : 0;
+  }
 
-    // Skręt — proporcjonalny do prędkości, odwrócony w biegu wstecznym
-    const steerFactor = Math.min(1, Math.abs(this.speed) / 2.5);
-    this.facing += steerIn * CAR_STEER_SPD * steerFactor * dt
-      * (this.speed >= 0 ? 1 : -1);
+  get isSkidding() {
+    return this._skidState ? this._skidState.some(s => s.active) : false;
+  }
 
-    // Przyspieszenie / hamowanie / bezwładność
-    if (accelIn > 0) {
-      this.speed = Math.min(this.speed + CAR_ACCEL * dt, CAR_MAX_FWD);
-    } else if (accelIn < 0) {
-      if (this.speed > 0.3) {
-        this.speed = Math.max(0, this.speed - CAR_BRAKE * dt);   // hamowanie
-      } else {
-        this.speed = Math.max(this.speed - CAR_ACCEL * 0.55 * dt, -CAR_MAX_REV); // wsteczny
+  /** Inicjalizuje system śladów hamowania (2 tylne koła). */
+  _initSkidMarks() {
+    // Stan per tylne koło (indeksy 2=RL, 3=RR w wheelInfos)
+    this._skidState = [false, false].map(() => ({
+      active:    false,   // czy teraz ślizga
+      positions: [],      // Float32Array-like; trójki x,y,z bieżącego śladu
+      line:      null,    // aktywny THREE.Line (rośnie w czasie ślizgu)
+      pool:      [],      // zamknięte ślady (maks 12)
+    }));
+  }
+
+  /** Tworzy nowy aktywny ślad dla danego stanu. */
+  _startSkidLine(state, color) {
+    const positions = new Float32Array(600 * 3);  // maks 600 punktów
+    const attr = new THREE.BufferAttribute(positions, 3);
+    attr.setUsage(THREE.DynamicDrawUsage);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', attr);
+    geo.setDrawRange(0, 0);
+    const mat = new THREE.LineBasicMaterial({
+      color, transparent: true, opacity: 0.65, depthWrite: false,
+    });
+    const line = new THREE.Line(geo, mat);
+    line.renderOrder = 2;
+    line.frustumCulled = false;
+    this._scene.add(line);
+    state.line = line;
+    state.positions = [];
+    state.active = true;
+  }
+
+  /** Zamyka aktywny ślad (finalizuje geometrię). */
+  _endSkidLine(state) {
+    if (state.line && state.positions.length >= 6) {
+      // Zamroź geometrię (nie trzeba już jej aktualizować)
+      state.pool.push(state.line);
+      // Ogranicz pulę do 12 starych śladów
+      if (state.pool.length > 12) {
+        const old = state.pool.shift();
+        this._scene.remove(old);
+        old.geometry.dispose();
+        old.material.dispose();
       }
-    } else {
-      // Bezwładność / tarcie
-      if (this.speed > 0) this.speed = Math.max(0, this.speed - CAR_DECEL * dt);
-      else if (this.speed < 0) this.speed = Math.min(0, this.speed + CAR_DECEL * dt);
+    } else if (state.line) {
+      // Za krótki ślad — usuń
+      this._scene.remove(state.line);
+      state.line.geometry.dispose();
+    }
+    state.line     = null;
+    state.active   = false;
+    state.positions = [];
+  }
+
+  /** Dopisuje punkt do aktywnego śladu i odświeża geometrię. */
+  _appendSkidPoint(state, x, y, z) {
+    state.positions.push(x, y, z);
+    if (state.positions.length > 600 * 3) {
+      state.positions.splice(0, 3); // usuń najstarszy punkt
+    }
+    const arr = state.line.geometry.attributes.position.array;
+    const pts = state.positions.length / 3;
+    arr.set(state.positions, 0);
+    state.line.geometry.attributes.position.needsUpdate = true;
+    state.line.geometry.setDrawRange(0, pts);
+  }
+
+  // ─── Dym wydechu ──────────────────────────────────────────────────────────
+
+  /** Inicjalizuje system cząsteczek dymu. Wywołaj po initPhysics(). */
+  _initExhaust() {
+    this._exhaust = { particles: [], timer: 0 };
+  }
+
+  _updateExhaust(dt) {
+    const ex = this._exhaust;
+    if (!ex) return;
+
+    // Spawn: tylko gdy auto zajęte (silnik pracuje)
+    ex.timer += dt;
+    if (this.isOccupied && ex.timer > 0.38) {
+      ex.timer = 0;
+      this._spawnExhaustParticle();
     }
 
-    // Przesuń ciało kinematyczne bezpośrednio
-    const pos = this._body.translation();
-    this._body.setNextKinematicTranslation({
-      x: pos.x + Math.sin(this.facing) * this.speed * dt,
-      y: CAR_BOX_HH,    // płaski teren — trzymamy stałe Y
-      z: pos.z + Math.cos(this.facing) * this.speed * dt,
-    });
+    // Aktualizuj istniejące cząsteczki
+    for (let i = ex.particles.length - 1; i >= 0; i--) {
+      const p = ex.particles[i];
+      p.life += dt;
+      const t = p.life / 1.5;
+      if (t >= 1) {
+        this._scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        p.mesh.material.dispose();
+        ex.particles.splice(i, 1);
+        continue;
+      }
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      p.mesh.scale.setScalar(0.3 + t * 1.4);
+      p.mesh.material.opacity = 0.32 * (1 - t * t);
+    }
+  }
 
-    // Animacja kół
-    const steerAngle = steerIn * MAX_STEER_VIS * steerFactor;
-    const rollDelta  = (this.speed * dt) / WHEEL_R;
-    this._wheels.forEach(({ outer, inner, isFront }) => {
-      if (isFront) outer.rotation.y = steerAngle;
-      inner.rotation.x -= rollDelta;
+  _spawnExhaustParticle() {
+    // Rura wydechowa jest w lokalnym (0.65, ~0.77, ~-2.31)
+    // Transformacja Y-rotacją (facing = root.rotation.y)
+    const f  = this.facing;
+    const lx = 0.65, ly = 0.77, lz = -2.31;
+    const wx = this.root.position.x + lx * Math.cos(f) + lz * Math.sin(f);
+    const wy = this.root.position.y + ly;
+    const wz = this.root.position.z - lx * Math.sin(f) + lz * Math.cos(f);
+
+    const geo = new THREE.SphereGeometry(0.07, 5, 4);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x999999, transparent: true, opacity: 0.32, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(wx, wy, wz);
+    mesh.renderOrder = 1;
+    this._scene.add(mesh);
+
+    this._exhaust.particles.push({
+      mesh, life: 0,
+      vx: (Math.random() - 0.5) * 0.25,
+      vy: 0.7 + Math.random() * 0.5,
+      vz: (Math.random() - 0.5) * 0.25,
     });
   }
 
-  /** Wywołaj PO physics.step() — sync mesh z body. */
+  // ─── Cykl klatki ──────────────────────────────────────────────────────────
+
+  /**
+   * Wywołaj PRZED vehiclePhysics.step().
+   * Aplikuje siły wejściowe do cannon-es RaycastVehicle.
+   */
+  update(dt, input, audio) {
+    this._dt = dt;
+    // Gaz do przodu: W / ArrowUp / R2
+    const fwdK  = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
+    // Cofanie / hamulec: S / ArrowDown / L2
+    const revK  = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
+    const gasIn = Math.max(fwdK, input.pad.r2) - Math.max(revK, input.pad.l2);
+
+    // Skręt: A/D / ArrowLeft/Right / lewy analog X
+    const steerKL = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
+    const steerKR = (input.isDown('KeyD') || input.isDown('ArrowRight')) ? 1 : 0;
+    const padSteer = Math.abs(input.pad.leftX) > 0.12 ? -input.pad.leftX : 0;
+    const steerIn = padSteer !== 0 ? padSteer : (steerKL - steerKR);
+
+    // ── Skręt — wygładzony lerp ──────────────────────────────────────────────
+    this._steer += (steerIn * MAX_STEER_ANGLE - this._steer) * Math.min(1, STEER_SPEED * dt);
+    this._vehicle.setSteeringValue(this._steer, 0);  // FL
+    this._vehicle.setSteeringValue(this._steer, 1);  // FR
+
+    // ── Hamulec ręczny (B) — blokuje tylne koła, umożliwia drifting ─────────
+    const handBrake = input.isDown('Space') || input.isPadButtonPressed?.(1);
+    if (handBrake && !this._prevHandbrake) {
+      audio?.playHandbrake(this._vehicle.currentVehicleSpeedKmHour);
+    }
+    this._prevHandbrake = handBrake;
+
+    // ── Gaz / hamulec ────────────────────────────────────────────────────────
+    const speedKmh = this._vehicle.currentVehicleSpeedKmHour;
+    let engineForce = 0;
+    let brakeForce  = IDLE_BRAKE;
+
+    if (handBrake) {
+      // Hamulec ręczny: silnik wyłączony, tylne koła zablokowane
+      engineForce = 0;
+      brakeForce  = 0;
+      this._vehicle.applyEngineForce(0, 2);
+      this._vehicle.applyEngineForce(0, 3);
+      this._vehicle.setBrake(0,               0);  // FL — przednie wolne (sterowalność)
+      this._vehicle.setBrake(0,               1);  // FR
+      this._vehicle.setBrake(HAND_BRAKE_FORCE, 2);  // RL — zablokowane
+      this._vehicle.setBrake(HAND_BRAKE_FORCE, 3);  // RR — zablokowane
+    } else {
+      if (gasIn > 0) {
+        if (speedKmh < -1) {
+          brakeForce = MAX_BRAKE_FORCE;
+        } else if (speedKmh < MAX_SPEED_KMH) {
+          engineForce = -MAX_ENGINE_FORCE;
+          brakeForce  = 0;
+        }
+      } else if (gasIn < 0) {
+        if (speedKmh > 1) {
+          brakeForce = MAX_BRAKE_FORCE;
+        } else if (speedKmh > -MAX_REV_KMH) {
+          engineForce = MAX_ENGINE_FORCE;
+          brakeForce  = 0;
+        }
+      }
+
+      this._vehicle.applyEngineForce(engineForce, 2);
+      this._vehicle.applyEngineForce(engineForce, 3);
+      for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
+    }
+
+    // ── Tarcie kół — mniejsze na trawie ─────────────────────────────────────
+    const cx = this._chassis.position.x;
+    const cz = this._chassis.position.z;
+    const onRoad = isOnRoad(cx, cz);
+    const slip = onRoad ? 2.8 : 0.85;  // wyższy = lepsza przyczepność na asfalcie
+    for (const wi of this._vehicle.wheelInfos) wi.frictionSlip = slip;
+
+    // ── Dźwięk silnika ───────────────────────────────────────────────────────
+    audio?.updateEngine(speedKmh, gasIn, dt);
+
+    // ── Animacja kół ─────────────────────────────────────────────────────────
+    const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
+    this._wheels.forEach(({ outer, inner, isFront }) => {
+      if (isFront) outer.rotation.y = this._steer;
+      inner.rotation.x += rollDelta;  // += bo oś koła w -X (axleLocal = (-1,0,0))
+    });
+  }
+
+  /**
+   * Wywołaj PO vehiclePhysics.step() i PRZED rapier.step().
+   * Synchronizuje: cannon-es → Three.js mesh + Rapier kinematic body.
+   */
   lateUpdate() {
-    const t = this._body.translation();
-    this.root.position.set(t.x, t.y - CAR_BOX_HH, t.z);
-    this.root.rotation.y = this.facing;
+    const pos  = this._chassis.position;
+    const quat = this._chassis.quaternion;
+
+    // Oblicz rootY z uśrednionej pozycji środków kół (cannon-es worldTransform).
+    // wheel center Y - WHEEL_R = poziom podłogi pod kołem → brak zapadania niezależnie
+    // od ustawień zawieszenia. Lerp 0.2 tłumi ewentualne drgania zawieszenia.
+    for (let i = 0; i < 4; i++) this._vehicle.updateWheelTransform(i);
+    const wi = this._vehicle.wheelInfos;
+    const avgWheelY = (wi[0].worldTransform.position.y + wi[1].worldTransform.position.y
+                     + wi[2].worldTransform.position.y + wi[3].worldTransform.position.y) / 4;
+    const targetRootY = avgWheelY - WHEEL_R;
+    if (this._rootY === undefined) this._rootY = targetRootY;
+    this._rootY += (targetRootY - this._rootY) * 0.2;
+
+    this.root.position.set(pos.x, this._rootY, pos.z);
+    this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+
+    // Wyciągnij kąt obrotu Y (heading) z kwaterniona — dla kamery i wychodzenia
+    this.facing = Math.atan2(
+      2 * (quat.w * quat.y + quat.x * quat.z),
+      1 - 2 * (quat.y * quat.y + quat.z * quat.z),
+    );
+
+    // Synchronizuj Rapier kinematic body (kolizja gracza z autem)
+    this._body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+
+    // Ślady hamowania (tylne koła)
+    if (this._skidState) this._updateSkidMarks();
+
+    // Dym wydechu
+    this._updateExhaust(this._dt ?? 1 / 60);
+  }
+
+  /**
+   * Aktualizuje ślady hamowania — wywołuj po vehiclePhysics.step().
+   * Detekcja ślizgu: skidInfo < 0.88 lub hamowanie przy prędkości > 8 km/h.
+   */
+  _updateSkidMarks() {
+    const wi     = this._vehicle.wheelInfos;
+    const speedK = Math.abs(this._vehicle.currentVehicleSpeedKmHour);
+
+    [2, 3].forEach((wIdx, i) => {
+      const wInfo    = wi[wIdx];
+      const state    = this._skidState[i];
+      const contact  = wInfo.isInContact;
+      const skidding = contact && speedK > 8
+        && (wInfo.skidInfo < 0.88 || (wInfo.skidInfo < 0.98 && speedK > 20));
+
+      const wx = wInfo.worldTransform.position.x;
+      const wy = 0.025;  // lekko nad ziemią (nie z-fighting)
+      const wz = wInfo.worldTransform.position.z;
+
+      if (skidding) {
+        if (!state.active) {
+          // Nowy ślad — kolor zależy od podłoża
+          const onHard = isOnHardSurface(wx, wz);  // asfalt + chodnik = czarny ślad
+          this._startSkidLine(state, onHard ? 0x1a1a1a : 0x5C3A1E);
+        }
+        this._appendSkidPoint(state, wx, wy, wz);
+      } else {
+        if (state.active) this._endSkidLine(state);
+      }
+    });
   }
 }

@@ -1,5 +1,33 @@
 # Changelog — Wobbly World
 
+## [v0.3.0] — 2026-03-24
+### v0.3.1 poprawki (2026-03-24)
+- Dźwięki uderzeń dla wszystkich obiektów: ściany (bum), drzewa (trzask), latarnie (brzęk metaliczny)
+- Chodniki i wzgórza oznaczone jako `'ground'` — brak fałszywych dźwięków od podłoża
+- `MAX_ENGINE_FORCE` 4000→2000 N (przyspieszenie wolniejsze o 50%)
+- Hamulec ręczny: SPACJA (klawiatura) / B (pad)
+### Added
+- `AudioManager` — proceduralny dźwięk przez Web Audio API (zero plików)
+- Silnik z 5-biegową automatyczną skrzynią: RPM rośnie na każdym biegu, shift → RPM spada → rośnie znowu
+- Rozruch silnika: sekwencja starter → złapanie → flare → bieg jałowy
+- Kroki: inny dźwięk na asfalcie (ostry klik) vs trawie (miękki szelest)
+- Opony: ciągły szum/pomruk, zależny od nawierzchni i prędkości
+- Pisk opon przy poślizgu: road (wysoki screech) vs grass (niski scrape)
+- Dźwięk hamulca ręcznego (B) proporcjonalny do prędkości
+- Skok (sine sweep) + lądowanie (bum + szum)
+- Dym wydechu: cząsteczki szarego dymu z rury gdy silnik pracuje
+- `isOnRoad(x, z)` — detekcja nawierzchni używająca pełnej siatki ROADS
+### Changed
+- `MAX_SPEED_KMH`: 70 → 140 km/h (wyższe prędkości)
+- `MAX_ENGINE_FORCE`: 2500 → 4000 N (lepsza dynamika)
+- `MAX_STEER_ANGLE`: 0.58 → 0.78 rad (większy kąt skrętu, ≈45°)
+- `MAX_REV_KMH`: 25 → 35 km/h
+- Detekcja nawierzchni (onRoad) w `Car.js` używa `isOnRoad()` zamiast uproszczonego sprawdzenia
+### Fixed
+- Ślady opon używają poprawnej detekcji drogi (wszystkie 6 dróg, nie tylko główne)
+
+
+
 ## [v0.2.0] — 2026-03-22
 ### Added
 - Przebudowa architektury na ES modules (OOP, plik per klasa)

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WorldObject } from './WorldObject.js';
 import { toonMat, addOutline, C } from '../core/Materials.js';
 
@@ -20,8 +21,8 @@ import { toonMat, addOutline, C } from '../core/Materials.js';
  *   - Interior definiuje własne ściany, meble, kolizje
  */
 export class Building extends WorldObject {
-  constructor(scene, physics, cfg = {}) {
-    super(scene, physics);
+  constructor(scene, physics, cfg = {}, vehiclePhysics = null) {
+    super(scene, physics, vehiclePhysics);
     this.cfg = {
       w:         6,
       h:         4,
@@ -43,9 +44,9 @@ export class Building extends WorldObject {
   _box(x, y, z, w, h, d, mat, opts = {}) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, y, z);
-    mesh.castShadow    = opts.cast    ?? true;
-    mesh.receiveShadow = opts.receive ?? true;
-    if (opts.outline !== false) addOutline(mesh, opts.outline ?? 0.03);
+    mesh.castShadow    = opts.cast    ?? false;  // statyczne obiekty nie rzucają cieni
+    mesh.receiveShadow = opts.receive ?? false;
+    if (opts.outline) addOutline(mesh, opts.outline);  // domyślnie wyłączone
     this.root.add(mesh);
     return mesh;
   }
@@ -101,9 +102,10 @@ export class Building extends WorldObject {
     return mesh;
   }
 
-  /** Dodaj statyczny box Rapier w world coords. */
+  /** Dodaj statyczny box w Rapier i (opcjonalnie) cannon-es. */
   _addPhysicsBox(wx, wy, wz, hw, hh, hd) {
     const body = this.physics.addStaticBox(wx, wy, wz, hw, hh, hd);
+    if (this.vehiclePhysics) this.vehiclePhysics.addStaticBox(wx, wy, wz, hw, hh, hd, 'wall');
     this._bodies.push(body);
     return body;
   }
@@ -122,10 +124,69 @@ export class Building extends WorldObject {
     this._addPhysicsBox(wx, wy + h / 2, wz, w / 2, h / 2, d / 2);
   }
 
-  /** Ustaw pozycję + zbuduj geometrię + kolizje */
+  /**
+   * Scal wszystkie meshe w root po materiale → minimalizuje draw calls.
+   * Geometrie opakowane (transparent, BackSide outline) zostawiane osobno.
+   */
+  _mergeRoot() {
+    const groups = new Map();  // mat.uuid → { mat, geos[] }
+    const keepMeshes = [];
+
+    const visit = (node, parentMat4) => {
+      node.updateMatrix();
+      const m4 = parentMat4.clone().multiply(node.matrix);
+      if (node.isMesh) {
+        const mtl = node.material;
+        if (mtl.side === THREE.BackSide || mtl.transparent) {
+          const g = node.geometry.clone();
+          g.applyMatrix4(m4);
+          keepMeshes.push(new THREE.Mesh(g, mtl));
+          return; // nie schodź głębiej — outline mesh nie ma dzieci geometrycznych
+        }
+        const g = node.geometry.clone();
+        // Ujednolić atrybuty (BufferGeometryUtils wymaga tych samych)
+        if (!g.attributes.uv) {
+          const cnt = g.attributes.position.count;
+          g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(cnt * 2), 2));
+        }
+        if (!g.index) g.toNonIndexed();  // zapewnia zgodność typów
+        g.applyMatrix4(m4);
+        const key = mtl.uuid;
+        if (!groups.has(key)) groups.set(key, { mtl, geos: [] });
+        groups.get(key).geos.push(g);
+      }
+      for (const c of node.children) visit(c, m4);
+    };
+
+    const identity = new THREE.Matrix4();
+    for (const c of [...this.root.children]) visit(c, identity);
+
+    this.root.clear();
+
+    for (const { mtl, geos } of groups.values()) {
+      if (!geos.length) continue;
+      try {
+        const merged = mergeGeometries(geos, false);
+        geos.forEach(g => g.dispose());
+        if (merged) {
+          const mesh = new THREE.Mesh(merged, mtl);
+          mesh.castShadow = false;
+          mesh.receiveShadow = false;
+          this.root.add(mesh);
+        }
+      } catch {
+        geos.forEach(g => { this.root.add(new THREE.Mesh(g, mtl)); });
+      }
+    }
+
+    for (const m of keepMeshes) this.root.add(m);
+  }
+
+  /** Ustaw pozycję + zbuduj geometrię + scal + kolizje */
   placeAt(x, y, z) {
     super.placeAt(x, y, z);
     this._buildGeometry();
+    this._mergeRoot();
     this._buildColliders(x, y, z);
     return this;
   }

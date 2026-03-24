@@ -42,6 +42,11 @@
       border: 2px solid rgba(255,255,255,0.35);
       display: none; white-space: nowrap;
     }
+    #seed-display {
+      position: fixed; top: 12px; right: 16px;
+      color: rgba(255,255,255,0.7); font: 12px monospace;
+      pointer-events: none; user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -53,12 +58,15 @@
 <div id="ui">WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)</div>
 <div id="hint">🖱️ Kliknij by sterować kamerą</div>
 <div id="interact">E — wsiądź</div>
+<div id="seed-display"></div>
 
 <script type="importmap">
 {
   "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+    "three":        "./lib/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+    "cannon-es":    "./lib/cannon-es.js",
+    "seedrandom":   "https://esm.sh/seedrandom@3.0.5"
   }
 }
 </script>
