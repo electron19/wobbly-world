@@ -102,13 +102,24 @@ export class PhysicsWorld {
 
   // ─── Pojazdy ──────────────────────────────────────────────────────────────
 
-  /** Kinematyczny box dla pojazdu. Zwraca { body, collider }. */
+  /**
+   * Kinematyczny pojazd — dwa collidery na jednym body:
+   *   1. Dolny kadłub (body + maska + bagażnik)
+   *   2. Górna kabina + dach — gracz może stanąć na masce / dachu
+   * Zwraca { body }.
+   */
   addVehicleBox(x, y, z, hw, hh, hd) {
     const body = this.world.createRigidBody(
       R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z)
     );
-    const collider = this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
-    return { body, collider };
+    // Dolny kadłub
+    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    // Kabina + dach: środek y = +0.87 nad centrum podwozia (chassis center y=0.75)
+    // Pokrywa wizualną kabinę (y≈1.22–2.00) + margines
+    const cabinDesc = R.ColliderDesc.cuboid(0.92, 0.42, 1.32);
+    cabinDesc.setTranslation(0, 0.87, 0);
+    this.world.createCollider(cabinDesc, body);
+    return { body };
   }
 
   /**

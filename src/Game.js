@@ -252,10 +252,11 @@ export class Game {
       this.player._body.setNextKinematicTranslation({
         x: cp.x, y: cp.y + 0.7, z: cp.z,
       });
-      // Dźwięk poślizgu — pisk tylko przy dużym kącie skrętu (>0.38 rad)
-      const carOnRoad = isOnRoad(cp.x, cp.z);
-      const bigTurn   = this._drivingCar.steerAngle > 0.38;
-      this.audio.updateSkid(this._drivingCar.isSkidding && bigTurn, carOnRoad);
+      // Dźwięk poślizgu — pisk przy dużym skręcie LUB hamowaniu
+      const carOnRoad  = isOnRoad(cp.x, cp.z);
+      const bigTurn    = this._drivingCar.steerAngle > 0.38;
+      const hardBrake  = this._drivingCar.isBraking;
+      this.audio.updateSkid(this._drivingCar.isSkidding && (bigTurn || hardBrake), carOnRoad);
     } else {
       if (!exitedThisFrame) {
         const pp = this.player.root.position;

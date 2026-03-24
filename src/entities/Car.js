@@ -17,7 +17,7 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE = 2000;   // N na koło tylne
+const MAX_ENGINE_FORCE = 2600;   // N na koło tylne (skompensowane za wzrost masy)
 const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
 const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
 const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
@@ -381,6 +381,9 @@ export class Car extends Entity {
   /** Aktualny kąt skrętu kół (wygładzony, radiany, wartość bezwzględna). */
   get steerAngle() { return Math.abs(this._steer ?? 0); }
 
+  /** True gdy auto aktywnie hamuje (S / L2). */
+  get isBraking() { return !!this._isBraking; }
+
   get isSkidding() {
     return this._skidState ? this._skidState.some(s => s.active) : false;
   }
@@ -671,7 +674,9 @@ export class Car extends Entity {
     );
 
     // Synchronizuj Rapier kinematic body (kolizja gracza z autem)
+    // Translacja + rotacja → compound collidery (kadłub + kabina) obracają się z autem
     this._body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+    this._body.setNextKinematicRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w });
 
     // Ślady hamowania (tylne koła)
     if (this._skidState) this._updateSkidMarks();
