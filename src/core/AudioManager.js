@@ -52,8 +52,8 @@ export class AudioManager {
     this._tireOnRoad    = true;
 
     // ── pisk / poślizg ──
-    this._skidOsc       = null;
-    this._skidNoise     = null;
+    this._skidNoise     = null;   // główny szum pisku (wąski bandpass)
+    this._skidNoise2    = null;   // drugi szum (high-end syczenie)
     this._skidNoiseF    = null;
     this._skidGain      = null;
     this._skidActive    = false;
@@ -443,50 +443,57 @@ export class AudioManager {
   }
 
   _startSkid(onRoad) {
-    const ctx = this._ensureCtx();
-    const now = ctx.currentTime;
+    const ctx  = this._ensureCtx();
+    const now  = ctx.currentTime;
+    const rate = ctx.sampleRate;
     this._skidActive = true;
 
     this._skidGain = ctx.createGain();
     this._skidGain.gain.setValueAtTime(0.001, now);
-    this._skidGain.gain.linearRampToValueAtTime(onRoad ? 0.28 : 0.15, now + 0.08);
+    this._skidGain.gain.linearRampToValueAtTime(onRoad ? 0.32 : 0.14, now + 0.10);
     this._skidGain.connect(ctx.destination);
 
+    const makeNoiseSrc = () => {
+      const buf = ctx.createBuffer(1, rate * 2, rate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      return src;
+    };
+
     if (onRoad) {
-      // Asfalt: wysoki pisk oscylatora (wzrastający)
-      this._skidOsc = ctx.createOscillator();
-      this._skidOsc.type = 'sawtooth';
-      this._skidOsc.frequency.setValueAtTime(640, now);
-      this._skidOsc.frequency.linearRampToValueAtTime(820, now + 0.3);
-      const oscF = ctx.createBiquadFilter();
-      oscF.type = 'bandpass'; oscF.frequency.value = 750; oscF.Q.value = 2.5;
-      this._skidOsc.connect(oscF);
-      oscF.connect(this._skidGain);
-      this._skidOsc.start(now);
-    }
-
-    // Szum: zarówno na asfalcie jak i trawie (różna filtracja)
-    const rate = ctx.sampleRate;
-    const nb   = ctx.createBuffer(1, rate * 2, rate);
-    const nd   = nb.getChannelData(0);
-    for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
-
-    this._skidNoise = ctx.createBufferSource();
-    this._skidNoise.buffer = nb;
-    this._skidNoise.loop   = true;
-
-    this._skidNoiseF = ctx.createBiquadFilter();
-    if (onRoad) {
+      // ── Asfalt: "iiiihhh" — wąski bandpass na ~3200 Hz (ton pisku) ──────────
+      // + szerokie wysokie częstotliwości (syk)
+      this._skidNoise  = makeNoiseSrc();
+      this._skidNoiseF = ctx.createBiquadFilter();
       this._skidNoiseF.type = 'bandpass';
-      this._skidNoiseF.frequency.value = 1800;
-      this._skidNoiseF.Q.value = 0.9;
+      this._skidNoiseF.frequency.value = 3200;
+      this._skidNoiseF.Q.value = 10;    // bardzo wąski → wyraźny ton pisku
+      const boost = ctx.createGain(); boost.gain.value = 2.2;
+      this._skidNoise.connect(this._skidNoiseF);
+      this._skidNoiseF.connect(boost);
+      boost.connect(this._skidGain);
+      this._skidNoise.start(now);
+
+      // Druhia warstwa: szerokie syczenie powyżej 1800 Hz
+      this._skidNoise2 = makeNoiseSrc();
+      const f2 = ctx.createBiquadFilter();
+      f2.type = 'highpass'; f2.frequency.value = 1800;
+      const g2 = ctx.createGain(); g2.gain.value = 0.28;
+      this._skidNoise2.connect(f2); f2.connect(g2); g2.connect(this._skidGain);
+      this._skidNoise2.start(now);
+
     } else {
+      // ── Trawa: niski szelest/tarcie ─────────────────────────────────────────
+      this._skidNoise  = makeNoiseSrc();
+      this._skidNoiseF = ctx.createBiquadFilter();
       this._skidNoiseF.type = 'lowpass';
-      this._skidNoiseF.frequency.value = 280;
+      this._skidNoiseF.frequency.value = 300;
+      this._skidNoise.connect(this._skidNoiseF);
+      this._skidNoiseF.connect(this._skidGain);
+      this._skidNoise.start(now);
     }
-    this._skidNoise.connect(this._skidNoiseF);
-    this._skidNoiseF.connect(this._skidGain);
-    this._skidNoise.start(now);
   }
 
   _stopSkid() {
@@ -495,14 +502,14 @@ export class AudioManager {
     if (!this._skidGain) return;
     const now = this._ctx.currentTime;
     this._skidGain.gain.setTargetAtTime(0.001, now, 0.12);
-    const o = this._skidOsc, n = this._skidNoise;
+    const n1 = this._skidNoise, n2 = this._skidNoise2;
     setTimeout(() => {
-      try { o?.stop(); } catch (_) {}
-      try { n?.stop(); } catch (_) {}
+      try { n1?.stop(); } catch (_) {}
+      try { n2?.stop(); } catch (_) {}
     }, 400);
-    this._skidOsc   = null;
-    this._skidNoise = null;
-    this._skidGain  = null;
+    this._skidNoise  = null;
+    this._skidNoise2 = null;
+    this._skidGain   = null;
   }
 
   // ─── Klakson ──────────────────────────────────────────────────────────────

@@ -387,65 +387,97 @@ export class Car extends Entity {
   _initSkidMarks() {
     this._skidState = [0, 1, 2, 3].map(() => ({
       active:    false,
-      positions: [],
-      line:      null,
-      pool:      [],    // maks 10 starych śladów per koło
+      ribbonPts: [],   // flat: [x0,y0,z0, x1,y1,z1, ...]
+      mesh:      null,
+      quadCount: 0,
+      pool:      [],   // maks 10 starych śladów per koło
     }));
   }
 
-  /** Tworzy nowy aktywny ślad dla danego stanu. */
+  /** Tworzy nowy aktywny ślad jako wstążkę (szerokość = bieżnik opony). */
   _startSkidLine(state, color) {
-    const positions = new Float32Array(600 * 3);  // maks 600 punktów
-    const attr = new THREE.BufferAttribute(positions, 3);
-    attr.setUsage(THREE.DynamicDrawUsage);
+    const MAX_QUADS = 400;
+    // Pre-allokacja bufora werteksów i indeksów
+    const positions = new Float32Array(MAX_QUADS * 4 * 3);
+    const indices   = new Uint32Array(MAX_QUADS * 6);
+    for (let q = 0; q < MAX_QUADS; q++) {
+      const i = q * 6, b = q * 4;
+      indices[i]   = b;   indices[i+1] = b+2; indices[i+2] = b+1;
+      indices[i+3] = b+1; indices[i+4] = b+2; indices[i+5] = b+3;
+    }
+    const posAttr = new THREE.BufferAttribute(positions, 3);
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', attr);
+    geo.setAttribute('position', posAttr);
+    geo.setIndex(new THREE.BufferAttribute(indices, 1));
     geo.setDrawRange(0, 0);
-    const mat = new THREE.LineBasicMaterial({
-      color, transparent: true, opacity: 0.65, depthWrite: false,
+
+    const mat = new THREE.MeshBasicMaterial({
+      color, transparent: true, opacity: 0.60, depthWrite: false, side: THREE.DoubleSide,
     });
-    const line = new THREE.Line(geo, mat);
-    line.renderOrder = 2;
-    line.frustumCulled = false;
-    this._scene.add(line);
-    state.line = line;
-    state.positions = [];
-    state.active = true;
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 2;
+    mesh.frustumCulled = false;
+    this._scene.add(mesh);
+
+    state.mesh      = mesh;
+    state.ribbonPts = [];
+    state.quadCount = 0;
+    state.active    = true;
   }
 
   /** Zamyka aktywny ślad (finalizuje geometrię). */
   _endSkidLine(state) {
-    if (state.line && state.positions.length >= 6) {
-      // Zamroź geometrię (nie trzeba już jej aktualizować)
-      state.pool.push(state.line);
-      // Ogranicz pulę do 10 starych śladów per koło
+    if (state.mesh && state.quadCount >= 1) {
+      state.pool.push(state.mesh);
       if (state.pool.length > 10) {
         const old = state.pool.shift();
         this._scene.remove(old);
         old.geometry.dispose();
         old.material.dispose();
       }
-    } else if (state.line) {
-      // Za krótki ślad — usuń
-      this._scene.remove(state.line);
-      state.line.geometry.dispose();
+    } else if (state.mesh) {
+      this._scene.remove(state.mesh);
+      state.mesh.geometry.dispose();
+      state.mesh.material.dispose();
     }
-    state.line     = null;
-    state.active   = false;
-    state.positions = [];
+    state.mesh      = null;
+    state.ribbonPts = [];
+    state.quadCount = 0;
+    state.active    = false;
   }
 
-  /** Dopisuje punkt do aktywnego śladu i odświeża geometrię. */
+  /** Dopisuje segment wstążki (quad prostopadły do kierunku jazdy). */
   _appendSkidPoint(state, x, y, z) {
-    state.positions.push(x, y, z);
-    if (state.positions.length > 600 * 3) {
-      state.positions.splice(0, 3); // usuń najstarszy punkt
-    }
-    const arr = state.line.geometry.attributes.position.array;
-    const pts = state.positions.length / 3;
-    arr.set(state.positions, 0);
-    state.line.geometry.attributes.position.needsUpdate = true;
-    state.line.geometry.setDrawRange(0, pts);
+    state.ribbonPts.push(x, y, z);
+    const n = state.ribbonPts.length / 3;   // liczba punktów
+    if (n < 2 || state.quadCount >= 400) return;
+
+    const HW  = WHEEL_W / 2;                // pół szerokości bieżnika ≈ 0.13 m
+    const pts = state.ribbonPts;
+    const i0  = (n - 2) * 3, i1 = (n - 1) * 3;
+    const p0x = pts[i0], p0z = pts[i0+2];
+    const p1x = pts[i1], p1z = pts[i1+2];
+
+    // Kierunek jazdy → prostopadły w XZ
+    let tdx = p1x - p0x, tdz = p1z - p0z;
+    const len = Math.sqrt(tdx * tdx + tdz * tdz);
+    if (len < 0.001) return;
+    tdx /= len; tdz /= len;
+    const px = -tdz, pz = tdx;   // perpendicular
+
+    const posArr = state.mesh.geometry.attributes.position.array;
+    const q = state.quadCount;
+    const v = q * 4 * 3;
+    posArr[v]    = p0x - px*HW; posArr[v+1]  = y; posArr[v+2]  = p0z - pz*HW;
+    posArr[v+3]  = p0x + px*HW; posArr[v+4]  = y; posArr[v+5]  = p0z + pz*HW;
+    posArr[v+6]  = p1x - px*HW; posArr[v+7]  = y; posArr[v+8]  = p1z - pz*HW;
+    posArr[v+9]  = p1x + px*HW; posArr[v+10] = y; posArr[v+11] = p1z + pz*HW;
+
+    state.mesh.geometry.attributes.position.needsUpdate = true;
+    state.quadCount = q + 1;
+    state.mesh.geometry.setDrawRange(0, state.quadCount * 6);
   }
 
   // ─── Dym wydechu ──────────────────────────────────────────────────────────

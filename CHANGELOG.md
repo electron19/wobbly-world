@@ -1,5 +1,10 @@
 # Changelog — Wobbly World
 
+## [v0.4.1] — 2026-03-24
+### Fixed
+- Pisk opon: przerobiony na realistyczny szum wysokich częstotliwości (bandpass 3200 Hz + highpass 1800 Hz) zamiast oscylatora piły — brzmi jak "iiiihhh"
+- Ślady opon: ribbon mesh (quady szerokości bieżnika WHEEL_W=0.26 m) zamiast cienkich linii
+
 ## [v0.4.0] — 2026-03-24
 ### Added
 - Klakson: H (klawiatura) / Y-pad (Xbox button 3) — proceduralny podwójny sygnał
