@@ -334,6 +334,7 @@ export class Car extends Entity {
     );
     antenna.position.set(0.52, ROOF_BOT + 0.20, CAB_ZOff - 0.55);
     this.root.add(antenna);
+
   }
 
   // ─── Fizyka ───────────────────────────────────────────────────────────────
@@ -499,18 +500,16 @@ export class Car extends Entity {
 
     const rpm = this._rpmFactor ?? 0.05;
 
-    // Spawn: interwał maleje przy wyższych obrotach (0.22s jałowy → 0.03s pełny gaz)
-    // Przy rpm > 0.65 spawnjemy dwa kłęby naraz
-    const interval = 0.22 - rpm * 0.19;
+    // Spawn: interwał maleje przy wyższych obrotach (0.50s jałowy → 0.22s pełny gaz)
+    const interval = 0.50 - rpm * 0.28;
     ex.timer += dt;
     if (this.isOccupied && ex.timer > interval) {
       ex.timer = 0;
       this._spawnExhaustParticle(rpm);
-      if (rpm > 0.65) this._spawnExhaustParticle(rpm);
     }
 
     // Aktualizuj istniejące cząsteczki
-    const maxLife = 2.2 - rpm * 0.8;   // krótsze życie przy dużym rpm (mniej bałaganu)
+    const maxLife = 1.3 - rpm * 0.5;   // 0.8..1.3 s
     for (let i = ex.particles.length - 1; i >= 0; i--) {
       const p = ex.particles[i];
       p.life += dt;
@@ -522,11 +521,15 @@ export class Car extends Entity {
         ex.particles.splice(i, 1);
         continue;
       }
+      // Drobna turbulencja horyzontalna — naturalny dryf dymu
+      p.vx += (Math.random() - 0.5) * 0.08;
+      p.vz += (Math.random() - 0.5) * 0.08;
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.mesh.scale.setScalar(0.3 + t * (1.5 + rpm * 1.2));
-      p.mesh.material.opacity = p.maxOpacity * (1 - t * t);
+      p.mesh.scale.setScalar(0.5 + t * (1.1 + rpm * 0.7));
+      // Szybkie zanikanie — potęgowa krzywa (naturalny dym)
+      p.mesh.material.opacity = p.maxOpacity * Math.pow(1 - t, 1.4);
     }
   }
 
@@ -538,10 +541,10 @@ export class Car extends Entity {
     const wz = this.root.position.z - lx * Math.sin(f) + lz * Math.cos(f);
 
     // Rozmiar i kolor cząsteczki skalowane przez obroty
-    // Jałowy: mały jasnoszary; pełny gaz: duży ciemnoszary
-    const radius  = 0.09 + rpm * 0.14;                      // 0.09..0.23
-    const opacity = 0.18 + rpm * 0.38;                      // 0.18..0.56
-    const grey    = Math.round(180 - rpm * 80);              // 180..100 (ciemnieje)
+    // Jałowy: drobna, prawie biała; pełny gaz: większa, szara
+    const radius  = 0.12 + rpm * 0.14;                      // 0.12..0.26
+    const opacity = 0.10 + rpm * 0.24;                      // 0.10..0.34
+    const grey    = Math.round(210 - rpm * 70);              // 210..140 (delikatnie ciemnieje)
     const color   = (grey << 16) | (grey << 8) | grey;
 
     const geo = new THREE.SphereGeometry(radius, 5, 4);
@@ -553,15 +556,15 @@ export class Car extends Entity {
     mesh.renderOrder = 1;
     this._scene.add(mesh);
 
-    // Przy wysokich obrotach: kłąb wystrzelony ku tyłowi i górze
-    const backSpeed = rpm * 2.2;
+    // Prędkość: ku górze + delikatny dryf boczny + przy gas wystrzelony ku tyłowi
+    const backSpeed = rpm * 1.8;
     this._exhaust.particles.push({
       mesh,
       life: 0,
       maxOpacity: opacity,
-      vx: (Math.random() - 0.5) * 0.35 - Math.sin(f) * backSpeed,
-      vy: 0.7 + rpm * 1.4 + Math.random() * 0.4,
-      vz: (Math.random() - 0.5) * 0.35 - Math.cos(f) * backSpeed,
+      vx: (Math.random() - 0.5) * 0.50 - Math.sin(f) * backSpeed,
+      vy: 0.9 + rpm * 1.0 + Math.random() * 0.5,
+      vz: (Math.random() - 0.5) * 0.50 - Math.cos(f) * backSpeed,
     });
   }
 
@@ -587,13 +590,15 @@ export class Car extends Entity {
     const padSteer = Math.abs(input.pad.leftX) > 0.12 ? -input.pad.leftX : 0;
     const steerIn = padSteer !== 0 ? padSteer : (steerKL - steerKR);
 
-    // ── Skręt — wygładzony lerp ──────────────────────────────────────────────
-    this._steer += (steerIn * MAX_STEER_ANGLE - this._steer) * Math.min(1, STEER_SPEED * dt);
+    // ── Skręt — wygładzony lerp, kąt maleje przy dużej prędkości ────────────
+    const absSpd0   = Math.abs(this._speedKmh ?? 0);
+    const steerMult = Math.max(0.30, 1 - absSpd0 / 160);  // 1.0 przy 0 → 0.3 przy 112+ km/h
+    this._steer += (steerIn * MAX_STEER_ANGLE * steerMult - this._steer) * Math.min(1, STEER_SPEED * dt);
     this._vehicle.setSteeringValue(this._steer, 0);  // FL
     this._vehicle.setSteeringValue(this._steer, 1);  // FR
 
     // ── Hamulec ręczny (B) — blokuje tylne koła, umożliwia drifting ─────────
-    const handBrake = input.isDown('Space') || input.isPadButtonPressed?.(1);
+    const handBrake = input.isDown('Space') || input.isPadButtonDown?.(1);
     if (handBrake && !this._prevHandbrake) {
       audio?.playHandbrake(this._vehicle.currentVehicleSpeedKmHour);
     }
@@ -605,15 +610,18 @@ export class Car extends Entity {
     let brakeForce  = IDLE_BRAKE;
 
     if (handBrake) {
-      // Hamulec ręczny: silnik wyłączony, tylne koła zablokowane
-      engineForce = 0;
-      brakeForce  = 0;
-      this._vehicle.applyEngineForce(0, 2);
-      this._vehicle.applyEngineForce(0, 3);
-      this._vehicle.setBrake(0,               0);  // FL — przednie wolne (sterowalność)
-      this._vehicle.setBrake(0,               1);  // FR
-      this._vehicle.setBrake(HAND_BRAKE_FORCE, 2);  // RL — zablokowane
-      this._vehicle.setBrake(HAND_BRAKE_FORCE, 3);  // RR — zablokowane
+      // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
+      if (gasIn > 0 && speedKmh > -1) {
+        engineForce = -MAX_ENGINE_FORCE * forwAmount;
+      }
+      this._vehicle.applyEngineForce(engineForce, 2);  // RL — napęd (donut gdy gaz)
+      this._vehicle.applyEngineForce(engineForce, 3);  // RR — napęd (donut gdy gaz)
+      this._vehicle.applyEngineForce(0,            0);  // FL — brak napędu
+      this._vehicle.applyEngineForce(0,            1);  // FR — brak napędu
+      this._vehicle.setBrake(0,                0);  // FL — przednie wolne (sterowalność)
+      this._vehicle.setBrake(0,                1);  // FR
+      this._vehicle.setBrake(HAND_BRAKE_FORCE,  2);  // RL — zablokowane
+      this._vehicle.setBrake(HAND_BRAKE_FORCE,  3);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
         if (speedKmh < -1) {
@@ -648,7 +656,8 @@ export class Car extends Entity {
     const cx = this._chassis.position.x;
     const cz = this._chassis.position.z;
     const onRoad = isOnRoad(cx, cz);
-    const fF = onRoad ? 2.0 : 0.70;   // przód: wysoka przyczepność
+    // Przód 1.5 (nie 2.0) — mniejszy opór boczny ułatwia ruszanie ze skręconymi kołami
+    const fF = onRoad ? 1.5 : 0.55;   // przód: umiarkowana przyczepność
     const fR = onRoad ? 1.3 : 0.45;   // tył: niższa → oversteer
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
@@ -704,20 +713,17 @@ export class Car extends Entity {
     const avgSuspLen = (wi[0].suspensionLength + wi[1].suspensionLength
                       + wi[2].suspensionLength + wi[3].suspensionLength) / 4;
 
-    // Obrót kół: speed-based, oś lokalna X pojazdu (bez wpływu kierunku geograficznego)
-    // speedKmh > 0 = jedzie do przodu → inner.rotation.x maleje (obrót zgodny z ruchem)
-    // Geometria: tire.rotation.z=PI/2 → oś cylindra leży wzdłuż X pojazdu
-    //            ujemny przyrost rotation.x = zgodny z ruchem do przodu (prawidłowy kierunek)
-    const dt        = this._dt ?? (1 / 60);
-    const speedKmh  = this._speedKmh ?? 0;
-    const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
+    // Obrót kół: bezpośrednio z cannon-es deltaRotation — kąt obrotu obliczony
+    // przez fizykę na ostatni krok (1/60 s), z uwzględnieniem poślizgu i hamowania.
+    // Gwarantuje zgodność bieżnika z nawierzchnią niezależnie od fps.
+    const dt = this._dt ?? (1 / 60);  // używane dalej przez _updateExhaust
 
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
       const w = wi[i];
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
-      // Obrót: -= bo obrót do przodu to ujemna rotacja wokół lokalnej +X
-      inner.rotation.x -= rollDelta;
+      // Obrót: deltaRotation z cannon-es = rad obrotu na krok fizyki
+      inner.rotation.x += w.deltaRotation;
       // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
     });

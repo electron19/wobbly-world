@@ -17,6 +17,8 @@ import { House, HOUSE_PALETTES }  from '../objects/House.js';
 import { Shop }                   from '../objects/Shop.js';
 import { School }                 from '../objects/School.js';
 import { Skyscraper }             from '../objects/Skyscraper.js';
+import { BrickBuilding }          from '../objects/BrickBuilding.js';
+import { TowerBlock }             from '../objects/TowerBlock.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
@@ -111,6 +113,20 @@ export class WorldBuilder {
       facing,
       ...opts,
     }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /** Kamienica z cegły — rejestruje koło wykluczenia, stawia budynek. */
+  _brick(x, z, facing, opts = {}) {
+    const w = opts.w ?? 9, d = opts.d ?? 12;
+    this._regCircle(x, z, w / 2, d / 2, 2.0);
+    return this._add(new BrickBuilding(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /** Wieżowiec-blok (prosta bryła) — rejestruje koło wykluczenia, stawia budynek. */
+  _tower(x, z, facing, opts = {}) {
+    const w = opts.w ?? 12, d = opts.d ?? 14;
+    this._regCircle(x, z, w / 2, d / 2, 2.5);
+    return this._add(new TowerBlock(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
   }
 
   /**
@@ -445,20 +461,11 @@ export class WorldBuilder {
       facing: FW, wallColor: 0xB4C8D8, glassColor: 0x3A7BBF, accentColor: 0xFFCC44,
     }, this.vehiclePhysics).placeAt(82, 0, -26));
 
-    this._regCircle( 82,  26, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xC8C8C8, glassColor: 0x5588AA, accentColor: 0xFF4444,
-    }, this.vehiclePhysics).placeAt(82, 0,  26));
-
-    this._regCircle(100, -14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xD4C8A8, glassColor: 0x4A8844, accentColor: 0xFFAA00,
-    }, this.vehiclePhysics).placeAt(100, 0, -14));
-
-    this._regCircle(100,  14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xE8E0D0, glassColor: 0x2255AA, accentColor: 0xFFDD00,
-    }, this.vehiclePhysics).placeAt(100, 0,  14));
+    // Wieżowiec-blok zamiast klasycznego Skyscraper — prostsza bryła
+    this._tower( 82,  26, FW, { h: 30, bodyColor: 0xC8C8C8, glassColor: 0x5588AA });
+    // Kamienica z cegły przy CBD
+    this._brick(100, -22, FW, { floors: 5, brickColor: 0x8B3A2A });
+    this._brick(100,  22, FW, { floors: 4, brickColor: 0x7B5A3A });
 
     // Sklepy przy x=65
     this._regCircle( 74, -38, 9/2, 7/2);
@@ -480,15 +487,9 @@ export class WorldBuilder {
       facing: FE, wallColor: 0xC8D8B4, glassColor: 0x3A7A3A, accentColor: 0xFF8844,
     }, this.vehiclePhysics).placeAt(-82, 0, -26));
 
-    this._regCircle(-82,  26, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FE, wallColor: 0xB8B8D8, glassColor: 0x446688, accentColor: 0x44FFAA,
-    }, this.vehiclePhysics).placeAt(-82, 0,  26));
-
-    this._regCircle(-100, -14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FE, wallColor: 0xD0C0B8, glassColor: 0x884422, accentColor: 0x44DDFF,
-    }, this.vehiclePhysics).placeAt(-100, 0, -14));
+    this._tower(-82,  26, FE, { h: 28, bodyColor: 0xB8B8D8, glassColor: 0x446688 });
+    this._brick(-100, -22, FE, { floors: 5, brickColor: 0x8B3A2A });
+    this._brick(-100,  22, FE, { floors: 4, brickColor: 0x5A3A2A });
 
     // Sklepy przy x=-65
     this._regCircle(-74, -38, 9/2, 7/2);
@@ -532,19 +533,19 @@ export class WorldBuilder {
     this._house(P[3],  14, -82, FS, { roofStyle: 'flat' });
     this._house(P[4],  42, -84, FS, { roofStyle: 'dome', w: 4.5, d: 4.5 });
 
-    // Zewnętrzny pas N-W (x∈[-125,-70])
-    this._house(P[3], -76, -68, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[4], -90, -74, FW, { roofStyle: 'flat' });
-    this._house(P[5],-108, -68, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[6], -80, -84, FS, { roofStyle: 'pitched' });
-    this._house(P[7],-100, -82, FS, { roofStyle: 'flat', floors: 2 });
+    // Zewnętrzny pas N-W (x∈[-125,-70]) — mix domów i kamienic
+    this._brick( -80, -68, FE, { floors: 3, brickColor: 0x8B3A2A });
+    this._house(P[4], -96, -74, FE, { roofStyle: 'flat' });
+    this._house(P[5],-110, -68, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[6], -82, -86, FN, { roofStyle: 'pitched' });
+    this._brick(-104, -84, FN, { floors: 4, brickColor: 0x5A3A2A });
 
-    // Zewnętrzny pas N-E (x∈[70,125])
-    this._house(P[8],  76, -68, FE, { roofStyle: 'flat', floors: 2 });
-    this._house(P[9],  92, -74, FE, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[0], 110, -68, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[1],  80, -84, FS, { roofStyle: 'flat' });
-    this._house(P[2], 102, -82, FS, { roofStyle: 'pitched' });
+    // Zewnętrzny pas N-E (x∈[70,125]) — mix domów i kamienic
+    this._brick(  80, -68, FW, { floors: 3, brickColor: 0x7B4030 });
+    this._house(P[9],  94, -74, FW, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[0], 112, -68, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[1],  82, -86, FN, { roofStyle: 'flat' });
+    this._brick( 104, -84, FN, { floors: 4, brickColor: 0x8B3A2A });
   }
 
   // ─── Pas środkowy południowy (z∈[55,95]) ─────────────────────────────────────
@@ -575,18 +576,18 @@ export class WorldBuilder {
     this._house(P[9],  42, 84, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
 
     // Zewnętrzny pas S-W (x∈[-125,-70])
-    this._house(P[1], -76, 68, FW, { roofStyle: 'flat' });
-    this._house(P[2], -92, 74, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[3],-108, 68, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[4], -80, 84, FN, { roofStyle: 'pitched' });
-    this._house(P[5],-104, 82, FN, { roofStyle: 'flat', floors: 2 });
+    this._house(P[1], -76, 68, FE, { roofStyle: 'flat' });
+    this._house(P[2], -92, 74, FE, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[3],-108, 68, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[4], -80, 84, FS, { roofStyle: 'pitched' });
+    this._house(P[5],-104, 82, FS, { roofStyle: 'flat', floors: 2 });
 
     // Zewnętrzny pas S-E (x∈[70,125])
-    this._house(P[6],  76, 68, FE, { roofStyle: 'dome' });
-    this._house(P[7],  90, 74, FE, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[8], 112, 68, FE, { roofStyle: 'flat', floors: 2 });
-    this._house(P[9],  82, 84, FN, { roofStyle: 'flat' });
-    this._house(P[0], 106, 82, FN, { roofStyle: 'pitched' });
+    this._house(P[6],  76, 68, FW, { roofStyle: 'dome' });
+    this._house(P[7],  90, 74, FW, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[8], 112, 68, FW, { roofStyle: 'flat', floors: 2 });
+    this._house(P[9],  82, 84, FS, { roofStyle: 'flat' });
+    this._house(P[0], 106, 82, FS, { roofStyle: 'pitched' });
   }
 
   // ─── Daleka północ (z∈[-145,-105]) ───────────────────────────────────────────
@@ -595,9 +596,9 @@ export class WorldBuilder {
     const P = HOUSE_PALETTES;
 
     // Pas W (x∈[-125,-70])
-    this._house(P[2], -78,-112, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[3], -96,-118, FW, { roofStyle: 'flat' });
-    this._house(P[4],-112,-112, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[2], -78,-112, FE, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[3], -96,-118, FE, { roofStyle: 'flat' });
+    this._house(P[4],-112,-112, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
     this._house(P[5], -82,-132, FS, { roofStyle: 'pitched' });
     this._house(P[6],-106,-130, FS, { roofStyle: 'flat', floors: 2 });
 
@@ -616,9 +617,9 @@ export class WorldBuilder {
     this._house(P[6],  48,-128, FS, { roofStyle: 'flat' });
 
     // Pas E (x∈[70,125])
-    this._house(P[7],  78,-112, FE, { roofStyle: 'flat', floors: 2 });
-    this._house(P[8],  96,-118, FE, { roofStyle: 'dome' });
-    this._house(P[9], 112,-112, FE, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[7],  78,-112, FW, { roofStyle: 'flat', floors: 2 });
+    this._house(P[8],  96,-118, FW, { roofStyle: 'dome' });
+    this._house(P[9], 112,-112, FW, { roofStyle: 'pitched', hasChimney: true });
     this._house(P[0],  84,-132, FS, { roofStyle: 'flat' });
     this._house(P[1], 108,-128, FS, { roofStyle: 'pitched' });
   }
@@ -629,9 +630,9 @@ export class WorldBuilder {
     const P = HOUSE_PALETTES;
 
     // Pas W (x∈[-125,-70])
-    this._house(P[4], -78, 112, FW, { roofStyle: 'dome' });
-    this._house(P[5], -96, 118, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[6],-112, 112, FW, { roofStyle: 'flat', floors: 2 });
+    this._house(P[4], -78, 112, FE, { roofStyle: 'dome' });
+    this._house(P[5], -96, 118, FE, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[6],-112, 112, FE, { roofStyle: 'flat', floors: 2 });
     this._house(P[7], -82, 132, FN, { roofStyle: 'pitched' });
     this._house(P[8],-106, 130, FN, { roofStyle: 'flat' });
 
@@ -650,9 +651,9 @@ export class WorldBuilder {
     this._house(P[8],  46, 128, FN, { roofStyle: 'flat' });
 
     // Pas E (x∈[70,125])
-    this._house(P[9],  78, 112, FE, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[0],  96, 118, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[1], 114, 112, FE, { roofStyle: 'flat', floors: 2 });
+    this._house(P[9],  78, 112, FW, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[0],  96, 118, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[1], 114, 112, FW, { roofStyle: 'flat', floors: 2 });
     this._house(P[2],  82, 132, FN, { roofStyle: 'flat' });
     this._house(P[3], 108, 128, FN, { roofStyle: 'pitched' });
   }
@@ -662,27 +663,16 @@ export class WorldBuilder {
   _addFarEast() {
     const P = HOUSE_PALETTES;
 
-    // Centrum dalekiego wschodu (z∈[-45,45]) — wieżowce
+    // Centrum dalekiego wschodu — mix: 1 wieżowiec + TowerBlock + kamienice
     this._regCircle(150, -28, 5, 5);
     this._add(new Skyscraper(this.scene, this.physics, {
       facing: FW, wallColor: 0xE8D5B8, glassColor: 0x8B4513, accentColor: 0xFF6600,
     }, this.vehiclePhysics).placeAt(150, 0, -28));
-    this._regCircle(150,  28, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xB8D4E8, glassColor: 0x1155AA, accentColor: 0xFFCC00,
-    }, this.vehiclePhysics).placeAt(150, 0,  28));
-    this._regCircle(168,   0, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xC8E8C8, glassColor: 0x228833, accentColor: 0xFF2222,
-    }, this.vehiclePhysics).placeAt(168, 0,   0));
-    this._regCircle(172, -14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xD8C8E8, glassColor: 0x553399, accentColor: 0xFFAA22,
-    }, this.vehiclePhysics).placeAt(172, 0, -14));
-    this._regCircle(172,  14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FW, wallColor: 0xE8E8C0, glassColor: 0x888822, accentColor: 0x44CCFF,
-    }, this.vehiclePhysics).placeAt(172, 0,  14));
+    this._tower(150,  28, FW, { h: 38, bodyColor: 0xB8D4E8, glassColor: 0x1155AA });
+    this._tower(168,   0, FW, { h: 44, bodyColor: 0xC8E8C8, glassColor: 0x228833 });
+    // Kamienice czynszowe przy głównej ulicy wschodu
+    this._brick(172, -18, FW, { floors: 5, brickColor: 0x8B3A2A });
+    this._brick(172,  18, FW, { floors: 4, brickColor: 0x7B5A3A });
 
     // Sklepy przy x=130
     this._regCircle(140, -38, 9/2, 7/2);
@@ -708,23 +698,16 @@ export class WorldBuilder {
   _addFarWest() {
     const P = HOUSE_PALETTES;
 
-    // Centrum dalekiego zachodu — wieżowce
+    // Centrum dalekiego zachodu — mix: wieżowiec + TowerBlock + kamienice
     this._regCircle(-150, -28, 5, 5);
     this._add(new Skyscraper(this.scene, this.physics, {
       facing: FE, wallColor: 0xE8C8C8, glassColor: 0xAA2222, accentColor: 0x44FFAA,
     }, this.vehiclePhysics).placeAt(-150, 0, -28));
-    this._regCircle(-150,  28, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FE, wallColor: 0xC8E8E8, glassColor: 0x226688, accentColor: 0xFF8800,
-    }, this.vehiclePhysics).placeAt(-150, 0,  28));
-    this._regCircle(-168,   0, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FE, wallColor: 0xE8E0C8, glassColor: 0x887722, accentColor: 0x8844FF,
-    }, this.vehiclePhysics).placeAt(-168, 0,   0));
-    this._regCircle(-172, -14, 5, 5);
-    this._add(new Skyscraper(this.scene, this.physics, {
-      facing: FE, wallColor: 0xD0D8E8, glassColor: 0x334477, accentColor: 0xFF4444,
-    }, this.vehiclePhysics).placeAt(-172, 0, -14));
+    this._tower(-150,  28, FE, { h: 36, bodyColor: 0xC8E8E8, glassColor: 0x226688 });
+    this._tower(-168,   0, FE, { h: 42, bodyColor: 0xE8E0C8, glassColor: 0x887722 });
+    // Kamienice z cegły (dzielnica artystyczna)
+    this._brick(-172, -18, FE, { floors: 4, brickColor: 0x7B4030, stoneColor: 0xE0D4B8 });
+    this._brick(-172,  18, FE, { floors: 5, brickColor: 0x8B3A2A });
 
     // Sklepy przy x=-130
     this._regCircle(-140, -38, 9/2, 7/2);
@@ -891,7 +874,7 @@ export class WorldBuilder {
       }
       const scale = 0.7 + rand() * 0.65;
       this._add(new Tree(this.scene, this.physics,
-        { trunkH: 1.5 * scale, leavesR: scale },
+        { trunkH: 3.0 * scale, trunkR: 0.22 * scale, leavesR: 2.0 * scale },
         this.vehiclePhysics,
       ).placeAt(x, 0, z));
     });

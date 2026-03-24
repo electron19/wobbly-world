@@ -17,9 +17,9 @@ export class Tree extends WorldObject {
   constructor(scene, physics, cfg = {}, vehiclePhysics = null) {
     super(scene, physics, vehiclePhysics);
     this.cfg = {
-      trunkH:      1.8,
-      trunkR:      0.18,
-      leavesR:     1.0,
+      trunkH:      3.6,
+      trunkR:      0.28,
+      leavesR:     2.0,
       trunkColor:  C.bark,
       leavesColor: C.leaves,
       ...cfg,
