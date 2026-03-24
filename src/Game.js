@@ -64,7 +64,7 @@ export class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7EC8F5);
     // Gęstość mgły: 0.006 = widok ~200j, 0.008 = ~130j; miasto jest większe więc luzujemy
-    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.006);
+    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.004);
 
     this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 200);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -133,7 +133,7 @@ export class Game {
   _updateCulling() {
     if (++this._cullFrame % 4 !== 0) return;
     const pp = this.player.root.position;
-    const DIST_SQ = 150 * 150;
+    const DIST_SQ = 200 * 200;
     for (const obj of this._worldObjects) {
       const dx = obj.root.position.x - pp.x;
       const dz = obj.root.position.z - pp.z;

@@ -17,7 +17,7 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE = 4500;   // N na koło tylne
+const MAX_ENGINE_FORCE = 5400;   // N na koło tylne
 const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
 const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
 const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
@@ -558,10 +558,12 @@ export class Car extends Entity {
   update(dt, input, audio) {
     this._dt = dt;
     // Gaz do przodu: W / ArrowUp / R2
-    const fwdK  = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
+    const fwdK      = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
     // Cofanie / hamulec: S / ArrowDown / L2
-    const revK  = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
-    const gasIn = Math.max(fwdK, input.pad.r2) - Math.max(revK, input.pad.l2);
+    const revK      = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
+    const forwAmount = Math.max(fwdK, input.pad.r2);  // 0..1 — siła gazu/hamo. w przód
+    const backAmount = Math.max(revK, input.pad.l2);  // 0..1 — siła gazu/hamo. w tył
+    const gasIn = forwAmount - backAmount;
 
     // Skręt: A/D / ArrowLeft/Right / lewy analog X
     const steerKL = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
@@ -599,22 +601,38 @@ export class Car extends Entity {
     } else {
       if (gasIn > 0) {
         if (speedKmh < -1) {
-          brakeForce = MAX_BRAKE_FORCE;
+          // Hamowanie podczas cofania — proporcjonalne do nacisku
+          brakeForce = MAX_BRAKE_FORCE * forwAmount;
         } else if (speedKmh < MAX_SPEED_KMH) {
           engineForce = -MAX_ENGINE_FORCE * gasIn;  // proporcjonalnie do nacisku
           brakeForce  = 0;
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
-          brakeForce = MAX_BRAKE_FORCE;
+          // Hamowanie podczas jazdy do przodu — proporcjonalne do L2 / klawisza
+          brakeForce = MAX_BRAKE_FORCE * backAmount;
         } else if (speedKmh > -MAX_REV_KMH) {
           engineForce = MAX_ENGINE_FORCE * (-gasIn);  // proporcjonalnie do nacisku
           brakeForce  = 0;
         }
       }
 
-      this._vehicle.applyEngineForce(engineForce, 2);
-      this._vehicle.applyEngineForce(engineForce, 3);
+      // Dyferencjał Ackermanna — tylna oś (napęd RWD)
+      // Koło wewnętrzne (mniejszy promień) dostaje mniej momentu niż zewnętrzne
+      const WHEELBASE  = AXLE_ZF - AXLE_ZR;  // 3.04 m
+      const absSteer   = Math.abs(this._steer);
+      let rlForce = engineForce;
+      let rrForce = engineForce;
+      if (absSteer > 0.01) {
+        const R    = WHEELBASE / Math.tan(absSteer);   // promień skrętu
+        const k    = Math.max(0.1, (R - WHEEL_X) / (R + WHEEL_X)); // 0.1..1
+        if (this._steer > 0) { rlForce = engineForce * k; }  // skręt w lewo  → RL wewnętrzne
+        else                 { rrForce = engineForce * k; }  // skręt w prawo → RR wewnętrzne
+      }
+      this._vehicle.applyEngineForce(0,       0);  // FL — brak napędu (FWD off)
+      this._vehicle.applyEngineForce(0,       1);  // FR — brak napędu (FWD off)
+      this._vehicle.applyEngineForce(rlForce, 2);  // RL
+      this._vehicle.applyEngineForce(rrForce, 3);  // RR
       for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
     }
 
@@ -635,7 +653,7 @@ export class Car extends Entity {
     // ── Stan hamowania — używany przez _updateSkidMarks ──────────────────────
     const absSpd = Math.abs(speedKmh);
     this._isHandbraking = handBrake && absSpd > 5;
-    this._isBraking     = !handBrake && brakeForce >= MAX_BRAKE_FORCE && absSpd > 6;
+    this._isBraking     = !handBrake && brakeForce > MAX_BRAKE_FORCE * 0.4 && absSpd > 6;
 
     // ── Animacja kół ─────────────────────────────────────────────────────────
     const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
