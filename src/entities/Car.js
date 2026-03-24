@@ -22,7 +22,7 @@ const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
 const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
 const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
-const STEER_SPEED      = 5;      // szybkość rampy kierownicy (1/s)
+const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 200;    // limit prędkości do przodu
 const MAX_REV_KMH      = 35;     // limit cofania
 
