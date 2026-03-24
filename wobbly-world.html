@@ -24,11 +24,30 @@
     border-radius: 999px; pointer-events: none;
     transition: opacity 0.5s;
   }
+  #score {
+    position: fixed; top: 14px; right: 18px;
+    color: white; font: bold 16px 'Arial Rounded MT Bold', Arial, sans-serif;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.35); padding: 8px 18px;
+    border-radius: 999px; pointer-events: none; user-select: none;
+  }
+  #hint-e {
+    position: fixed; bottom: 64px; left: 50%;
+    transform: translateX(-50%);
+    color: white; font: bold 15px Arial, sans-serif;
+    text-shadow: 0 2px 6px rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.50); padding: 8px 24px;
+    border-radius: 999px; pointer-events: none;
+    border: 2px solid rgba(255,255,255,0.35);
+    display: none; white-space: nowrap;
+  }
 </style>
 </head>
 <body>
 <div id="ui">WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)</div>
 <div id="hint">🖱️ Kliknij by sterować kamerą</div>
+<div id="score">⭐ 0 / 15</div>
+<div id="hint-e"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.0/build/three.min.js"></script>
 <script>
@@ -96,6 +115,163 @@ class Spring {
   kick(v) { this.vel += v; }
 }
 
+// ─── CAR ──────────────────────────────────────────────────────────────────────
+// Fizyka: prosta arcade (bez biblioteki).
+// Koła: inner.rotation.x += speed/WHEEL_R * dt  → prawidłowy kierunek toczenia.
+// Skręt: outer.rotation.y = steer  → wizualny skręt przednich kół.
+const WHEEL_R       = 0.38;
+const CAR_ENTER_R   = 3.5;   // promień wsiadania
+
+class Car {
+  constructor(x, z, color, heading = Math.PI) {
+    this.root    = new THREE.Group();
+    this.heading = heading;
+    this.speed   = 0;        // m/s, + = do przodu
+    this.steer   = 0;        // rad, bieżący kąt kierownicy
+    this.isOccupied = false;
+    this._wheels = [];
+    this._build(color);
+    this.root.position.set(x, 0, z);
+    this.root.rotation.y = heading;
+    scene.add(this.root);
+  }
+
+  _shade(hex, f) {
+    return ((Math.round(((hex >> 16) & 0xff) * f)) << 16)
+         | ((Math.round(((hex >>  8) & 0xff) * f)) <<  8)
+         |   Math.round(( hex        & 0xff) * f);
+  }
+
+  _build(color) {
+    const bodyMat = tmat(color);
+    const glassMat = new THREE.MeshToonMaterial({
+      color: 0x6EC6E0, transparent: true, opacity: 0.65, gradientMap: toonGrad });
+    const tireM  = tmat(0x1A1A1A);
+    const rimM   = tmat(0xBEBEBE);
+    const blackM = tmat(0x111111);
+    const chromM = tmat(0xD4D4D4);
+
+    const B = (x, y, z, w, h, d, mat, ol = 0) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z); m.castShadow = true;
+      if (ol > 0) addOutline(m, ol);
+      this.root.add(m);
+    };
+    // Karoseria
+    B(0, 0.52,  0,      2.06, 0.48, 4.12, bodyMat, 0.04);
+    // Kabina
+    B(0, 1.12,  0.12,   1.82, 0.60, 2.28, bodyMat, 0.035);
+    // Dach
+    B(0, 1.48,  0.12,   1.86, 0.10, 2.30, bodyMat, 0.025);
+    // Szyba przednia (ramka + szkło)
+    B(0, 1.12,  1.22,   1.75, 0.54, 0.06, blackM);
+    B(0, 1.12,  1.24,   1.62, 0.50, 0.05, glassMat);
+    // Szyba tylna
+    B(0, 1.12, -1.02,   1.75, 0.54, 0.06, blackM);
+    B(0, 1.12, -1.04,   1.62, 0.50, 0.05, glassMat);
+    // Zderzaki
+    B(0, 0.34,  2.12,   2.08, 0.24, 0.16, chromM, 0.025);
+    B(0, 0.34, -2.12,   2.08, 0.24, 0.16, chromM, 0.025);
+    // Reflektory
+    [-0.70, 0.70].forEach(x => {
+      B(x, 0.62,  2.10, 0.44, 0.22, 0.06, new THREE.MeshBasicMaterial({ color: 0xFFFDE0 }));
+      B(x, 0.62, -2.10, 0.44, 0.18, 0.06, new THREE.MeshBasicMaterial({ color: 0x330000 }));
+    });
+    // Progi boczne
+    [-1.04, 1.04].forEach(x => B(x, 0.28, 0, 0.06, 0.20, 3.80, blackM));
+
+    // 4 koła: FL, FR, RL, RR
+    [
+      { x: -1.09, z:  1.44, isFront: true  },
+      { x:  1.09, z:  1.44, isFront: true  },
+      { x: -1.09, z: -1.44, isFront: false },
+      { x:  1.09, z: -1.44, isFront: false },
+    ].forEach(({ x, z, isFront }) => {
+      const outer = new THREE.Group();
+      const inner = new THREE.Group();
+
+      // Opona (cylinder, oś → X przez rotation.z=PI/2)
+      const tire = new THREE.Mesh(
+        new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.26, 14), tireM);
+      tire.rotation.z = Math.PI / 2;
+      tire.castShadow = true;
+      addOutline(tire, 0.04);
+      inner.add(tire);
+
+      // Felga
+      const rim = new THREE.Mesh(
+        new THREE.CylinderGeometry(WHEEL_R * 0.60, WHEEL_R * 0.60, 0.28, 10), rimM);
+      rim.rotation.z = Math.PI / 2;
+      inner.add(rim);
+
+      // 3 szprychy (widoczne dzięki nim że koło się kręci)
+      for (let s = 0; s < 3; s++) {
+        const sp = new THREE.Mesh(
+          new THREE.BoxGeometry(0.28, WHEEL_R * 1.52, 0.08), rimM);
+        sp.rotation.x = (s / 3) * Math.PI;
+        inner.add(sp);
+      }
+
+      // Piasta
+      const hub = new THREE.Mesh(
+        new THREE.CylinderGeometry(WHEEL_R * 0.15, WHEEL_R * 0.15, 0.30, 8), blackM);
+      hub.rotation.z = Math.PI / 2;
+      inner.add(hub);
+
+      outer.add(inner);
+      outer.position.set(x, WHEEL_R, z);
+      this.root.add(outer);
+      this._wheels.push({ outer, inner, isFront });
+    });
+  }
+
+  update(dt, inp) {
+    const GAS = 14, BRAKE = 24, MAX_FWD = 22, MAX_REV = 8;
+    const STEER_SPD = 2.8, MAX_STEER = 0.60;
+
+    // Gaz / hamulec
+    if (inp.has('KeyW') || inp.has('ArrowUp')) {
+      this.speed = Math.min(MAX_FWD, this.speed + GAS * dt);
+    } else if (inp.has('KeyS') || inp.has('ArrowDown')) {
+      if (this.speed > 0.3) this.speed = Math.max(0, this.speed - BRAKE * dt);
+      else this.speed = Math.max(-MAX_REV, this.speed - GAS * 0.5 * dt);
+    } else {
+      this.speed *= Math.pow(0.88, dt * 60);
+      if (Math.abs(this.speed) < 0.05) this.speed = 0;
+    }
+
+    // Kierownica (efektywna tylko przy ruchu)
+    const sf    = Math.min(1, Math.abs(this.speed) / 4);
+    const slim  = MAX_STEER * (0.25 + sf * 0.75);
+    if (inp.has('KeyA') || inp.has('ArrowLeft'))
+      this.steer = Math.min( slim, this.steer + STEER_SPD * dt);
+    else if (inp.has('KeyD') || inp.has('ArrowRight'))
+      this.steer = Math.max(-slim, this.steer - STEER_SPD * dt);
+    else {
+      this.steer *= Math.pow(0.75, dt * 60);
+      if (Math.abs(this.steer) < 0.005) this.steer = 0;
+    }
+
+    // Ruch
+    this.heading += (this.steer * this.speed / 5.0) * dt;
+    this.root.position.x += Math.sin(this.heading) * this.speed * dt;
+    this.root.position.z += Math.cos(this.heading) * this.speed * dt;
+    this.root.rotation.y  = this.heading;
+
+    // Obracanie kół ──────────────────────────────────────────────────────────
+    // Koła toczą się: inner.rotation.x += speed / promień * dt
+    // Obrót wokół osi X kontenera inner (= oś X samochodu):
+    //   + obrót → górna część koła idzie w +Z (przód auta) = auto jedzie naprzód ✓
+    const spin = (this.speed / WHEEL_R) * dt;
+    this._wheels.forEach(({ outer, inner, isFront }) => {
+      inner.rotation.x += spin;
+      if (isFront) outer.rotation.y = this.steer;
+    });
+  }
+
+  get position() { return this.root.position; }
+}
+
 // ─── WOBBLY CHARACTER ─────────────────────────────────────────────────────────
 class WobblyCharacter {
   constructor(startX = 0, startZ = 0) {
@@ -126,24 +302,27 @@ class WobblyCharacter {
   }
 
   _buildEyes() {
-    const whiteMat = tmat(0xffffff);
-    const darkMat  = new THREE.MeshBasicMaterial({ color: 0x222222 });
-    const shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    // Pionowe kapsułkowe oczka
     const makeEye = (side) => {
-      const g = new THREE.Group();
-      g.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), whiteMat));
-      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), darkMat);
-      pupil.position.z = 0.07;
-      g.add(pupil);
-      const gleam = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), shineMat);
-      gleam.position.set(0.04, 0.04, 0.10);
-      g.add(gleam);
-      g.position.set(side * 0.22, 0.72, 0.44);
-      this.root.add(g);
-      return g;
+      const eye = new THREE.Mesh(new THREE.CapsuleGeometry(0.042, 0.10, 4, 8), blackMat);
+      eye.position.set(side * 0.20, 0.76, 0.50);
+      this.root.add(eye);
+      return eye;
     };
     this.lEye = makeEye(-1);
     this.rEye = makeEye(1);
+    // Uśmiechnięta buzia (łuk Beziera)
+    const smile = new THREE.Mesh(
+      new THREE.TubeGeometry(
+        new THREE.QuadraticBezierCurve3(
+          new THREE.Vector3(-0.17, 0.65, 0.50),
+          new THREE.Vector3(0,     0.57, 0.52),
+          new THREE.Vector3( 0.17, 0.65, 0.50)
+        ), 20, 0.024, 6, false
+      ), blackMat
+    );
+    this.root.add(smile);
   }
 
   _buildLimbs() {
@@ -845,6 +1024,35 @@ const clouds = [
   );
 })();
 
+// ─── CARS ─────────────────────────────────────────────────────────────────────
+const cars = [
+  new Car( 1.2, 26, 0x3498DB),   // niebieski, blisko gracza
+  new Car(-1.2, 18, 0xFF4444),   // czerwony, trochę dalej
+];
+
+// ─── COLLECTIBLES (gwiazdki) ──────────────────────────────────────────────────
+const STAR_XZ = [
+  [ 0,   30], [ 0,   22], [ 0,   12], [ 0,    2], [ 0,  -10],
+  [ 0,  -20], [ 0,  -32], [-28,  10], [-28,  14], [-28,   6],
+  [ 18, -12], [-18, -12], [ 18,  14], [-18,  14], [  0, -44],
+];
+const stars = STAR_XZ.map(([x, z]) => {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.36, 0.09, 8, 16),
+    new THREE.MeshToonMaterial({ color: 0xFFD700, gradientMap: toonGrad })
+  );
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(0.18, 8, 6),
+    new THREE.MeshToonMaterial({ color: 0xFFFF44, gradientMap: toonGrad })
+  ));
+  g.position.set(x, 0.9, z);
+  scene.add(g);
+  return { group: g, collected: false };
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── INPUT / CAMERA / CHARACTER / LOOP ───────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -873,8 +1081,14 @@ const camPos    = new THREE.Vector3(0, 5, 8);
 const camLookAt = new THREE.Vector3(0, 1, 0);
 const tmpV      = new THREE.Vector3();
 
-// Character starts at south end of street
-const hero = new WobblyCharacter(0, 34);
+const hero  = new WobblyCharacter(0, 34);
+const uiEl  = document.getElementById('ui');
+const hintE = document.getElementById('hint-e');
+const scoreEl = document.getElementById('score');
+
+let drivingCar = null;
+let eWasDown   = false;
+let score      = 0;
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -889,21 +1103,102 @@ let prev = 0;
   prev = now;
   const t = now / 1000;
 
-  hero.update(dt, input, camYaw);
+  // ── Obsługa klawisza E (wsiadanie / wysiadanie) ──────────────────────────
+  const eDown    = input.has('KeyE');
+  const ePressed = eDown && !eWasDown;
+  eWasDown = eDown;
 
-  // Drift clouds
+  if (ePressed) {
+    if (drivingCar) {
+      // Wysiądź — pojaw się z boku auta
+      const cp = drivingCar.root.position;
+      const ex = cp.x + Math.cos(drivingCar.heading) * 2.8;
+      const ez = cp.z - Math.sin(drivingCar.heading) * 2.8;
+      hero.pos.set(ex, 0, ez);
+      hero.vel.set(0, 0, 0);
+      hero.root.visible = true;
+      drivingCar.speed  = 0;
+      drivingCar.isOccupied = false;
+      drivingCar = null;
+      uiEl.innerHTML = 'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)';
+    } else {
+      // Wsiądź do najbliższego auta w zasięgu
+      for (const car of cars) {
+        const dx = hero.pos.x - car.position.x;
+        const dz = hero.pos.z - car.position.z;
+        if (dx * dx + dz * dz < CAR_ENTER_R * CAR_ENTER_R) {
+          drivingCar = car;
+          car.isOccupied = true;
+          hero.root.visible = false;
+          uiEl.innerHTML = 'WASD – jedź &nbsp;|&nbsp; E – wysiądź &nbsp;|&nbsp; Mysz – kamera';
+          break;
+        }
+      }
+    }
+  }
+
+  // ── Update gracza lub auta ───────────────────────────────────────────────
+  if (drivingCar) {
+    drivingCar.update(dt, input);
+  } else {
+    hero.update(dt, input, camYaw);
+  }
+
+  // ── Drift chmur ──────────────────────────────────────────────────────────
   clouds.forEach(c => {
     c.group.position.x += c.speed * dt;
     if (c.group.position.x > 40) c.group.position.x = -40;
   });
 
-  // Camera
-  const p  = hero.pos;
-  const hz = Math.cos(camPitch) * 8;
-  const hy = Math.sin(camPitch) * 8;
-  tmpV.set(p.x + Math.sin(camYaw) * hz, p.y + 1.8 + hy, p.z + Math.cos(camYaw) * hz);
+  // ── Gwiazdki: animacja + zbieranie ──────────────────────────────────────
+  const collectPos = drivingCar ? drivingCar.root.position : hero.pos;
+  stars.forEach((s, i) => {
+    if (s.collected) return;
+    s.group.rotation.y     = t * 1.6 + i * 0.9;
+    s.group.position.y     = 0.9 + Math.sin(t * 2 + i * 1.3) * 0.13;
+    const dx = collectPos.x - s.group.position.x;
+    const dz = collectPos.z - s.group.position.z;
+    if (dx * dx + dz * dz < 1.6 * 1.6) {
+      s.collected = true;
+      scene.remove(s.group);
+      score++;
+      scoreEl.textContent = `⭐ ${score} / ${stars.length}`;
+    }
+  });
+
+  // ── Hint E ──────────────────────────────────────────────────────────────
+  if (drivingCar) {
+    hintE.textContent = 'E — wysiądź';
+    hintE.style.display = 'block';
+  } else {
+    let near = false;
+    for (const car of cars) {
+      const dx = hero.pos.x - car.position.x;
+      const dz = hero.pos.z - car.position.z;
+      if (dx * dx + dz * dz < CAR_ENTER_R * CAR_ENTER_R) { near = true; break; }
+    }
+    hintE.textContent = near ? 'E — wsiądź' : '';
+    hintE.style.display = near ? 'block' : 'none';
+  }
+
+  // ── Kamera ──────────────────────────────────────────────────────────────
+  if (drivingCar) {
+    // Kamera automatycznie podąża za tyłem auta (lerp kąta)
+    const targetYaw = drivingCar.heading + Math.PI;
+    let diff = targetYaw - camYaw;
+    while (diff >  Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    camYaw += diff * Math.min(1, dt * 2.5);
+  }
+  const followPos  = drivingCar ? drivingCar.root.position : hero.pos;
+  const camDist    = drivingCar ? 11 : 8;
+  const camHeight  = drivingCar ? 2.0 : 1.8;
+  const lookYOff   = drivingCar ? 0.8 : 1.0;
+  const hz = Math.cos(camPitch) * camDist;
+  const hy = Math.sin(camPitch) * camDist;
+  tmpV.set(followPos.x + Math.sin(camYaw) * hz, followPos.y + camHeight + hy, followPos.z + Math.cos(camYaw) * hz);
   camPos.lerp(tmpV, 0.12);
-  camLookAt.lerp(tmpV.set(p.x, p.y + 1.0, p.z), 0.15);
+  camLookAt.lerp(tmpV.set(followPos.x, followPos.y + lookYOff, followPos.z), 0.15);
   camera.position.copy(camPos);
   camera.lookAt(camLookAt);
 
