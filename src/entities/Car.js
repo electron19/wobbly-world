@@ -18,7 +18,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE = 6750;   // N na koło tylne
-const MAX_BRAKE_FORCE  = 80;     // Nm hamowania
+const MAX_BRAKE_FORCE  = 120;    // Nm hamowania
 const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
 const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -626,12 +626,19 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
     }
 
-    // ── Tarcie kół — mniejsze na trawie ─────────────────────────────────────
+    // ── Tarcie kół — per koło (przód ≠ tył) × nawierzchnia ──────────────────
+    // Tylne mniej przyczepne → naturalny oversteer RWD
+    // Nie nadpisuj jednakowo dla wszystkich — to niszczyło efekt RWD!
     const cx = this._chassis.position.x;
     const cz = this._chassis.position.z;
     const onRoad = isOnRoad(cx, cz);
-    const slip = onRoad ? 2.8 : 0.85;  // wyższy = lepsza przyczepność na asfalcie
-    for (const wi of this._vehicle.wheelInfos) wi.frictionSlip = slip;
+    const fF = onRoad ? 2.0 : 0.70;   // przód: wysoka przyczepność
+    const fR = onRoad ? 1.3 : 0.45;   // tył: niższa → oversteer
+    const wInfos = this._vehicle.wheelInfos;
+    wInfos[0].frictionSlip = fF;  // FL
+    wInfos[1].frictionSlip = fF;  // FR
+    wInfos[2].frictionSlip = fR;  // RL
+    wInfos[3].frictionSlip = fR;  // RR
 
     // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
     const hornDown = input.isDown('KeyH') || input.isPadButtonDown?.(3);
@@ -645,12 +652,8 @@ export class Car extends Entity {
     this._isHandbraking = handBrake && absSpd > 5;
     this._isBraking     = !handBrake && brakeForce > MAX_BRAKE_FORCE * 0.4 && absSpd > 6;
 
-    // ── Animacja kół ─────────────────────────────────────────────────────────
-    const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
-    this._wheels.forEach(({ outer, inner, isFront }) => {
-      if (isFront) outer.rotation.y = this._steer;
-      inner.rotation.x += rollDelta;  // += bo oś koła w -X (axleLocal = (-1,0,0))
-    });
+    // ── Skręt kół przednich (wizualnie) — synkronizowany w lateUpdate ────────
+    // Nie robimy tu nic — obrót kół pobierany z cannon-es w lateUpdate()
   }
 
   /**
@@ -661,11 +664,12 @@ export class Car extends Entity {
     const pos  = this._chassis.position;
     const quat = this._chassis.quaternion;
 
-    // Oblicz rootY z uśrednionej pozycji środków kół (cannon-es worldTransform).
-    // wheel center Y - WHEEL_R = poziom podłogi pod kołem → brak zapadania niezależnie
-    // od ustawień zawieszenia. Lerp 0.2 tłumi ewentualne drgania zawieszenia.
+    // ── Synchronizacja kół z cannon-es ───────────────────────────────────────
+    // updateWheelTransform() przelicza: pozycję koła, obrót (rotation), skręt (steering)
     for (let i = 0; i < 4; i++) this._vehicle.updateWheelTransform(i);
     const wi = this._vehicle.wheelInfos;
+
+    // Root Y: uśredniona pozycja środków kół → brak zapadania przy drganiach zawieszenia
     const avgWheelY = (wi[0].worldTransform.position.y + wi[1].worldTransform.position.y
                      + wi[2].worldTransform.position.y + wi[3].worldTransform.position.y) / 4;
     const targetRootY = avgWheelY - WHEEL_R;
@@ -674,6 +678,26 @@ export class Car extends Entity {
 
     this.root.position.set(pos.x, this._rootY, pos.z);
     this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+
+    // Per-koło: zawieszenie (Y względem roota) + obrót + skręt
+    // avgSuspLen = podstawa do wyrównania — koła oscylują symetrycznie względem rootY
+    const avgSuspLen = (wi[0].suspensionLength + wi[1].suspensionLength
+                      + wi[2].suspensionLength + wi[3].suspensionLength) / 4;
+    this._wheels.forEach(({ outer, inner, isFront }, i) => {
+      const w = wi[i];
+
+      // Zawieszenie: koło wyżej gdy bardziej ściśnięte niż przeciętne (np. przeszkoda)
+      outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
+
+      // Obrót koła z cannon-es — wi.rotation to kąt skumulowany wokół osi -X koła
+      // Znak: axleLocal=(-1,0,0) → obrót w cannon-es = obrót wokół -X
+      //        → Three.js rotation.x = -wi.rotation
+      // Efekt: tylne koła spinują się szybciej niż przednie przy gazie (burnout)
+      inner.rotation.x = -w.rotation;
+
+      // Skręt kół przednich z cannon-es (źródło prawdy)
+      if (isFront) outer.rotation.y = w.steering;
+    });
 
     // Wyciągnij kąt obrotu Y (heading) z kwaterniona — dla kamery i wychodzenia
     this.facing = Math.atan2(
