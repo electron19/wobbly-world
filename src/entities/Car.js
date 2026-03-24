@@ -601,14 +601,14 @@ export class Car extends Entity {
         if (speedKmh < -1) {
           brakeForce = MAX_BRAKE_FORCE;
         } else if (speedKmh < MAX_SPEED_KMH) {
-          engineForce = -MAX_ENGINE_FORCE;
+          engineForce = -MAX_ENGINE_FORCE * gasIn;  // proporcjonalnie do nacisku
           brakeForce  = 0;
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
           brakeForce = MAX_BRAKE_FORCE;
         } else if (speedKmh > -MAX_REV_KMH) {
-          engineForce = MAX_ENGINE_FORCE;
+          engineForce = MAX_ENGINE_FORCE * (-gasIn);  // proporcjonalnie do nacisku
           brakeForce  = 0;
         }
       }
