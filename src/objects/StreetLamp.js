@@ -37,7 +37,8 @@ export class StreetLamp extends WorldObject {
 
   placeAt(x, y, z, rotY = 0) {
     super.placeAt(x, y, z);
-    this.root.rotation.y = rotY;
+    // +π: ramię domyślnie wskazuje +X, a powinno wskazywać W STRONĘ drogi
+    this.root.rotation.y = rotY + Math.PI;
     this._build();
     // Cienki cylinder na słup — Rapier + cannon-es
     this._bodies.push(

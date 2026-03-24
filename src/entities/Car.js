@@ -377,14 +377,13 @@ export class Car extends Entity {
     return this._skidState ? this._skidState.some(s => s.active) : false;
   }
 
-  /** Inicjalizuje system śladów hamowania (2 tylne koła). */
+  /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
-    // Stan per tylne koło (indeksy 2=RL, 3=RR w wheelInfos)
-    this._skidState = [false, false].map(() => ({
-      active:    false,   // czy teraz ślizga
-      positions: [],      // Float32Array-like; trójki x,y,z bieżącego śladu
-      line:      null,    // aktywny THREE.Line (rośnie w czasie ślizgu)
-      pool:      [],      // zamknięte ślady (maks 12)
+    this._skidState = [0, 1, 2, 3].map(() => ({
+      active:    false,
+      positions: [],
+      line:      null,
+      pool:      [],    // maks 10 starych śladów per koło
     }));
   }
 
@@ -413,8 +412,8 @@ export class Car extends Entity {
     if (state.line && state.positions.length >= 6) {
       // Zamroź geometrię (nie trzeba już jej aktualizować)
       state.pool.push(state.line);
-      // Ogranicz pulę do 12 starych śladów
-      if (state.pool.length > 12) {
+      // Ogranicz pulę do 10 starych śladów per koło
+      if (state.pool.length > 10) {
         const old = state.pool.shift();
         this._scene.remove(old);
         old.geometry.dispose();
@@ -586,6 +585,11 @@ export class Car extends Entity {
     // ── Dźwięk silnika ───────────────────────────────────────────────────────
     audio?.updateEngine(speedKmh, gasIn, dt);
 
+    // ── Stan hamowania — używany przez _updateSkidMarks ──────────────────────
+    const absSpd = Math.abs(speedKmh);
+    this._isHandbraking = handBrake && absSpd > 5;
+    this._isBraking     = !handBrake && brakeForce >= MAX_BRAKE_FORCE && absSpd > 6;
+
     // ── Animacja kół ─────────────────────────────────────────────────────────
     const rollDelta = (speedKmh / 3.6) * dt / WHEEL_R;
     this._wheels.forEach(({ outer, inner, isFront }) => {
@@ -633,34 +637,40 @@ export class Car extends Entity {
   }
 
   /**
-   * Aktualizuje ślady hamowania — wywołuj po vehiclePhysics.step().
-   * Detekcja ślizgu: skidInfo < 0.88 lub hamowanie przy prędkości > 8 km/h.
+   * Aktualizuje ślady opon — 4 koła.
+   *
+   * Ślad pojawia się gdy:
+   *  - fizyczny poślizg (skidInfo < 0.96) przy prędkości > 5 km/h
+   *  - hamowanie na wszystkich kołach (_isBraking)
+   *  - hamulec ręczny na tylnych kołach (_isHandbraking)
    */
   _updateSkidMarks() {
     const wi     = this._vehicle.wheelInfos;
     const speedK = Math.abs(this._vehicle.currentVehicleSpeedKmHour);
 
-    [2, 3].forEach((wIdx, i) => {
-      const wInfo    = wi[wIdx];
-      const state    = this._skidState[i];
-      const contact  = wInfo.isInContact;
-      const skidding = contact && speedK > 8
-        && (wInfo.skidInfo < 0.88 || (wInfo.skidInfo < 0.98 && speedK > 20));
+    for (let wIdx = 0; wIdx < 4; wIdx++) {
+      const wInfo  = wi[wIdx];
+      const state  = this._skidState[wIdx];
+      const isRear = wIdx >= 2;
+
+      const physicsSlip = wInfo.isInContact && speedK > 5 && wInfo.skidInfo < 0.96;
+      const brakeSkid   = this._isBraking && wInfo.isInContact;
+      const handSkid    = this._isHandbraking && isRear && wInfo.isInContact;
+
+      const skidding = physicsSlip || brakeSkid || handSkid;
 
       const wx = wInfo.worldTransform.position.x;
-      const wy = 0.025;  // lekko nad ziemią (nie z-fighting)
       const wz = wInfo.worldTransform.position.z;
 
       if (skidding) {
         if (!state.active) {
-          // Nowy ślad — kolor zależy od podłoża
-          const onHard = isOnHardSurface(wx, wz);  // asfalt + chodnik = czarny ślad
-          this._startSkidLine(state, onHard ? 0x1a1a1a : 0x5C3A1E);
+          const onHard = isOnHardSurface(wx, wz);
+          this._startSkidLine(state, onHard ? 0x222222 : 0x6B4423);
         }
-        this._appendSkidPoint(state, wx, wy, wz);
+        this._appendSkidPoint(state, wx, 0.025, wz);
       } else {
         if (state.active) this._endSkidLine(state);
       }
-    });
+    }
   }
 }

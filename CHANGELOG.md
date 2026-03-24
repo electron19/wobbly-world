@@ -1,5 +1,12 @@
 # Changelog — Wobbly World
 
+## [v0.3.2] — 2026-03-24
+### Fixed
+- Ślady opon: wszystkie 4 koła (było tylko 2 tylne), próg skidInfo 0.88→0.96
+- Ślady przy hamowaniu (wszystkie koła) i hamulcu ręcznym (tylne koła) — niezależnie od fizycznego skidInfo
+- Lampy uliczne obrócone we właściwą stronę (oświetlają ulicę, nie trawę)
+- Dźwięki uderzeń: chodniki, wzgórza, krawężniki oznaczone jako 'ground' (brak fałszywych dźwięków)
+
 ## [v0.3.0] — 2026-03-24
 ### v0.3.1 poprawki (2026-03-24)
 - Dźwięki uderzeń dla wszystkich obiektów: ściany (bum), drzewa (trzask), latarnie (brzęk metaliczny)
