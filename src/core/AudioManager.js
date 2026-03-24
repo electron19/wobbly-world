@@ -436,15 +436,13 @@ export class AudioManager {
    * @param {boolean} onRoad   — nawierzchnia
    */
   updateSkid(skidding, onRoad) {
-    // Pisk opon TYLKO na asfalcie — na trawie cisza
-    const active = skidding && onRoad;
-    if (active && !this._skidActive) {
-      this._startSkid(true);
-    } else if (!active && this._skidActive) {
+    if (skidding && !this._skidActive) {
+      this._startSkid(onRoad);
+    } else if (!skidding && this._skidActive) {
       this._stopSkid();
     }
-    if (active && this._skidGain) {
-      this._skidGain.gain.setTargetAtTime(0.32, this._ctx.currentTime, 0.05);
+    if (skidding && this._skidGain) {
+      this._skidGain.gain.setTargetAtTime(onRoad ? 0.32 : 0.20, this._ctx.currentTime, 0.05);
     }
   }
 
@@ -469,20 +467,18 @@ export class AudioManager {
     };
 
     if (onRoad) {
-      // ── Asfalt: "iiiihhh" — wąski bandpass na ~3200 Hz (ton pisku) ──────────
-      // + szerokie wysokie częstotliwości (syk)
+      // ── Asfalt: "iiiihhh" — wąski bandpass ~3200 Hz + syczenie high-end ─────
       this._skidNoise  = makeNoiseSrc();
       this._skidNoiseF = ctx.createBiquadFilter();
       this._skidNoiseF.type = 'bandpass';
       this._skidNoiseF.frequency.value = 3200;
-      this._skidNoiseF.Q.value = 10;    // bardzo wąski → wyraźny ton pisku
+      this._skidNoiseF.Q.value = 10;
       const boost = ctx.createGain(); boost.gain.value = 2.2;
       this._skidNoise.connect(this._skidNoiseF);
       this._skidNoiseF.connect(boost);
       boost.connect(this._skidGain);
       this._skidNoise.start(now);
 
-      // Druhia warstwa: szerokie syczenie powyżej 1800 Hz
       this._skidNoise2 = makeNoiseSrc();
       const f2 = ctx.createBiquadFilter();
       f2.type = 'highpass'; f2.frequency.value = 1800;
@@ -491,14 +487,25 @@ export class AudioManager {
       this._skidNoise2.start(now);
 
     } else {
-      // ── Trawa: niski szelest/tarcie ─────────────────────────────────────────
+      // ── Trawa: mokry błotnisty szum — głęboki rumble + "chlupot" ────────────
+      // Warstwa 1: głęboki pomruk (lowpass ~120 Hz) — podłoże szumu
       this._skidNoise  = makeNoiseSrc();
       this._skidNoiseF = ctx.createBiquadFilter();
       this._skidNoiseF.type = 'lowpass';
-      this._skidNoiseF.frequency.value = 300;
+      this._skidNoiseF.frequency.value = 120;
+      const g1 = ctx.createGain(); g1.gain.value = 1.4;
       this._skidNoise.connect(this._skidNoiseF);
-      this._skidNoiseF.connect(this._skidGain);
+      this._skidNoiseF.connect(g1);
+      g1.connect(this._skidGain);
       this._skidNoise.start(now);
+
+      // Warstwa 2: wilgotny chlupot — bandpass ~320 Hz, umiarkowane Q
+      this._skidNoise2 = makeNoiseSrc();
+      const f2 = ctx.createBiquadFilter();
+      f2.type = 'bandpass'; f2.frequency.value = 320; f2.Q.value = 1.8;
+      const g2 = ctx.createGain(); g2.gain.value = 0.85;
+      this._skidNoise2.connect(f2); f2.connect(g2); g2.connect(this._skidGain);
+      this._skidNoise2.start(now);
     }
   }
 

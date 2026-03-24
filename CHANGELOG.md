@@ -1,5 +1,10 @@
 # Changelog — Wobbly World
 
+## [v0.4.4] — 2026-03-24
+### Changed
+- Trawa: poślizg brzmi jak mokry błotek (głęboki rumble 120 Hz + chlupot bandpass 320 Hz)
+- Ulica: pisk opon bez zmian ("iiiihhh" 3200 Hz + syk 1800 Hz)
+
 ## [v0.4.3] — 2026-03-24
 ### Fixed
 - Lampy uliczne: poprawiona rotacja klosza dla wszystkich dróg (E-W z=0, z=-50, N-S x=±65 były odwrócone)
