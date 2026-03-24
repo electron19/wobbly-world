@@ -436,15 +436,15 @@ export class AudioManager {
    * @param {boolean} onRoad   — nawierzchnia
    */
   updateSkid(skidding, onRoad) {
-    if (skidding && !this._skidActive) {
-      this._startSkid(onRoad);
-    } else if (!skidding && this._skidActive) {
+    // Pisk opon TYLKO na asfalcie — na trawie cisza
+    const active = skidding && onRoad;
+    if (active && !this._skidActive) {
+      this._startSkid(true);
+    } else if (!active && this._skidActive) {
       this._stopSkid();
     }
-    // Utrzymaj głośność gdy trwa pisk
-    if (skidding && this._skidGain) {
-      const vol = onRoad ? 0.28 : 0.16;
-      this._skidGain.gain.setTargetAtTime(vol, this._ctx.currentTime, 0.05);
+    if (active && this._skidGain) {
+      this._skidGain.gain.setTargetAtTime(0.32, this._ctx.currentTime, 0.05);
     }
   }
 

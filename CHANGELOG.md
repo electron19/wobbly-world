@@ -1,5 +1,12 @@
 # Changelog — Wobbly World
 
+## [v0.4.3] — 2026-03-24
+### Fixed
+- Lampy uliczne: poprawiona rotacja klosza dla wszystkich dróg (E-W z=0, z=-50, N-S x=±65 były odwrócone)
+- Klakson pada: zmienione z `isPadButtonPressed` → `isPadButtonDown` (ciągłe trąbienie przy trzymaniu Y)
+- Pisk opon: aktywny TYLKO na asfalcie — na trawie cisza (zgodnie z życzeniem)
+- Trawa: brak dźwięku tarcia przy poślizgu na trawie
+
 ## [v0.4.2] — 2026-03-24
 ### Changed
 - Klakson: ciągły dźwięk gdy trzymasz H (startHorn/stopHorn zamiast jednorazowego)

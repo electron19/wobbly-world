@@ -620,7 +620,7 @@ export class Car extends Entity {
     for (const wi of this._vehicle.wheelInfos) wi.frictionSlip = slip;
 
     // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
-    const hornDown = input.isDown('KeyH') || input.isPadButtonPressed?.(3);
+    const hornDown = input.isDown('KeyH') || input.isPadButtonDown?.(3);
     if (hornDown) audio?.startHorn(); else audio?.stopHorn();
 
     // ── Dźwięk silnika ───────────────────────────────────────────────────────
