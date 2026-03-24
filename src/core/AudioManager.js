@@ -58,6 +58,12 @@ export class AudioManager {
     this._skidGain      = null;
     this._skidActive    = false;
 
+    // ── klakson ──
+    this._hornOsc     = null;
+    this._hornF       = null;
+    this._hornGain    = null;
+    this._hornRunning = false;
+
     // ── kroki ──
     this._lastFootFloor = 0;
   }
@@ -514,24 +520,37 @@ export class AudioManager {
 
   // ─── Klakson ──────────────────────────────────────────────────────────────
 
-  /** Dwa krótkie toniki — podwójne trąbienie. */
-  playHorn() {
+  /** Zacznij trąbić — ciągły dźwięk klaksonu. */
+  startHorn() {
+    if (this._hornRunning) return;
     const ctx = this._ensureCtx();
     const now = ctx.currentTime;
-    [0, 0.19].forEach(t => {
-      const osc = ctx.createOscillator();
-      osc.type = 'sawtooth';
-      osc.frequency.value = 440;
-      const f = ctx.createBiquadFilter();
-      f.type = 'bandpass'; f.frequency.value = 540; f.Q.value = 2.2;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.001, now + t);
-      g.gain.linearRampToValueAtTime(0.32, now + t + 0.04);
-      g.gain.setValueAtTime(0.32, now + t + 0.12);
-      g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.18);
-      osc.connect(f); f.connect(g); g.connect(ctx.destination);
-      osc.start(now + t); osc.stop(now + t + 0.19);
-    });
+    this._hornOsc  = ctx.createOscillator();
+    this._hornOsc.type = 'sawtooth';
+    this._hornOsc.frequency.value = 440;
+    this._hornF    = ctx.createBiquadFilter();
+    this._hornF.type = 'bandpass'; this._hornF.frequency.value = 540; this._hornF.Q.value = 2.2;
+    this._hornGain = ctx.createGain();
+    this._hornGain.gain.setValueAtTime(0.001, now);
+    this._hornGain.gain.linearRampToValueAtTime(0.38, now + 0.06);
+    this._hornOsc.connect(this._hornF);
+    this._hornF.connect(this._hornGain);
+    this._hornGain.connect(ctx.destination);
+    this._hornOsc.start(now);
+    this._hornRunning = true;
+  }
+
+  /** Przestań trąbić. */
+  stopHorn() {
+    if (!this._hornRunning) return;
+    const now = this._ctx.currentTime;
+    this._hornGain.gain.setTargetAtTime(0.001, now, 0.05);
+    const osc = this._hornOsc;
+    setTimeout(() => { try { osc.stop(); } catch (_) {} }, 200);
+    this._hornOsc     = null;
+    this._hornGain    = null;
+    this._hornF       = null;
+    this._hornRunning = false;
   }
 
   // ─── Hamulec ręczny ───────────────────────────────────────────────────────

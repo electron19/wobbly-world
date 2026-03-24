@@ -45,7 +45,6 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake = false;
-    this._hornWasDown   = false;
     // Wydech
     this._exhaust       = null;   // inicjalizowany w initPhysics()
     // Materiały świateł (do dynamicznej zmiany koloru)
@@ -491,9 +490,9 @@ export class Car extends Entity {
     const ex = this._exhaust;
     if (!ex) return;
 
-    // Spawn: tylko gdy auto zajęte (silnik pracuje)
+    // Spawn: tylko gdy auto zajęte (silnik pracuje) — co 0.10s = ~10 kłębów/s
     ex.timer += dt;
-    if (this.isOccupied && ex.timer > 0.38) {
+    if (this.isOccupied && ex.timer > 0.10) {
       ex.timer = 0;
       this._spawnExhaustParticle();
     }
@@ -502,7 +501,7 @@ export class Car extends Entity {
     for (let i = ex.particles.length - 1; i >= 0; i--) {
       const p = ex.particles[i];
       p.life += dt;
-      const t = p.life / 1.5;
+      const t = p.life / 2.2;   // dłużej unosi się w powietrzu
       if (t >= 1) {
         this._scene.remove(p.mesh);
         p.mesh.geometry.dispose();
@@ -513,8 +512,8 @@ export class Car extends Entity {
       p.mesh.position.x += p.vx * dt;
       p.mesh.position.y += p.vy * dt;
       p.mesh.position.z += p.vz * dt;
-      p.mesh.scale.setScalar(0.3 + t * 1.4);
-      p.mesh.material.opacity = 0.32 * (1 - t * t);
+      p.mesh.scale.setScalar(0.4 + t * 2.2);          // rośnie szybciej i większa
+      p.mesh.material.opacity = 0.40 * (1 - t * t);
     }
   }
 
@@ -527,9 +526,9 @@ export class Car extends Entity {
     const wy = this.root.position.y + ly;
     const wz = this.root.position.z - lx * Math.sin(f) + lz * Math.cos(f);
 
-    const geo = new THREE.SphereGeometry(0.07, 5, 4);
+    const geo = new THREE.SphereGeometry(0.13, 5, 4);
     const mat = new THREE.MeshBasicMaterial({
-      color: 0x999999, transparent: true, opacity: 0.32, depthWrite: false,
+      color: 0xAAAAAA, transparent: true, opacity: 0.40, depthWrite: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(wx, wy, wz);
@@ -538,9 +537,9 @@ export class Car extends Entity {
 
     this._exhaust.particles.push({
       mesh, life: 0,
-      vx: (Math.random() - 0.5) * 0.25,
-      vy: 0.7 + Math.random() * 0.5,
-      vz: (Math.random() - 0.5) * 0.25,
+      vx: (Math.random() - 0.5) * 0.40,
+      vy: 1.1 + Math.random() * 0.7,
+      vz: (Math.random() - 0.5) * 0.40,
     });
   }
 
@@ -620,10 +619,9 @@ export class Car extends Entity {
     const slip = onRoad ? 2.8 : 0.85;  // wyższy = lepsza przyczepność na asfalcie
     for (const wi of this._vehicle.wheelInfos) wi.frictionSlip = slip;
 
-    // ── Klakson (H / Y-pad) ──────────────────────────────────────────────────
+    // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
     const hornDown = input.isDown('KeyH') || input.isPadButtonPressed?.(3);
-    if (hornDown && !this._hornWasDown) audio?.playHorn();
-    this._hornWasDown = hornDown;
+    if (hornDown) audio?.startHorn(); else audio?.stopHorn();
 
     // ── Dźwięk silnika ───────────────────────────────────────────────────────
     audio?.updateEngine(speedKmh, gasIn, dt);

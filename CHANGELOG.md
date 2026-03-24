@@ -1,5 +1,10 @@
 # Changelog — Wobbly World
 
+## [v0.4.2] — 2026-03-24
+### Changed
+- Klakson: ciągły dźwięk gdy trzymasz H (startHorn/stopHorn zamiast jednorazowego)
+- Dym wydechu: 4× więcej kłębów/s, większe cząsteczki (r 0.07→0.13), unoszą się dłużej (2.2s), szybciej rosną
+
 ## [v0.4.1] — 2026-03-24
 ### Fixed
 - Pisk opon: przerobiony na realistyczny szum wysokich częstotliwości (bandpass 3200 Hz + highpass 1800 Hz) zamiast oscylatora piły — brzmi jak "iiiihhh"
