@@ -52,10 +52,12 @@ export class AudioManager {
     this._tireOnRoad    = true;
 
     // ── pisk / poślizg ──
-    this._skidNoise     = null;   // główny szum pisku (wąski bandpass)
-    this._skidNoise2    = null;   // drugi szum (high-end syczenie)
+    this._skidNoise     = null;
+    this._skidNoise2    = null;
     this._skidNoiseF    = null;
     this._skidGain      = null;
+    this._skidLFO       = null;   // pulsacja — oscylator ~8 Hz
+    this._skidDC        = null;   // DC offset dla LFO (ConstantSourceNode)
     this._skidActive    = false;
 
     // ── klakson ──
@@ -467,7 +469,26 @@ export class AudioManager {
     };
 
     if (onRoad) {
-      // ── Asfalt: "iiiihhh" — wąski bandpass ~3200 Hz + syczenie high-end ─────
+      // ── Asfalt: pulsujący wysoki pisk — LFO 8 Hz moduluje amplitudę ──────────
+      // pulseGain.gain oscyluje 0→1 (DC 0.5 + LFO ±0.5)
+      const pulseGain = ctx.createGain();
+      pulseGain.gain.value = 0;
+      pulseGain.connect(this._skidGain);
+
+      const dc = new ConstantSourceNode(ctx, { offset: 0.5 });
+      this._skidDC = dc;
+      dc.connect(pulseGain.gain);
+      dc.start(now);
+
+      this._skidLFO = ctx.createOscillator();
+      this._skidLFO.type = 'sine';
+      this._skidLFO.frequency.value = 8;   // 8 Hz = przerywany pisk
+      const lfoAmp = ctx.createGain(); lfoAmp.gain.value = 0.5;
+      this._skidLFO.connect(lfoAmp);
+      lfoAmp.connect(pulseGain.gain);
+      this._skidLFO.start(now);
+
+      // Wąski bandpass 3200 Hz → pulseGain
       this._skidNoise  = makeNoiseSrc();
       this._skidNoiseF = ctx.createBiquadFilter();
       this._skidNoiseF.type = 'bandpass';
@@ -476,14 +497,15 @@ export class AudioManager {
       const boost = ctx.createGain(); boost.gain.value = 2.2;
       this._skidNoise.connect(this._skidNoiseF);
       this._skidNoiseF.connect(boost);
-      boost.connect(this._skidGain);
+      boost.connect(pulseGain);
       this._skidNoise.start(now);
 
+      // High-end syczenie → pulseGain
       this._skidNoise2 = makeNoiseSrc();
       const f2 = ctx.createBiquadFilter();
       f2.type = 'highpass'; f2.frequency.value = 1800;
       const g2 = ctx.createGain(); g2.gain.value = 0.28;
-      this._skidNoise2.connect(f2); f2.connect(g2); g2.connect(this._skidGain);
+      this._skidNoise2.connect(f2); f2.connect(g2); g2.connect(pulseGain);
       this._skidNoise2.start(now);
 
     } else {
@@ -516,12 +538,17 @@ export class AudioManager {
     const now = this._ctx.currentTime;
     this._skidGain.gain.setTargetAtTime(0.001, now, 0.12);
     const n1 = this._skidNoise, n2 = this._skidNoise2;
+    const lfo = this._skidLFO,  dc = this._skidDC;
     setTimeout(() => {
-      try { n1?.stop(); } catch (_) {}
-      try { n2?.stop(); } catch (_) {}
+      try { n1?.stop();  } catch (_) {}
+      try { n2?.stop();  } catch (_) {}
+      try { lfo?.stop(); } catch (_) {}
+      try { dc?.stop();  } catch (_) {}
     }, 400);
     this._skidNoise  = null;
     this._skidNoise2 = null;
+    this._skidLFO    = null;
+    this._skidDC     = null;
     this._skidGain   = null;
   }
 

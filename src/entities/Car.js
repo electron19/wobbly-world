@@ -378,6 +378,9 @@ export class Car extends Entity {
     return this._vehicle ? this._vehicle.currentVehicleSpeedKmHour : 0;
   }
 
+  /** Aktualny kąt skrętu kół (wygładzony, radiany, wartość bezwzględna). */
+  get steerAngle() { return Math.abs(this._steer ?? 0); }
+
   get isSkidding() {
     return this._skidState ? this._skidState.some(s => s.active) : false;
   }
