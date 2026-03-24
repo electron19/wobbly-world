@@ -52,6 +52,7 @@ export class VehiclePhysics {
     // Spawn: lekko wyżej niż CANNON_CHASSIS_OFFSET żeby zawieszenie się ustabilizowało
     chassis.position.set(x, CANNON_CHASSIS_OFFSET + 0.1, z);
     chassis.quaternion.setFromEuler(0, facing, 0);
+    chassis._material = 'metal';   // dźwięk zderzenia aut
     this.world.addBody(chassis);
 
     const vehicle = new CANNON.RaycastVehicle({

@@ -1,5 +1,16 @@
 # Changelog — Wobbly World
 
+## [v0.4.0] — 2026-03-24
+### Added
+- Klakson: H (klawiatura) / Y-pad (Xbox button 3) — proceduralny podwójny sygnał
+- Światła stop: tylne lampy świecą jaskrawoczerwono przy hamowaniu / hamulcu ręcznym
+- Światła cofania: białe lampki przy jeździe wstecz
+- Ogródki zielone + ścieżka z białych płytek przed każdym domem
+- Dźwięk zderzenia aut — chassis oznaczone jako 'metal' (użyty istniejący dźwięk metaliczny)
+### Fixed
+- Ślady opon: usunięto warunek `isInContact` (cannon-es nie zawsze go ustawia) → ślady pojawiają się poprawnie przy hamowaniu i poślizgu
+- Usunięto szum opon (na życzenie użytkownika)
+
 ## [v0.3.2] — 2026-03-24
 ### Fixed
 - Ślady opon: wszystkie 4 koła (było tylko 2 tylne), próg skidInfo 0.88→0.96

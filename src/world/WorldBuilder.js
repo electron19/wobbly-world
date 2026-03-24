@@ -92,10 +92,11 @@ export class WorldBuilder {
     return segs;
   }
 
-  // Skrótowy helper — dom z paletą
+  // Skrótowy helper — dom z paletą + ogródek
   _house(pal, x, z, facing, opts = {}) {
     const w = opts.w ?? 6, d = opts.d ?? 8;
     this._regCircle(x, z, w / 2, d / 2);
+    this._addGarden(x, z, facing, w, d);
     return this._add(new House(this.scene, this.physics, {
       wallColor: pal.wall,
       roofColor: pal.roof,
@@ -104,6 +105,46 @@ export class WorldBuilder {
       facing,
       ...opts,
     }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /**
+   * Ogródek + ścieżka z białych płytek przed wejściem.
+   * @param {number} x, z    centrum domu
+   * @param {number} facing  obrót Y (FN/FS/FE/FW)
+   * @param {number} w, d    wymiary domu (przed rotacją)
+   */
+  _addGarden(x, z, facing, w = 6, d = 8) {
+    // Kierunek wejścia w przestrzeni świata (obróć lokalny +Z przez facing)
+    const dx = Math.sin(facing);
+    const dz = Math.cos(facing);
+
+    // ── Zielony ogródek ─────────────────────────────────────────────────────
+    // Płaski box nieco większy od domu, lekko podniesiony (2 cm)
+    const gardenW = w + 2.0;
+    const gardenD = d + 1.5;
+    const gardenMat = new THREE.MeshToonMaterial({ color: 0x3EA832 });
+    const garden = new THREE.Mesh(
+      new THREE.BoxGeometry(gardenW, 0.04, gardenD), gardenMat,
+    );
+    // Obróć ogródek tak by był pod domem (taka sama rotacja)
+    garden.rotation.y = facing;
+    garden.position.set(x, 0.02, z);
+    garden.receiveShadow = true;
+    this.scene.add(garden);
+
+    // ── Białe płytki — ścieżka od drzwi ku jezdni ───────────────────────────
+    const tileMat = new THREE.MeshToonMaterial({ color: 0xEEECDC });
+    const tileStep = 1.0;
+    const tileStart = d / 2 + 0.6;   // pierwsza płytka tuż za frontem domu
+    for (let i = 0; i < 4; i++) {
+      const dist = tileStart + i * tileStep;
+      const tx = x + dx * dist;
+      const tz = z + dz * dist;
+      const tile = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.06, 0.85), tileMat);
+      tile.position.set(tx, 0.03, tz);
+      tile.receiveShadow = true;
+      this.scene.add(tile);
+    }
   }
 
   // ─── Podłoże ────────────────────────────────────────────────────────────────

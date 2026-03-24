@@ -165,7 +165,7 @@ export class Game {
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; SPACJA – hamulec ręczny &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
@@ -252,9 +252,8 @@ export class Game {
       this.player._body.setNextKinematicTranslation({
         x: cp.x, y: cp.y + 0.7, z: cp.z,
       });
-      // Dźwięk opon + poślizgu
+      // Dźwięk poślizgu
       const carOnRoad = isOnRoad(cp.x, cp.z);
-      this.audio.updateTires(this._drivingCar.speedKmh, carOnRoad);
       this.audio.updateSkid(this._drivingCar.isSkidding, carOnRoad);
     } else {
       if (!exitedThisFrame) {

@@ -283,9 +283,6 @@ export class AudioManager {
     this._engineOsc2.start();
     this._engineNoise.start();
     this._engineRunning = true;
-
-    // Uruchom opony
-    this._startTires();
   }
 
   /**
@@ -338,7 +335,6 @@ export class AudioManager {
     const now = ctx.currentTime;
 
     this._engineGain.gain.setTargetAtTime(0.001, now, 0.22);
-    this._stopTires();
     this._stopSkid();
 
     const o1 = this._engineOsc1, o2 = this._engineOsc2, n = this._engineNoise;
@@ -507,6 +503,28 @@ export class AudioManager {
     this._skidOsc   = null;
     this._skidNoise = null;
     this._skidGain  = null;
+  }
+
+  // ─── Klakson ──────────────────────────────────────────────────────────────
+
+  /** Dwa krótkie toniki — podwójne trąbienie. */
+  playHorn() {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+    [0, 0.19].forEach(t => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.value = 440;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass'; f.frequency.value = 540; f.Q.value = 2.2;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.001, now + t);
+      g.gain.linearRampToValueAtTime(0.32, now + t + 0.04);
+      g.gain.setValueAtTime(0.32, now + t + 0.12);
+      g.gain.exponentialRampToValueAtTime(0.001, now + t + 0.18);
+      osc.connect(f); f.connect(g); g.connect(ctx.destination);
+      osc.start(now + t); osc.stop(now + t + 0.19);
+    });
   }
 
   // ─── Hamulec ręczny ───────────────────────────────────────────────────────

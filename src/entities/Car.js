@@ -45,8 +45,12 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake = false;
+    this._hornWasDown   = false;
     // Wydech
     this._exhaust       = null;   // inicjalizowany w initPhysics()
+    // Materiały świateł (do dynamicznej zmiany koloru)
+    this._tailMat       = null;   // stop + pozycyjne tylne
+    this._revMat        = null;   // cofania
     this._build();
   }
 
@@ -71,9 +75,11 @@ export class Car extends Entity {
     const sillMat  = toonMat(0x222222);
     const headMat  = toonMat(0xFFFDE0);   // reflektory — biało-żółte
     const drlMat   = toonMat(0xFFFFFF);   // DRL strip
-    const tailMat  = toonMat(0xFF1A1A);   // światła stop
+    this._tailMat  = toonMat(0x550000);    // stop — domyślnie przyciemnione (parking)
+    this._revMat   = toonMat(0x1A1000);   // cofania — domyślnie wyłączone
+    const tailMat  = this._tailMat;
     const indMat   = toonMat(0xFF8800);   // kierunkowskazy
-    const revMat   = toonMat(0xFFEECC);   // cofania
+    const revMat   = this._revMat;
     const fogMat   = toonMat(0xFFFACC);   // lampy przeciwmgielne
 
     // Pomocnik: dodaj box do this.root
@@ -582,6 +588,11 @@ export class Car extends Entity {
     const slip = onRoad ? 2.8 : 0.85;  // wyższy = lepsza przyczepność na asfalcie
     for (const wi of this._vehicle.wheelInfos) wi.frictionSlip = slip;
 
+    // ── Klakson (H / Y-pad) ──────────────────────────────────────────────────
+    const hornDown = input.isDown('KeyH') || input.isPadButtonPressed?.(3);
+    if (hornDown && !this._hornWasDown) audio?.playHorn();
+    this._hornWasDown = hornDown;
+
     // ── Dźwięk silnika ───────────────────────────────────────────────────────
     audio?.updateEngine(speedKmh, gasIn, dt);
 
@@ -634,6 +645,18 @@ export class Car extends Entity {
 
     // Dym wydechu
     this._updateExhaust(this._dt ?? 1 / 60);
+
+    // Światła (stop + cofania)
+    this._updateLights();
+  }
+
+  /** Dynamicznie zmienia kolor świateł tylnych. */
+  _updateLights() {
+    if (!this._tailMat || !this._revMat) return;
+    const braking   = this._isBraking || this._isHandbraking;
+    const reversing = this.speedKmh < -1;
+    this._tailMat.color.setHex(braking   ? 0xFF1100 : 0x550000);
+    this._revMat.color.setHex( reversing ? 0xFFFFFF : 0x1A1000);
   }
 
   /**
@@ -653,9 +676,9 @@ export class Car extends Entity {
       const state  = this._skidState[wIdx];
       const isRear = wIdx >= 2;
 
-      const physicsSlip = wInfo.isInContact && speedK > 5 && wInfo.skidInfo < 0.96;
-      const brakeSkid   = this._isBraking && wInfo.isInContact;
-      const handSkid    = this._isHandbraking && isRear && wInfo.isInContact;
+      const physicsSlip = speedK > 5 && wInfo.skidInfo < 0.96;
+      const brakeSkid   = this._isBraking   && speedK > 6;
+      const handSkid    = this._isHandbraking && isRear && speedK > 3;
 
       const skidding = physicsSlip || brakeSkid || handSkid;
 
