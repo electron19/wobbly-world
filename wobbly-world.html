@@ -236,7 +236,7 @@ class Car {
       if (this.speed > 0.3) this.speed = Math.max(0, this.speed - BRAKE * dt);
       else this.speed = Math.max(-MAX_REV, this.speed - GAS * 0.5 * dt);
     } else {
-      this.speed *= Math.pow(0.88, dt * 60);
+      this.speed *= Math.pow(0.985, dt * 60);
       if (Math.abs(this.speed) < 0.05) this.speed = 0;
     }
 
@@ -259,12 +259,10 @@ class Car {
     this.root.rotation.y  = this.heading;
 
     // Obracanie kół ──────────────────────────────────────────────────────────
-    // Koła toczą się: inner.rotation.x += speed / promień * dt
-    // Obrót wokół osi X kontenera inner (= oś X samochodu):
-    //   + obrót → górna część koła idzie w +Z (przód auta) = auto jedzie naprzód ✓
+    // heading=π → oś X kół wskazuje w world -X → RHR odwrócona → -= spin
     const spin = (this.speed / WHEEL_R) * dt;
     this._wheels.forEach(({ outer, inner, isFront }) => {
-      inner.rotation.x += spin;
+      inner.rotation.x -= spin;
       if (isFront) outer.rotation.y = this.steer;
     });
   }
