@@ -204,11 +204,11 @@ class Car {
       rim.rotation.z = Math.PI / 2;
       inner.add(rim);
 
-      // 3 szprychy (widoczne dzięki nim że koło się kręci)
+      // 3 szprychy — stożek (asymetryczny, brak efektu wagon-wheel przy >14 m/s)
       for (let s = 0; s < 3; s++) {
         const sp = new THREE.Mesh(
-          new THREE.BoxGeometry(0.28, WHEEL_R * 1.52, 0.08), rimM);
-        sp.rotation.x = (s / 3) * Math.PI;
+          new THREE.CylinderGeometry(0.04, 0.14, WHEEL_R * 1.8, 6), rimM);
+        sp.rotation.x = (s / 3) * 2 * Math.PI;
         inner.add(sp);
       }
 
