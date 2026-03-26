@@ -192,7 +192,7 @@ class Car {
 
       // Opona (cylinder, oś → X przez rotation.z=PI/2)
       const tire = new THREE.Mesh(
-        new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.26, 14), tireM);
+        new THREE.CylinderGeometry(WHEEL_R, WHEEL_R, 0.26, 8), tireM);
       tire.rotation.z = Math.PI / 2;
       tire.castShadow = true;
       addOutline(tire, 0.04);
@@ -200,7 +200,7 @@ class Car {
 
       // Felga
       const rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(WHEEL_R * 0.60, WHEEL_R * 0.60, 0.28, 10), rimM);
+        new THREE.CylinderGeometry(WHEEL_R * 0.60, WHEEL_R * 0.60, 0.28, 8), rimM);
       rim.rotation.z = Math.PI / 2;
       inner.add(rim);
 
@@ -214,7 +214,7 @@ class Car {
 
       // Piasta
       const hub = new THREE.Mesh(
-        new THREE.CylinderGeometry(WHEEL_R * 0.15, WHEEL_R * 0.15, 0.30, 8), blackM);
+        new THREE.CylinderGeometry(WHEEL_R * 0.15, WHEEL_R * 0.15, 0.30, 6), blackM);
       hub.rotation.z = Math.PI / 2;
       inner.add(hub);
 
@@ -714,7 +714,7 @@ function buildLamp(x, z) {
   // Cone shade
   const shade = new THREE.Mesh(
     new THREE.ConeGeometry(0.32, 0.3, 8, 1, true),
-    new THREE.MeshToonMaterial({ color: 0x888888, side: THREE.DoubleSide, gradientMap: toonGrad })
+    new THREE.MeshToonMaterial({ color: 0x888888, gradientMap: toonGrad })
   );
   shade.position.set(-1.0, 4.27, 0);
   shade.rotation.x = Math.PI;
