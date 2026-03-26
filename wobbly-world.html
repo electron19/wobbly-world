@@ -204,11 +204,11 @@ class Car {
       rim.rotation.z = Math.PI / 2;
       inner.add(rim);
 
-      // 3 szprychy — stożek (asymetryczny, brak efektu wagon-wheel przy >14 m/s)
-      for (let s = 0; s < 3; s++) {
+      // 5 szprych — cienkie pręty, wyraźnie widoczny kierunek obrotu
+      for (let s = 0; s < 5; s++) {
         const sp = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.04, 0.14, WHEEL_R * 1.8, 6), rimM);
-        sp.rotation.x = (s / 3) * 2 * Math.PI;
+          new THREE.CylinderGeometry(0.03, 0.03, WHEEL_R * 1.85, 5), rimM);
+        sp.rotation.x = (s / 5) * 2 * Math.PI;
         inner.add(sp);
       }
 
@@ -259,10 +259,10 @@ class Car {
     this.root.rotation.y  = this.heading;
 
     // Obracanie kół ──────────────────────────────────────────────────────────
-    // heading=π → oś X kół wskazuje w world -X → RHR odwrócona → -= spin
+    // heading=π: inner lokalny X = world -X → RHR: top koła idzie w world -Z = przód ✓
     const spin = (this.speed / WHEEL_R) * dt;
     this._wheels.forEach(({ outer, inner, isFront }) => {
-      inner.rotation.x -= spin;
+      inner.rotation.x += spin;
       if (isFront) outer.rotation.y = this.steer;
     });
   }
