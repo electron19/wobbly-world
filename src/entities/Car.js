@@ -17,10 +17,11 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE = 6750;   // N na koło tylne
-const MAX_BRAKE_FORCE  = 600;    // Nm hamowania — wystarczy na blokadę przy pełnym wciśnięciu
-const HAND_BRAKE_FORCE = 700;    // Nm hamulca ręcznego (tylne koła, drift)
-const IDLE_BRAKE       = 8;      // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
+const MAX_ENGINE_FORCE   = 6750;  // N na koło tylne
+const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada)
+const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
+const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
+const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 200;    // limit prędkości do przodu
@@ -607,6 +608,12 @@ export class Car extends Entity {
     }
     this._prevHandbrake = handBrake;
 
+    // ── Nawierzchnia — raz dla całego bloku ──────────────────────────────────
+    const cx = this._chassis.position.x;
+    const cz = this._chassis.position.z;
+    const onRoad      = isOnRoad(cx, cz);
+    const brakeSurf   = onRoad ? 1.0 : BRAKE_GRASS_MULT;  // trawa = krótszy moment hamowania
+
     // ── Gaz / hamulec ────────────────────────────────────────────────────────
     const speedKmh = this._vehicle.currentVehicleSpeedKmHour;
     const absSpd   = Math.abs(speedKmh);
@@ -622,23 +629,23 @@ export class Car extends Entity {
       this._vehicle.applyEngineForce(engineForce, 3);  // RR — napęd (donut gdy gaz)
       this._vehicle.applyEngineForce(0,            0);  // FL — brak napędu
       this._vehicle.applyEngineForce(0,            1);  // FR — brak napędu
-      this._vehicle.setBrake(0,                0);  // FL — przednie wolne (sterowalność)
-      this._vehicle.setBrake(0,                1);  // FR
-      this._vehicle.setBrake(HAND_BRAKE_FORCE,  2);  // RL — zablokowane
-      this._vehicle.setBrake(HAND_BRAKE_FORCE,  3);  // RR — zablokowane
+      this._vehicle.setBrake(0,                            0);  // FL — wolne
+      this._vehicle.setBrake(0,                            1);  // FR — wolne
+      this._vehicle.setBrake(HAND_BRAKE_FORCE * brakeSurf, 2);  // RL — zablokowane
+      this._vehicle.setBrake(HAND_BRAKE_FORCE * brakeSurf, 3);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
         if (speedKmh < -1) {
-          // Hamowanie podczas cofania — proporcjonalne do nacisku
-          brakeForce = MAX_BRAKE_FORCE * forwAmount;
+          // Hamowanie podczas cofania
+          brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
         } else if (speedKmh < MAX_SPEED_KMH) {
           engineForce = -MAX_ENGINE_FORCE * gasIn;
           brakeForce  = 0;
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
-          // Hamowanie podczas jazdy do przodu — proporcjonalne do nacisku
-          brakeForce = MAX_BRAKE_FORCE * backAmount;
+          // Hamowanie podczas jazdy do przodu — skalowane przez nawierzchnię
+          brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
         } else if (speedKmh > -MAX_REV_KMH) {
           engineForce = MAX_ENGINE_FORCE * (-gasIn);
           brakeForce  = 0;
@@ -657,12 +664,7 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
     }
 
-    // ── Tarcie kół — per koło (przód ≠ tył) × nawierzchnia ──────────────────
-    // Tylne mniej przyczepne → naturalny oversteer RWD
-    // Nie nadpisuj jednakowo dla wszystkich — to niszczyło efekt RWD!
-    const cx = this._chassis.position.x;
-    const cz = this._chassis.position.z;
-    const onRoad = isOnRoad(cx, cz);
+    // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
     // Przód 1.5 (nie 2.0) — mniejszy opór boczny ułatwia ruszanie ze skręconymi kołami
     const fF = onRoad ? 1.5 : 0.55;   // przód: umiarkowana przyczepność
     const fR = onRoad ? 1.3 : 0.45;   // tył: niższa → oversteer
