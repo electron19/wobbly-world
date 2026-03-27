@@ -609,8 +609,9 @@ export class Car extends Entity {
 
     // ── Gaz / hamulec ────────────────────────────────────────────────────────
     const speedKmh = this._vehicle.currentVehicleSpeedKmHour;
+    const absSpd   = Math.abs(speedKmh);
     let engineForce = 0;
-    let brakeForce  = IDLE_BRAKE;
+    let brakeForce  = 0;   // domyślnie 0 — auto toczy się swobodnie (opór = linearDamping)
 
     if (handBrake) {
       // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
@@ -631,21 +632,24 @@ export class Car extends Entity {
           // Hamowanie podczas cofania — proporcjonalne do nacisku
           brakeForce = MAX_BRAKE_FORCE * forwAmount;
         } else if (speedKmh < MAX_SPEED_KMH) {
-          engineForce = -MAX_ENGINE_FORCE * gasIn;  // proporcjonalnie do nacisku
+          engineForce = -MAX_ENGINE_FORCE * gasIn;
           brakeForce  = 0;
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
-          // Hamowanie podczas jazdy do przodu — proporcjonalne do L2 / klawisza
+          // Hamowanie podczas jazdy do przodu — proporcjonalne do nacisku
           brakeForce = MAX_BRAKE_FORCE * backAmount;
         } else if (speedKmh > -MAX_REV_KMH) {
-          engineForce = MAX_ENGINE_FORCE * (-gasIn);  // proporcjonalnie do nacisku
+          engineForce = MAX_ENGINE_FORCE * (-gasIn);
           brakeForce  = 0;
         }
+      } else {
+        // Brak gazu i brak hamulca — swobodne toczenie
+        // Parking: zatrzymaj gdy prawie stoi (zabezpieczenie na stoku)
+        if (absSpd < 1.5) brakeForce = IDLE_BRAKE;
       }
 
-      // Otwarty dyferencjał tylny — oba koła dostają równy moment (GTA5-style)
-      // Oversteer pochodzi naturalnie z mniejszej przyczepności tylnych kół (VehiclePhysics.js)
+      // Otwarty dyferencjał tylny (RWD)
       this._vehicle.applyEngineForce(0,           0);  // FL — brak napędu
       this._vehicle.applyEngineForce(0,           1);  // FR — brak napędu
       this._vehicle.applyEngineForce(engineForce, 2);  // RL
@@ -676,7 +680,6 @@ export class Car extends Entity {
     audio?.updateEngine(speedKmh, gasIn, dt);
 
     // ── Stan hamowania — TYLKO dla świateł stop ───────────────────────────────
-    const absSpd = Math.abs(speedKmh);
     this._isHandbraking = handBrake && absSpd > 3;
     this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1;
 
@@ -741,17 +744,14 @@ export class Car extends Entity {
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
 
-      // Obrót wizualny: blenduj prędkość pojazdu z faktycznym poślizgiem koła.
-      // Przy zerowym poślizgu = prędkość pojazdu (zawsze poprawny kierunek).
-      // Przy blokadzie (slip→1) = koło wizualnie zwalnia / staje.
-      let visualSpeedMs;
-      if (absVehicleSpeedMs > 0.3) {
+      // Obrót wizualny:
+      // • Przy swobodnym toczeniu / gazie: prosto z prędkości pojazdu (zawsze poprawny)
+      // • Przy aktywnym hamowaniu (S / ręczny): blend ze slip ratio → koło wizualnie staje
+      let visualSpeedMs = vehicleSpeedMs;
+      if (absVehicleSpeedMs > 0.3 && this._isBraking || this._isHandbraking) {
         const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 60 * WHEEL_R;
         const rollingFraction = Math.min(1, wheelSpeedMs / absVehicleSpeedMs);
-        // Zachowaj znak z pojazdu (forward/reverse)
         visualSpeedMs = vehicleSpeedMs * rollingFraction;
-      } else {
-        visualSpeedMs = vehicleSpeedMs;
       }
       inner.rotation.x += visualSpeedMs / WHEEL_R * dt;
 

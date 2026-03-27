@@ -43,7 +43,7 @@ export class VehiclePhysics {
     const chassis = new CANNON.Body({
       mass:           2500,  // cięższa karoseria → więcej bezwładności
       angularDamping: 0.40,  // mniejsze tłumienie → tylny koniec może wychodzić (oversteer)
-      linearDamping:  0.08,  // niskie tłumienie → więcej rozpędu (GTA5-style)
+      linearDamping:  0.18,  // opór toczenia — auto zwalnia bez gazu (bez blokowania kół)
     });
 
     // Pudło chassis — rozmiar odpowiada Car.js CAR_BOX_*
