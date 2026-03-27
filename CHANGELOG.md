@@ -1,5 +1,12 @@
 # Changelog — Wobbly World
 
+## [v0.5.0] — 2026-03-27
+### Fixed
+- Drzewa i lampy nie nachodzą na siebie ani na budynki:
+  - Drzewa: po dodaniu rejestrowane w `_circles` (r≈3.3j) — kolejne drzewa/lampy je omijają
+  - Lampy: sprawdzane przez `_isFreeForTree(x,z,1.5)` przed dodaniem (wcześniej bez sprawdzenia)
+  - Lampy: po dodaniu rejestrowane w `_circles` (r≈1.7j)
+
 ## [v0.4.9] — 2026-03-27
 ### Changed
 - `MAX_BRAKE_FORCE`: 600 → 220 Nm — mniej agresywne hamowanie (mniejsze opóźnienie)
