@@ -1,5 +1,11 @@
 # Changelog — Wobbly World
 
+## [v0.6.1] — 2026-03-27
+### Changed
+- Analogowe hamowanie: pedał gazu i hamulec mają rampę narastania (80 ms) i opadania (180 ms)
+- Dotyczy zarówno klawiatury (0/1 → płynne) jak i pada (już był analog, teraz też wygładzony)
+- Efekt: delikatne wciśnięcie → wolne hamowanie; pełny nacisk → pełna siła po ~80 ms
+
 ## [v0.6.0] — 2026-03-27
 ### Changed
 - Biegi: fizyczne przełożenia nieliniowe (`RPM_PER_KMH = [310, 148, 91, 59, 52]`) zamiast liniowych

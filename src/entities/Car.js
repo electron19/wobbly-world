@@ -17,7 +17,7 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE   = 6750;  // N na koło tylne
+const MAX_ENGINE_FORCE   = 9000;  // N na koło tylne (wyżej → wheelspin przy ruszaniu)
 const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada)
 const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
@@ -676,10 +676,15 @@ export class Car extends Entity {
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Wysoki frictionSlip → koła nie ślizgają się bocznie → auto zachowuje prędkość w zakrętach
-    // Tył niższy niż przód → delikatny oversteer (tył może wychodzić przy drifcie)
-    const fF = onRoad ? 3.2 : 0.70;   // przód: wysoka przyczepność boczna
-    const fR = onRoad ? 2.6 : 0.55;   // tył: nieco niższy → naturalne wychodzenie
+    // Przód: wysoka przyczepność przez cały czas (understeer-proof)
+    const fF = onRoad ? 3.2 : 0.70;
+
+    // Tył: dynamiczne — przy ruszaniu z dużym gazem frictionSlip spada → wheelspin + oversteer
+    // launchT: 1.0 przy absSpd=0 + forwAmount=1, opada liniowo do 0 przy 40 km/h lub < 30% gazu
+    const launching = speedKmh > -1 && absSpd < 40;
+    const launchT   = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
+    // Przy launchT=1: fR = max(0.32, 2.6 - 2.28) = 0.32 → silnik(9000) > tarcie(0.32×12500=4000) → poślizg
+    const fR = onRoad ? Math.max(0.32, 2.6 - launchT * 2.28) : 0.55;
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
     wInfos[1].frictionSlip = fF;  // FR
