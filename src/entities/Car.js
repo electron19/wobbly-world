@@ -39,6 +39,8 @@ export class Car extends Entity {
     this._vehicle   = null;   // CANNON.RaycastVehicle
     this._chassis   = null;   // CANNON.Body
     this._steer     = 0;      // wygładzona wartość kierownicy [-1..1]
+    this._throttle  = 0;      // wygładzony gaz [0..1]
+    this._brake     = 0;      // wygładzone hamowanie [0..1]
     // Rapier kinematic body (kolizja gracza z autem)
     this._body      = null;
     // Ślady hamowania
@@ -581,11 +583,20 @@ export class Car extends Entity {
   update(dt, input, audio) {
     this._dt = dt;
     // Gaz do przodu: W / ArrowUp / R2
-    const fwdK      = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
+    const fwdK       = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
     // Cofanie / hamulec: S / ArrowDown / L2
-    const revK      = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
-    const forwAmount = Math.max(fwdK, input.pad.r2);  // 0..1 — siła gazu/hamo. w przód
-    const backAmount = Math.max(revK, input.pad.l2);  // 0..1 — siła gazu/hamo. w tył
+    const revK       = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
+    const rawFwd = Math.max(fwdK, input.pad.r2 ?? 0);  // docelowy gaz/hamo. w przód
+    const rawBack= Math.max(revK, input.pad.l2 ?? 0);  // docelowy gaz/hamo. w tył
+
+    // Analogowe wygładzanie — narastanie szybsze niż opadanie (jak fizyczny pedał)
+    const tauOn  = 0.08;  // 80 ms narastania  (szybka odpowiedź)
+    const tauOff = 0.18;  // 180 ms opadania   (płynne puszczenie)
+    this._throttle += (rawFwd - this._throttle) * Math.min(1, dt / (rawFwd > this._throttle ? tauOn : tauOff));
+    this._brake    += (rawBack - this._brake)    * Math.min(1, dt / (rawBack > this._brake  ? tauOn : tauOff));
+
+    const forwAmount = this._throttle;
+    const backAmount = this._brake;
     const gasIn = forwAmount - backAmount;
 
     // Skręt: A/D / ArrowLeft/Right / lewy analog X

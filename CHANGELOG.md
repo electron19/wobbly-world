@@ -1,5 +1,16 @@
 # Changelog — Wobbly World
 
+## [v0.6.0] — 2026-03-27
+### Changed
+- Biegi: fizyczne przełożenia nieliniowe (`RPM_PER_KMH = [310, 148, 91, 59, 52]`) zamiast liniowych
+- Biegi: po zmianie biegu RPM = `prędkość × przełożenie_nowego_biegu` (zamiast stałego `RPM_DROP=2200`)
+- Biegi: 5 bieg ma minimalny spadek dźwięku względem 4 (124.9 → 118.2 Hz przy 115 km/h, ~5%)
+- `rpmToHz`: sqrt-kompresja zamiast liniowej → mniejsze różnice słyszalne między wysokimi biegami
+- Progi zmiany: `[20, 42, 68, 115]` km/h w górę / `[12, 27, 48, 85]` km/h w dół
+- Zawieszenie: miększe sprężyny (`suspensionStiffness` 52→36), większy skok (0.22→0.28), wolniejszy powrót (dampingRelaxation 3.2→2.4)
+- `frictionSlip` przód/tył na asfalcie: 1.5/1.3 → 3.2/2.6 — auto zachowuje prędkość w zakrętach zamiast tracić
+- `angularDamping` chassis: 0.40→0.25 — mniejszy opór przy rotacji, lepsze zachowanie pędu
+
 ## [v0.5.0] — 2026-03-27
 ### Fixed
 - Drzewa i lampy nie nachodzą na siebie ani na budynki:
