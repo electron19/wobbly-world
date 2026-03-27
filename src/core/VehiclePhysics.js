@@ -42,7 +42,7 @@ export class VehiclePhysics {
   createVehicle(x, y, z, facing = 0) {
     const chassis = new CANNON.Body({
       mass:           2500,  // cięższa karoseria → więcej bezwładności
-      angularDamping: 0.40,  // mniejsze tłumienie → tylny koniec może wychodzić (oversteer)
+      angularDamping: 0.25,  // mniejsze tłumienie obrotu → auto lepiej zachowuje prędkość w zakrętach
       linearDamping:  0.18,  // opór toczenia — auto zwalnia bez gazu (bez blokowania kół)
     });
 
@@ -66,13 +66,13 @@ export class VehiclePhysics {
       radius:               0.40,
       directionLocal:       new CANNON.Vec3(0, -1, 0),  // suspensja w dół
       axleLocal:            new CANNON.Vec3(-1, 0, 0),  // oś = -X
-      suspensionRestLength: 0.42,   // dłuższy skok = miękkość jazdy
-      suspensionStiffness:  52,     // miększe sprężyny → kołysanie na nierównościach
-      maxSuspensionTravel:  0.22,
+      suspensionRestLength: 0.45,   // dłuższy skok = miękkość jazdy
+      suspensionStiffness:  36,     // miększe sprężyny → większe kołysanie, komfort
+      maxSuspensionTravel:  0.28,   // więcej skoku → nie "odbija" na nierównościach
       maxSuspensionForce:   100000,
-      dampingRelaxation:    3.2,    // wolniejszy powrót → "płynące" zawieszenie
-      dampingCompression:   4.0,
-      frictionSlip:         1.9,    // bazowa przyczepność (nadpisywana per koło poniżej)
+      dampingRelaxation:    2.4,    // wolniejszy powrót → "płynące" zawieszenie
+      dampingCompression:   3.2,
+      frictionSlip:         2.5,    // bazowa przyczepność (nadpisywana per koło w Car.js)
       rollInfluence:        0.03,   // prawie zerowe wywracanie
     };
 

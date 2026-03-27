@@ -665,9 +665,10 @@ export class Car extends Entity {
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Przód 1.5 (nie 2.0) — mniejszy opór boczny ułatwia ruszanie ze skręconymi kołami
-    const fF = onRoad ? 1.5 : 0.55;   // przód: umiarkowana przyczepność
-    const fR = onRoad ? 1.3 : 0.45;   // tył: niższa → oversteer
+    // Wysoki frictionSlip → koła nie ślizgają się bocznie → auto zachowuje prędkość w zakrętach
+    // Tył niższy niż przód → delikatny oversteer (tył może wychodzić przy drifcie)
+    const fF = onRoad ? 3.2 : 0.70;   // przód: wysoka przyczepność boczna
+    const fR = onRoad ? 2.6 : 0.55;   // tył: nieco niższy → naturalne wychodzenie
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
     wInfos[1].frictionSlip = fF;  // FR

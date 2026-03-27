@@ -10,21 +10,26 @@
  */
 
 // ─── Konfiguracja biegów ───────────────────────────────────────────────────────
-// 5 biegów: progi zmiany dobrane do MAX_SPEED=200 km/h
-const GEAR_UP_KMH    = [16, 34, 58, 88];   // prędkości zmiany w górę (km/h)
-const GEAR_DOWN_KMH  = [ 9, 22, 42, 68];   // prędkości zmiany w dół (histereza)
-// RPM/(km/h) dla każdego biegu — przy progu zmiany RPM ≈ RPM_MAX
-const RPM_PER_KMH    = [425, 200, 117, 77, 34];
+// 5 biegów — przełożenia wzorowane na fizycznym RWD (sportowe sedan):
+//   całkowite ratio: 1=12.4, 2=7.2, 3=4.6, 4=2.95, 5=2.35
+//   RPM_PER_KMH = ratio × (60 / (2π × WHEEL_R × 3.6)) ≈ ratio × 6.63
+const GEAR_UP_KMH    = [20, 42, 68, 115];  // progi zmiany w górę (km/h)
+const GEAR_DOWN_KMH  = [12, 27, 48,  85];  // progi zmiany w dół (histereza)
+// Przy każdym progu: absSpd × RPM_PER_KMH[gear] ≈ RPM_MAX
+// Gear 1: 20×310=6200 | 2: 42×148=6216 | 3: 68×91=6188 | 4: 115×59=6785≈RPM_MAX
+// Gear 5: silnik "na czerwonym" od ~131 km/h (6800/52), max prędkość 200 km/h
+// Gear 4→5 przy 115 km/h: 4 bieg ma RPM≈MAX → hz=125, 5 bieg=115×52=5980 → hz=122 (skok ~3 Hz!)
+const RPM_PER_KMH    = [310, 148, 91, 59, 52];
 const RPM_IDLE       = 850;
 const RPM_MAX        = 6800;
-const RPM_DROP       = 2200;  // spadek RPM przy zmianie biegu w górę
-const SHIFT_COOLDOWN = 0.50;  // blokada po zmianie (anti-ping-pong)
+const SHIFT_COOLDOWN = 0.45;  // blokada po zmianie (anti-ping-pong)
 
 // Mapowanie RPM → częstotliwość oscylatora (Hz).
-// Niższy zakres = głębszy, bardziej samochodowy dźwięk.
-// Idle: ~30 Hz, max: ~118 Hz; osc2 (3x) dodaje harmoniczne 90-354 Hz.
+// sqrt-kompresja górnego zakresu → małe różnice słyszalne między wysokimi biegami.
+// Idle: ~30 Hz, max: ~125 Hz; osc2 (3x) dodaje harmoniczne 90–375 Hz.
 function rpmToHz(rpm) {
-  return 30 + (rpm - RPM_IDLE) / (RPM_MAX - RPM_IDLE) * 88;
+  const t = Math.max(0, (rpm - RPM_IDLE) / (RPM_MAX - RPM_IDLE));
+  return 30 + Math.sqrt(t) * 95;
 }
 
 export class AudioManager {
@@ -310,7 +315,8 @@ export class AudioManager {
     if (this._shiftTimer === 0) {
       if (this._gear < GEAR_UP_KMH.length && absSpd > GEAR_UP_KMH[this._gear]) {
         this._gear++;
-        this._rpm = Math.max(RPM_IDLE, this._rpm - RPM_DROP);
+        // RPM po zmianie = prędkość × przełożenie nowego biegu (jak w fizycznym samochodzie)
+        this._rpm = Math.max(RPM_IDLE, absSpd * RPM_PER_KMH[this._gear]);
         this._shiftTimer = SHIFT_COOLDOWN;
       } else if (this._gear > 0 && absSpd < GEAR_DOWN_KMH[this._gear - 1]) {
         this._gear--;
