@@ -868,15 +868,15 @@ export class WorldBuilder {
     ];
 
     positions.forEach(([x, z]) => {
-      if (!this._isFreeForTree(x, z)) {
-        console.warn(`WorldBuilder: drzewo (${x},${z}) koliduje z drogą lub budynkiem — pominięte`);
-        return;
-      }
+      // treeR=2.5 — sprawdź czy nie koliduje z drogą, budynkiem LUB innym drzewem/lampą
+      if (!this._isFreeForTree(x, z, 2.5)) return;
       const scale = 0.7 + rand() * 0.65;
       this._add(new Tree(this.scene, this.physics,
         { trunkH: 3.0 * scale, trunkR: 0.22 * scale, leavesR: 2.0 * scale },
         this.vehiclePhysics,
       ).placeAt(x, 0, z));
+      // Zarejestruj drzewo w _circles — następne drzewa i lampy go ominą
+      this._regCircle(x, z, 1.8, 1.8, 0.8);  // efektywny promień ≈ 3.3j
     });
   }
 
@@ -933,7 +933,11 @@ export class WorldBuilder {
     ];
 
     lamps.forEach(([x, z, rotY]) => {
+      // Sprawdź czy nie koliduje z drzewem, budynkiem lub inną lampą
+      if (!this._isFreeForTree(x, z, 1.5)) return;
       this._add(new StreetLamp(this.scene, this.physics, this.vehiclePhysics).placeAt(x, SWH, z, rotY));
+      // Zarejestruj lampę — kolejne obiekty jej ominą
+      this._regCircle(x, z, 0.5, 0.5, 1.0);  // efektywny promień ≈ 1.7j
     });
   }
 
