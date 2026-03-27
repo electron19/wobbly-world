@@ -1,5 +1,20 @@
 # Changelog — Wobbly World
 
+## [v0.4.9] — 2026-03-27
+### Changed
+- `MAX_BRAKE_FORCE`: 600 → 220 Nm — mniej agresywne hamowanie (mniejsze opóźnienie)
+- Hamowanie na trawie: 38% siły asfaltu (`BRAKE_GRASS_MULT = 0.38`) → dłuższa droga
+- Hamulec ręczny na trawie: skalowany tak samo jak nożny
+- `onRoad` obliczane raz na klatkę, przed blokiem gazu/hamulca (refaktor)
+
+## [v0.4.8] — 2026-03-27
+### Fixed
+- Coasting: `brakeForce = 0` gdy brak gazu — auto toczy się swobodnie
+- Parking: `IDLE_BRAKE` (8) tylko gdy `absSpd < 1.5` km/h
+- Wizualne koła: slip-blend tylko przy aktywnym `_isBraking`/`_isHandbraking`
+### Changed
+- `linearDamping`: 0.08 → 0.18 — naturalny opór toczenia przez powietrze/tarcie
+
 ## [v0.4.7] — 2026-03-27
 ### Fixed
 - Pisk opon: aktywny TYLKO gdy koła realnie blokują (slip ratio > 20%) lub boczny drift
