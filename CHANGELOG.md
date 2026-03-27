@@ -1,5 +1,22 @@
 # Changelog — Wobbly World
 
+## [v0.4.7] — 2026-03-27
+### Fixed
+- Pisk opon: aktywny TYLKO gdy koła realnie blokują (slip ratio > 20%) lub boczny drift
+  - Usunięto `brakeSkid` — ślady/pisk nie pojawiają się przy zwykłym hamowaniu
+  - Pisk teraz oparty na `wheelSlip` (deltaRotation vs vehicleSpeed), nie na `isBraking`
+- Wizualna blokada kół: przy dużym poślizgu koła wizualnie zwalniają proporcjonalnie do slip ratio
+### Changed
+- `MAX_BRAKE_FORCE`: 120 → 600 Nm — umożliwia fizyczną blokadę przy pełnym hamowaniu
+- `HAND_BRAKE_FORCE`: 140 → 700 Nm — dramatyczny drift
+- `_isBraking` służy teraz TYLKO do świateł stop (już przy każdym hamowaniu > idle)
+### Added
+- Getter `Car.wheelSlip` — slip ratio [0..1] (0=wolne toczenie, 1=blokada)
+
+## [v0.4.6] — 2026-03-27
+### Fixed
+- Koła: `+=wheelRotDelta` (poprzednie `-=` było błędne — koła kręciły się do tyłu)
+
 ## [v0.4.5] — 2026-03-27
 ### Fixed
 - Koła pojazdu: naprawiona rotacja — kręciły się do tyłu i stały przy coasting (brak gazu)
