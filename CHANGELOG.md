@@ -1,5 +1,17 @@
 # Changelog — Wobbly World
 
+## [v0.4.5] — 2026-03-27
+### Fixed
+- Koła pojazdu: naprawiona rotacja — kręciły się do tyłu i stały przy coasting (brak gazu)
+  - Wymiana `w.deltaRotation` (=0 bez silnika) na obliczanie z `speedKmh / WHEEL_R * dt`
+  - Negacja znaku: `inner.rotation.x -= wheelRotDelta` (wcześniej `+=` dawało obrót wstecz)
+### Changed
+- Wydajność: zasięg renderowania skrócony (cull 200→85j, camera far 200→110, fog 0.004→0.008)
+### Added
+- Pierdnięcie gracza: klawisz **F** — proceduralny szum z LFO (losowa długość 0.28–0.83 s)
+- Beknięcie gracza: klawisz **B** — oscylator piła z sweep (losowa długość 0.32–0.67 s)
+- Hint sterowania zaktualizowany (F/B widoczne na ekranie)
+
 ## [v0.4.4] — 2026-03-24
 ### Changed
 - Trawa: poślizg brzmi jak mokry błotek (głęboki rumble 120 Hz + chlupot bandpass 320 Hz)
