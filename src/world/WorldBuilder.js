@@ -19,6 +19,9 @@ import { School }                 from '../objects/School.js';
 import { Skyscraper }             from '../objects/Skyscraper.js';
 import { BrickBuilding }          from '../objects/BrickBuilding.js';
 import { TowerBlock }             from '../objects/TowerBlock.js';
+import { TriOffice }             from '../objects/TriOffice.js';
+import { Church }                 from '../objects/Church.js';
+import { Warehouse }              from '../objects/Warehouse.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
@@ -56,6 +59,8 @@ export class WorldBuilder {
     this._addFarSouth();
     this._addFarEast();
     this._addFarWest();
+    this._addFarFarNorth();
+    this._addFarFarSouth();
     this._addHills();
     this._addTrees();
     this._addStreetLamps();
@@ -120,6 +125,25 @@ export class WorldBuilder {
     const w = opts.w ?? 9, d = opts.d ?? 12;
     this._regCircle(x, z, w / 2, d / 2, 2.0);
     return this._add(new BrickBuilding(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /** Trójkątny biurowiec — rejestruje koło wykluczenia, stawia budynek. */
+  _triOffice(x, z, facing, opts = {}) {
+    this._regCircle(x, z, 11 / 2, 9 / 2, 2.5);
+    return this._add(new TriOffice(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /** Kościół — rejestruje koło wykluczenia, stawia budynek. */
+  _church(x, z, facing, opts = {}) {
+    this._regCircle(x, z, 10 / 2, 20 / 2, 2.0);
+    return this._add(new Church(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
+  }
+
+  /** Magazyn przemysłowy — rejestruje koło wykluczenia, stawia budynek. */
+  _warehouse(x, z, facing, opts = {}) {
+    const w = opts.w ?? 24, d = opts.d ?? 16;
+    this._regCircle(x, z, w / 2, d / 2, 2.0);
+    return this._add(new Warehouse(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
   }
 
   /** Wieżowiec-blok (prosta bryła) — rejestruje koło wykluczenia, stawia budynek. */
@@ -261,11 +285,13 @@ export class WorldBuilder {
   }
 
   _addRoads() {
-    // Główny krzyż (x=0, z=0) jest w Ground.js — tu dodajemy pozostałe 8 dróg.
+    // Główny krzyż (x=0, z=0) jest w Ground.js — tu dodajemy pozostałe drogi.
     this._road({ axis: 'z', center:  -50, halfLen: 200 });
     this._road({ axis: 'z', center:   50, halfLen: 200 });
     this._road({ axis: 'z', center: -100, halfLen: 200 });
     this._road({ axis: 'z', center:  100, halfLen: 200 });
+    this._road({ axis: 'z', center: -150, halfLen: 145 }); // ← nowe
+    this._road({ axis: 'z', center:  150, halfLen: 145 }); // ← nowe
     this._road({ axis: 'x', center:   65, halfLen: 200 });
     this._road({ axis: 'x', center:  -65, halfLen: 200 });
     this._road({ axis: 'x', center:  130, halfLen: 200 });
@@ -475,6 +501,9 @@ export class WorldBuilder {
       wallColor: 0xEBDEF0, roofColor: 0x6C3483,
     }, this.vehiclePhysics).placeAt(74, 0, 38));
 
+    // Trójkątny biurowiec — pomiędzy kamieniami (100,±22), fasada na zachód
+    this._triOffice(100, 0, FW);
+
     // Domy w CBD wschodnim
     this._house(P[2],  78, -40, FW, { roofStyle: 'flat', floors: 2 });
     this._house(P[3],  78,  40, FW, { roofStyle: 'pitched' });
@@ -498,6 +527,9 @@ export class WorldBuilder {
     this._add(new Shop(this.scene, this.physics, { facing: FE,
       wallColor: 0xFDEBD0, roofColor: 0xAF601A,
     }, this.vehiclePhysics).placeAt(-74, 0, 38));
+
+    // Trójkątny biurowiec CBD zachód — symetryczny, fasada na wschód
+    this._triOffice(-100, 0, FE);
 
     // Domy w CBD zachodnim
     this._house(P[6], -78, -40, FE, { roofStyle: 'flat', floors: 2 });
@@ -673,6 +705,8 @@ export class WorldBuilder {
     // Kamienice czynszowe przy głównej ulicy wschodu
     this._brick(172, -18, FW, { floors: 5, brickColor: 0x8B3A2A });
     this._brick(172,  18, FW, { floors: 4, brickColor: 0x7B5A3A });
+    // Trójkątny biurowiec w dzielnicy dalekiego wschodu
+    this._triOffice(162, -42, FW, { wallColor: 0xECF0EC, glassColor: 0x0A1520 });
 
     // Sklepy przy x=130
     this._regCircle(140, -38, 9/2, 7/2);
@@ -726,6 +760,84 @@ export class WorldBuilder {
     this._house(P[3], -142,  78, FE, { roofStyle: 'flat' });
     this._house(P[4], -160,  72, FE, { roofStyle: 'pitched' });
     this._house(P[5], -172,  78, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+  }
+
+  // ─── Daleka-daleka północ (z ∈ [-195,-155]) — nowa dzielnica za drogą z=-150 ───
+
+  _addFarFarNorth() {
+    const P = HOUSE_PALETTES;
+
+    // Kościół centralny — obok osi x=0, po wschodniej stronie (x=30 > ROAD_CLEAR+5)
+    this._church( 30, -174, FS, { wallColor: 0xD8CEC0, roofColor: 0x7A2828 });
+
+    // Magazyny przemysłowe — przy N-S x=65 i x=-65 (wschodnia i zachodnia strona)
+    this._warehouse( 86, -170, FW, { w: 22, h: 6, d: 14, bodyColor: 0xB8BFC8 });
+    this._warehouse(-86, -170, FE, { w: 22, h: 6, d: 14, bodyColor: 0xC0BAB0 });
+
+    // Domy — wewnętrzny pas NW (x∈[-60,-5])
+    this._house(P[2], -16,-162, FS, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[3], -38,-168, FS, { roofStyle: 'flat', floors: 2 });
+    this._house(P[4], -54,-162, FS, { roofStyle: 'dome' });
+    this._house(P[5], -20,-182, FS, { roofStyle: 'flat' });
+    this._house(P[6], -48,-186, FS, { roofStyle: 'pitched', hasChimney: true });
+
+    // Domy — wewnętrzny pas NE (x∈[5,60])
+    this._house(P[7],  16,-162, FS, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[8],  40,-168, FS, { roofStyle: 'pitched' });
+    this._house(P[9],  56,-162, FS, { roofStyle: 'flat', floors: 2 });
+    this._house(P[0],  18,-182, FS, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[1],  50,-186, FS, { roofStyle: 'dome' });
+
+    // Kamienice — zewnętrzny pas NW (x∈[-125,-70])
+    this._brick( -80,-164, FE, { floors: 3, brickColor: 0x7B4030 });
+    this._house(P[2],-100,-170, FE, { roofStyle: 'flat' });
+    this._house(P[3],-118,-164, FE, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[4], -84,-184, FS, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+
+    // Kamienice — zewnętrzny pas NE (x∈[70,125])
+    this._brick(  80,-164, FW, { floors: 3, brickColor: 0x6B3828 });
+    this._house(P[5],  98,-170, FW, { roofStyle: 'flat', floors: 2 });
+    this._house(P[6], 118,-164, FW, { roofStyle: 'dome' });
+    this._house(P[7],  84,-184, FS, { roofStyle: 'pitched' });
+  }
+
+  // ─── Daleka-daleka południe (z ∈ [155,195]) ──────────────────────────────────
+
+  _addFarFarSouth() {
+    const P = HOUSE_PALETTES;
+
+    // Kościół centralny — obok osi x=0, po zachodniej stronie (x=-30)
+    this._church(-30, 174, FN, { wallColor: 0xCED8D0, roofColor: 0x284A28, spireColor: 0x1E3A1E });
+
+    // Magazyny przy bocznych drogach
+    this._warehouse( 86, 170, FW, { w: 20, h: 7, d: 16, bodyColor: 0xC4C8B8 });
+    this._warehouse(-86, 170, FE, { w: 20, h: 7, d: 16, bodyColor: 0xB8C0C4 });
+
+    // Domy — wewnętrzny pas SW
+    this._house(P[8], -16, 162, FN, { roofStyle: 'flat' });
+    this._house(P[9], -36, 168, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[0], -54, 162, FN, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[1], -20, 182, FN, { roofStyle: 'flat', floors: 2 });
+    this._house(P[2], -48, 186, FN, { roofStyle: 'pitched' });
+
+    // Domy — wewnętrzny pas SE
+    this._house(P[3],  16, 162, FN, { roofStyle: 'dome' });
+    this._house(P[4],  38, 168, FN, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[5],  56, 162, FN, { roofStyle: 'flat', floors: 2 });
+    this._house(P[6],  22, 182, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    this._house(P[7],  50, 186, FN, { roofStyle: 'pitched' });
+
+    // Kamienice — zewnętrzny pas SW
+    this._brick( -80, 164, FE, { floors: 4, brickColor: 0x8B4030 });
+    this._house(P[8],-100, 170, FE, { roofStyle: 'flat', floors: 2 });
+    this._house(P[9],-118, 164, FE, { roofStyle: 'pitched' });
+    this._house(P[0], -84, 184, FN, { roofStyle: 'dome' });
+
+    // Kamienice — zewnętrzny pas SE
+    this._brick(  80, 164, FW, { floors: 4, brickColor: 0x7B3828 });
+    this._house(P[1],  98, 170, FW, { roofStyle: 'flat' });
+    this._house(P[2], 118, 164, FW, { roofStyle: 'pitched', hasChimney: true });
+    this._house(P[3],  82, 184, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
   }
 
   // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────
@@ -930,6 +1042,37 @@ export class WorldBuilder {
       // ── Wzdłuż N-S main (x=0), daleka północ i południe
       [5,-95,FS],[-5,-95,FN],[5,-110,FS],[-5,-110,FN],[5,-130,FS],[-5,-130,FN],
       [5, 95,FS],[-5, 95,FN],[5, 110,FS],[-5, 110,FN],[5, 130,FS],[-5, 130,FN],
+      // daleka-daleka: z=±150 do z=±180
+      [5,-148,FS],[-5,-148,FN],[5,-162,FS],[-5,-162,FN],[5,-178,FS],[-5,-178,FN],
+      [5, 148,FS],[-5, 148,FN],[5, 162,FS],[-5, 162,FN],[5, 178,FS],[-5, 178,FN],
+
+      // ── E-W z=0 — pełne pokrycie (było tylko ±16, droga sięga ±200) ──────────
+      [-35, 5,FW],[-35,-5,FE],[35, 5,FW],[35,-5,FE],
+      [-55, 5,FW],[-55,-5,FE],[55, 5,FW],[55,-5,FE],
+      [-90, 5,FW],[-90,-5,FE],[90, 5,FW],[90,-5,FE],
+      [-110, 5,FW],[-110,-5,FE],[110, 5,FW],[110,-5,FE],
+
+      // ── N-S x=±65 — przedłużenie od z=±80 do z=±145 ─────────────────────────
+      [60,-100,FN],[70,-100,FS],[60,-120,FN],[70,-120,FS],[60,-140,FN],[70,-140,FS],
+      [60, 100,FN],[70, 100,FS],[60, 120,FN],[70, 120,FS],[60, 140,FN],[70, 140,FS],
+      [-60,-100,FS],[-70,-100,FN],[-60,-120,FS],[-70,-120,FN],[-60,-140,FS],[-70,-140,FN],
+      [-60, 100,FS],[-70, 100,FN],[-60, 120,FS],[-70, 120,FN],[-60, 140,FS],[-70, 140,FN],
+
+      // ── N-S x=±130 — przedłużenie od z=±80 do z=±145 ────────────────────────
+      [124.5,-100,FN],[135.5,-100,FS],[124.5,-120,FN],[135.5,-120,FS],[124.5,-140,FN],[135.5,-140,FS],
+      [124.5, 100,FN],[135.5, 100,FS],[124.5, 120,FN],[135.5, 120,FS],[124.5, 140,FN],[135.5, 140,FS],
+      [-124.5,-100,FS],[-135.5,-100,FN],[-124.5,-120,FS],[-135.5,-120,FN],[-124.5,-140,FS],[-135.5,-140,FN],
+      [-124.5, 100,FS],[-135.5, 100,FN],[-124.5, 120,FS],[-135.5, 120,FN],[-124.5, 140,FS],[-135.5, 140,FN],
+
+      // ── E-W z=±150 — nowe drogi ───────────────────────────────────────────────
+      [-120,-144.5,FW],[-90,-144.5,FW],[-52,-144.5,FW],[-18,-144.5,FW],
+      [18,-144.5,FW],[52,-144.5,FW],[90,-144.5,FW],[120,-144.5,FW],
+      [-120,-155.5,FE],[-90,-155.5,FE],[-52,-155.5,FE],[-18,-155.5,FE],
+      [18,-155.5,FE],[52,-155.5,FE],[90,-155.5,FE],[120,-155.5,FE],
+      [-120,144.5,FE],[-90,144.5,FE],[-52,144.5,FE],[-18,144.5,FE],
+      [18,144.5,FE],[52,144.5,FE],[90,144.5,FE],[120,144.5,FE],
+      [-120,155.5,FW],[-90,155.5,FW],[-52,155.5,FW],[-18,155.5,FW],
+      [18,155.5,FW],[52,155.5,FW],[90,155.5,FW],[120,155.5,FW],
     ];
 
     lamps.forEach(([x, z, rotY]) => {

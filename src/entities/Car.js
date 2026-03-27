@@ -17,14 +17,14 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
-const MAX_ENGINE_FORCE   = 9000;  // N na koło tylne (wyżej → wheelspin przy ruszaniu)
+const MAX_ENGINE_FORCE   = 10800; // N na koło tylne (+20% vs 9000, wheelspin przy ruszaniu)
 const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada)
 const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
-const MAX_SPEED_KMH    = 200;    // limit prędkości do przodu
+const MAX_SPEED_KMH    = 260;    // limit prędkości do przodu (+30%)
 const MAX_REV_KMH      = 35;     // limit cofania
 
 export class Car extends Entity {
@@ -399,11 +399,13 @@ export class Car extends Entity {
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
     this._skidState = [0, 1, 2, 3].map(() => ({
-      active:    false,
-      ribbonPts: [],   // flat: [x0,y0,z0, x1,y1,z1, ...]
-      mesh:      null,
-      quadCount: 0,
-      pool:      [],   // maks 10 starych śladów per koło
+      active:         false,
+      ribbonPts:      [],   // flat: [x0,y0,z0, x1,y1,z1, ...]
+      mesh:           null,
+      quadCount:      0,
+      pool:           [],   // maks 10 starych śladów per koło
+      surface:        null,        // 'hard' | 'grass' — bieżąca nawierzchnia segmentu
+      transitionLeft: 0,           // punkty przejścia brąz→czarny (trawa→asfalt)
     }));
   }
 
@@ -591,7 +593,7 @@ export class Car extends Entity {
 
     // Analogowe wygładzanie — narastanie szybsze niż opadanie (jak fizyczny pedał)
     const tauOn  = 0.08;  // 80 ms narastania  (szybka odpowiedź)
-    const tauOff = 0.18;  // 180 ms opadania   (płynne puszczenie)
+    const tauOff = 0.05;  // 50 ms opadania    (szybkie puszczenie → brak poślizgu po puszczeniu)
     this._throttle += (rawFwd - this._throttle) * Math.min(1, dt / (rawFwd > this._throttle ? tauOn : tauOff));
     this._brake    += (rawBack - this._brake)    * Math.min(1, dt / (rawBack > this._brake  ? tauOn : tauOff));
 
@@ -623,7 +625,9 @@ export class Car extends Entity {
     const cx = this._chassis.position.x;
     const cz = this._chassis.position.z;
     const onRoad      = isOnRoad(cx, cz);
-    const brakeSurf   = onRoad ? 1.0 : BRAKE_GRASS_MULT;  // trawa = krótszy moment hamowania
+    // μ_peak: asfalt≈0.85, beton≈0.75 (×0.88), trawa≈0.35 (×0.41 → grywalnie 0.22)
+    const onSidewalk  = !onRoad && isOnHardSurface(cx, cz);
+    const brakeSurf   = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
 
     // ── Gaz / hamulec ────────────────────────────────────────────────────────
     const speedKmh = this._vehicle.currentVehicleSpeedKmHour;
@@ -676,15 +680,17 @@ export class Car extends Entity {
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Przód: wysoka przyczepność przez cały czas (understeer-proof)
-    const fF = onRoad ? 3.2 : 0.70;
+    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=0.70 (×0.22)
+    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 0.70);
 
     // Tył: dynamiczne — przy ruszaniu z dużym gazem frictionSlip spada → wheelspin + oversteer
     // launchT: 1.0 przy absSpd=0 + forwAmount=1, opada liniowo do 0 przy 40 km/h lub < 30% gazu
     const launching = speedKmh > -1 && absSpd < 40;
     const launchT   = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
-    // Przy launchT=1: fR = max(0.32, 2.6 - 2.28) = 0.32 → silnik(9000) > tarcie(0.32×12500=4000) → poślizg
-    const fR = onRoad ? Math.max(0.32, 2.6 - launchT * 2.28) : 0.55;
+    // Asfalt: max(0.32, 2.6-2.28×launchT) | Beton: max(0.35, 2.3-1.95×launchT) | Trawa: 0.55
+    const fR = onRoad      ? Math.max(0.32, 2.6 - launchT * 2.28)
+             : onSidewalk  ? Math.max(0.35, 2.3 - launchT * 1.95)
+             : 0.55;
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
     wInfos[1].frictionSlip = fF;  // FR
@@ -709,6 +715,30 @@ export class Car extends Entity {
     // Zachowaj prędkość i gaz dla lateUpdate (obrót kół)
     this._speedKmh   = speedKmh;
     this._gasIn      = gasIn;
+
+    // ── Auto-flip recovery: koziołkowanie → po 2 s auto wyprostowanie ────────
+    // Oś Y chassis po rotacji: Ry = 1 - 2*(qx²+qz²). Ujemne = wywrotka.
+    const q = this._chassis.quaternion;
+    const worldUpY = 1 - 2 * (q.x * q.x + q.z * q.z);
+    const isFlipped = worldUpY < -0.2;
+
+    if (isFlipped) {
+      this._flippedTimer = (this._flippedTimer ?? 0) + dt;
+      if (this._flippedTimer > 2.0) {
+        // Zachowaj kierunek jazdy (kąt Y), ustaw chassis prosto
+        const heading = Math.atan2(2 * (q.w * q.y + q.x * q.z),
+                                   1 - 2 * (q.y * q.y + q.z * q.z));
+        const sinH = Math.sin(heading / 2), cosH = Math.cos(heading / 2);
+        const p = this._chassis.position;
+        this._chassis.position.set(p.x, Math.max(p.y, 1.2) + 1.5, p.z);
+        this._chassis.quaternion.set(0, sinH, 0, cosH);  // tylko rotacja Y
+        this._chassis.velocity.set(0, 0, 0);
+        this._chassis.angularVelocity.set(0, 0, 0);
+        this._flippedTimer = 0;
+      }
+    } else {
+      this._flippedTimer = 0;
+    }
   }
 
   /**
@@ -763,16 +793,17 @@ export class Car extends Entity {
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
 
-      // Obrót wizualny:
-      // • Przy swobodnym toczeniu / gazie: prosto z prędkości pojazdu (zawsze poprawny)
-      // • Przy aktywnym hamowaniu (S / ręczny): blend ze slip ratio → koło wizualnie staje
+      // Obrót wizualny: stały krok fizyki 1/60s (niezależny od FPS renderowania).
+      // Przy swobodnym toczeniu / gazie: vehicleSpeedMs / WHEEL_R × (1/60) = kąt obrotu [rad/krok].
+      // Przy hamowaniu: blend ze slip ratio → koło wizualnie zwalnia proporcjonalnie do blokady.
+      const PHYS_DT = 1 / 60;
       let visualSpeedMs = vehicleSpeedMs;
-      if (absVehicleSpeedMs > 0.3 && this._isBraking || this._isHandbraking) {
+      if (absVehicleSpeedMs > 0.3 && (this._isBraking || this._isHandbraking)) {
         const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 60 * WHEEL_R;
         const rollingFraction = Math.min(1, wheelSpeedMs / absVehicleSpeedMs);
         visualSpeedMs = vehicleSpeedMs * rollingFraction;
       }
-      inner.rotation.x += visualSpeedMs / WHEEL_R * dt;
+      inner.rotation.x += visualSpeedMs / WHEEL_R * PHYS_DT;
 
       // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
@@ -844,14 +875,48 @@ export class Car extends Entity {
       const wx = wInfo.worldTransform.position.x;
       const wz = wInfo.worldTransform.position.z;
 
+      const onHard = isOnHardSurface(wx, wz);
+      const TRANS_PTS = 12;   // ≈12 punktów brązowych po wjeździe na asfalt z trawy
+
       if (skidding) {
         if (!state.active) {
-          const onHard = isOnHardSurface(wx, wz);
+          // Nowy ślad — kolor wg nawierzchni
           this._startSkidLine(state, onHard ? 0x222222 : 0x6B4423);
+          state.surface        = onHard ? 'hard' : 'grass';
+          state.transitionLeft = 0;
+        } else {
+          // Aktywny ślad — obsłuż zmianę nawierzchni
+          const wasHard = state.surface === 'hard';
+
+          if (!wasHard && onHard) {
+            // Trawa → Asfalt: otwórz segment przejściowy (brązowy) z licznikiem
+            this._endSkidLine(state);
+            this._startSkidLine(state, 0x6B4423);
+            state.surface        = 'hard';
+            state.transitionLeft = TRANS_PTS;
+          } else if (wasHard && !onHard) {
+            // Asfalt → Trawa: natychmiast brązowy
+            this._endSkidLine(state);
+            this._startSkidLine(state, 0x6B4423);
+            state.surface        = 'grass';
+            state.transitionLeft = 0;
+          }
+
+          // Odliczanie przejścia brąz→czarny
+          if (state.transitionLeft > 0) {
+            state.transitionLeft--;
+            if (state.transitionLeft === 0) {
+              this._endSkidLine(state);
+              this._startSkidLine(state, 0x222222);
+            }
+          }
         }
         this._appendSkidPoint(state, wx, 0.025, wz);
       } else {
-        if (state.active) this._endSkidLine(state);
+        if (state.active) {
+          this._endSkidLine(state);
+          state.transitionLeft = 0;
+        }
       }
     }
   }

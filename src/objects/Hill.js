@@ -69,11 +69,22 @@ export class Hill extends WorldObject {
     }
 
     // ── Visual mesh ───────────────────────────────────────────────────────
-    const mesh = new THREE.Mesh(geo, toonMat(color));
+    const mat = toonMat(color);
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.y = offsetY;
     mesh.scale.set(sx, sy, sz);
     mesh.receiveShadow = true;
     this.root.add(mesh);
+
+    // ── Zaślepka dna — półsfery mają otwarte dno (widać wnętrze od dołu) ──
+    // ConeGeometry i CylinderGeometry mają wbudowane capy — tylko round/ridge
+    if (shape === 'round' || shape === 'ridge') {
+      const cap = new THREE.Mesh(new THREE.CircleGeometry(radius, 28), mat);
+      cap.rotation.x = -Math.PI / 2;  // płaski poziomo
+      cap.scale.set(sx, 1, sz);
+      cap.position.y = 0.02;          // lekko ponad gruntem (unika z-fighting)
+      this.root.add(cap);
+    }
 
     // ── Physics: trimesh z wbudowaną transformacją (T × S) ────────────────
     const physGeo = geo.clone();
@@ -91,9 +102,12 @@ export class Hill extends WorldObject {
     const indices = new Uint32Array(physGeo.index.array);
     this._bodies.push(this.physics.addStaticTrimesh(verts, indices));
 
-    // ── Cannon-es: dokładny trimesh — auto może wjeżdżać na stok ─────────
+    // ── Cannon-es: Heightfield — stabilna kolizja bez tunelowania ──────────
+    // Trimesh w cannon-es tuneluje przy dużych prędkościach (>100 km/h).
+    // Heightfield z profilem kosinusowym jest stabilny niezależnie od prędkości.
+    // Dla pojazdu wystarczy aproksymacja round — kształt wizualny zachowany w Rapier.
     if (this.vehiclePhysics) {
-      this.vehiclePhysics.addStaticTrimesh(verts, indices);
+      this.vehiclePhysics.addHillHeightfield(wx, wz, radius, height);
     }
   }
 }

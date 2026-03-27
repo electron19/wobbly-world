@@ -21,7 +21,7 @@ export class VehiclePhysics {
     });
     this.world.broadphase     = new CANNON.SAPBroadphase(this.world);
     this.world.defaultContactMaterial.friction    = 0.4;
-    this.world.defaultContactMaterial.restitution = 0.1;
+    this.world.defaultContactMaterial.restitution = 0.28;  // sprężyste uderzenia (0.1→0.28)
 
     // Płaska ziemia y=0.01 — wyrównana z wizualną drogą (Ground.js: road y=0.01)
     // Trawa jest na y=0, więc na trawie koła unosza się 1cm — niezauważalne
@@ -43,7 +43,7 @@ export class VehiclePhysics {
     const chassis = new CANNON.Body({
       mass:           2500,  // cięższa karoseria → więcej bezwładności
       angularDamping: 0.12,  // niskie tłumienie obrotu → tył swobodnie wychodzi przy wheelspin
-      linearDamping:  0.18,  // opór toczenia — auto zwalnia bez gazu (bez blokowania kół)
+      linearDamping:  0.04,  // opór powietrza + toczenia ≈ 4% v/s (vs. 18% → ciągłe hamowanie)
     });
 
     // Pudło chassis — rozmiar odpowiada Car.js CAR_BOX_*
@@ -73,7 +73,7 @@ export class VehiclePhysics {
       dampingRelaxation:    2.4,    // wolniejszy powrót → "płynące" zawieszenie
       dampingCompression:   3.2,
       frictionSlip:         2.5,    // bazowa przyczepność (nadpisywana per koło w Car.js)
-      rollInfluence:        0.03,   // prawie zerowe wywracanie
+      rollInfluence:        0.01,   // minimalne wywracanie — auto nie przewraca się o krawężnik
     };
 
     // FL, FR, RL, RR — punkty przyłączenia zawieszenia do chassis
@@ -118,8 +118,44 @@ export class VehiclePhysics {
     this.world.addBody(body);
   }
 
-  /** Krok fizyki — stały krok 1/60 s niezależnie od dt klatki. */
-  step(_dt) {
-    this.world.step(1 / 60);
+  /**
+   * Dodaje Heightfield dla wzgórza do cannon-es — stabilniejszy od Trimesh przy dużych prędkościach.
+   * @param {number} cx, cz  centrum wzgórza w world space
+   * @param {number} radius  promień wzgórza
+   * @param {number} height  wysokość szczytu
+   * @param {number} sy      skala Y (dla nie-round wzgórz)
+   */
+  addHillHeightfield(cx, cz, radius, height, sy = 1) {
+    const N    = 20;     // rozdzielczość siatki (20×20 punktów)
+    const span = radius * 2 * 1.05;  // margines 5% poza promień
+    const step = span / (N - 1);
+    const data = [];
+
+    for (let i = 0; i < N; i++) {
+      const row = [];
+      for (let j = 0; j < N; j++) {
+        const lx = (i / (N - 1) - 0.5) * span;
+        const lz = (j / (N - 1) - 0.5) * span;
+        const r  = Math.sqrt(lx * lx + lz * lz) / radius;
+        // Profil kosinusowy: h(r) = height × cos(r × π/2), zeruje się przy r=1
+        row.push(r < 1 ? height * sy * Math.cos(r * Math.PI / 2) : 0);
+      }
+      data.push(row);
+    }
+
+    const hf = new CANNON.Heightfield(data, { elementSize: step });
+    const body = new CANNON.Body({ mass: 0 });
+    body.addShape(hf);
+    // Heightfield corner to (0,0) → przesuń żeby centrum było w (cx, cz)
+    body.position.set(cx - span / 2, 0, cz - span / 2);
+    body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);  // Heightfield leży w XZ, obróć
+    this.world.addBody(body);
+  }
+
+  /** Krok fizyki z sub-stepowaniem — lepsza detekcja kolizji przy wysokich prędkościach. */
+  step(dt) {
+    // fixedStep 1/120s + max 4 substepy = do 240 kroków/s przy 60fps
+    // Eliminuje tunelowanie przez wzgórza i mury przy Vmax 260 km/h
+    this.world.step(1 / 120, dt, 4);
   }
 }

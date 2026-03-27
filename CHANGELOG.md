@@ -1,5 +1,33 @@
 # Changelog — Wobbly World
 
+## [v0.7.0] — 2026-03-27
+### Fixed
+- `linearDamping: 0.18 → 0.04` — pojazd nie hamuje sam; 0.18 powodowało 18% straty prędkości/s
+- Auto-flip recovery: po 2 s koziołkowania auto wyprostowuje się (zachowuje kierunek Y)
+- `rollInfluence: 0.03 → 0.01` — auto nie przewraca się od krawężnika
+- Góry: zaślepka dna (`CircleGeometry`) dla kształtów round/ridge — brak dziury w podstawie
+- Ślady opon: brązowe na trawie → brązowe ~12 punktów po wjeździe na asfalt → czarne (dynamiczna zmiana)
+- E-W z=0 — lampy: droga miała tylko 4 lampy w centrum, teraz pełne pokrycie ±110j
+- N-S x=±65 i x=±130 — lampy: przedłużone do z=±140
+- Przyczepność 3 nawierzchni: asfalt fF=3.2, beton chodnika fF=2.8 (μ×0.88), trawa fF=0.70
+### Changed
+- `restitution: 0.1 → 0.28` — sprężyste uderzenia w ściany/obiekty
+### Added
+- Nowe drogi: E-W z=±150 (halfLen=145), lampy wzdłuż
+- `Church.js` — kościół z wieżą, iglicą, witrażami, złotym krzyżem
+- `Warehouse.js` — hala przemysłowa z bramami garażowymi i ryglami
+- Nowe dzielnice `_addFarFarNorth/South` (z∈[-195,-155] i [155,195]):
+  kościoły + 2 magazyny + kamienice + domy w 4 pasach
+- N-S x=0: lampy przedłużone do z=±178
+
+## [v0.6.2] — 2026-03-27
+### Changed
+- RWD nadsterowalność: tył wchodzi w wheelspin przy ruszaniu z mocnym gazem
+  - `frictionSlip` tył dynamicznie: 2.6 (normalne) → 0.32 (pełny gaz od miejsca) — poślizg gdy silnik > tarcie
+  - `MAX_ENGINE_FORCE`: 6750 → 9000 N — siła silnika przekracza przyczepność przy ruszaniu
+  - `angularDamping`: 0.25 → 0.12 — tył swobodnie wychodzi bez silnego tłumienia
+- Oversteer wygasa przy ~40 km/h (frictionSlip wraca do 2.6) — bez poślizgu na autostradzie
+
 ## [v0.6.1] — 2026-03-27
 ### Changed
 - Analogowe hamowanie: pedał gazu i hamulec mają rampę narastania (80 ms) i opadania (180 ms)
