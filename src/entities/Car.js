@@ -18,9 +18,9 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE = 6750;   // N na koło tylne
-const MAX_BRAKE_FORCE  = 120;    // Nm hamowania
-const HAND_BRAKE_FORCE = 140;    // Nm hamulca ręcznego (tylne koła, poślizg)
-const IDLE_BRAKE       = 10;     // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
+const MAX_BRAKE_FORCE  = 600;    // Nm hamowania — wystarczy na blokadę przy pełnym wciśnięciu
+const HAND_BRAKE_FORCE = 700;    // Nm hamulca ręcznego (tylne koła, drift)
+const IDLE_BRAKE       = 8;      // tarcie spoczynkowe (auto stoi gdy nikt nie jedzie)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 200;    // limit prędkości do przodu
@@ -390,6 +390,9 @@ export class Car extends Entity {
     return this._skidState ? this._skidState.some(s => s.active) : false;
   }
 
+  /** Maksymalny slip ratio kół [0..1]: 0 = swobodne toczenie, 1 = zablokowane. */
+  get wheelSlip() { return this._maxWheelSlip ?? 0; }
+
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
     this._skidState = [0, 1, 2, 3].map(() => ({
@@ -672,10 +675,10 @@ export class Car extends Entity {
     // ── Dźwięk silnika ───────────────────────────────────────────────────────
     audio?.updateEngine(speedKmh, gasIn, dt);
 
-    // ── Stan hamowania — używany przez _updateSkidMarks ──────────────────────
+    // ── Stan hamowania — TYLKO dla świateł stop ───────────────────────────────
     const absSpd = Math.abs(speedKmh);
-    this._isHandbraking = handBrake && absSpd > 5;
-    this._isBraking     = !handBrake && brakeForce > MAX_BRAKE_FORCE * 0.4 && absSpd > 6;
+    this._isHandbraking = handBrake && absSpd > 3;
+    this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1;
 
     // ── RPM factor — używany przez wydech i inne efekty ──────────────────────
     // 0 = jałowy, 1 = pełne obroty; kombinacja prędkości i gazu
@@ -718,18 +721,40 @@ export class Car extends Entity {
     // Gwarantuje zgodność bieżnika z nawierzchnią niezależnie od fps.
     const dt = this._dt ?? (1 / 60);  // używane dalej przez _updateExhaust
 
-    // Obrót kół: obliczany z aktualnej prędkości (nie deltaRotation — jest 0 przy coasting)
-    // Ujemny znak: koła toczą się do przodu gdy speedKmh > 0 (prawy układ współrzędnych)
-    const forwardSpeed = (this._speedKmh ?? 0) / 3.6;  // m/s (+ = do przodu)
-    const wheelRotDelta = forwardSpeed / WHEEL_R * dt;
+    // ── Prędkość pojazdu (m/s, ze znakiem: + = do przodu) ───────────────────
+    const vehicleSpeedMs = (this._speedKmh ?? 0) / 3.6;
+    const absVehicleSpeedMs = Math.abs(vehicleSpeedMs);
+
+    // ── Slip ratio per koło + zapis dla dźwięku / śladów ────────────────────
+    // slip = 0: koło toczy się swobodnie; slip = 1: koło zablokowane
+    let maxSlip = 0;
+    const slips = wi.map(w => {
+      if (absVehicleSpeedMs < 0.5) return 0;
+      const wheelSpeedMs = Math.abs(w.deltaRotation) * 60 * WHEEL_R;
+      return Math.max(0, 1 - wheelSpeedMs / absVehicleSpeedMs);
+    });
+    maxSlip = Math.max(...slips);
+    this._maxWheelSlip = maxSlip;
 
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
       const w = wi[i];
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
-      // Obrót: prędkościozależny — działa również przy coasting (brak gazu)
-      // += bo: rotation.x rośnie → góra koła idzie w +Z (do przodu) — poprawny kierunek
-      inner.rotation.x += wheelRotDelta;
+
+      // Obrót wizualny: blenduj prędkość pojazdu z faktycznym poślizgiem koła.
+      // Przy zerowym poślizgu = prędkość pojazdu (zawsze poprawny kierunek).
+      // Przy blokadzie (slip→1) = koło wizualnie zwalnia / staje.
+      let visualSpeedMs;
+      if (absVehicleSpeedMs > 0.3) {
+        const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 60 * WHEEL_R;
+        const rollingFraction = Math.min(1, wheelSpeedMs / absVehicleSpeedMs);
+        // Zachowaj znak z pojazdu (forward/reverse)
+        visualSpeedMs = vehicleSpeedMs * rollingFraction;
+      } else {
+        visualSpeedMs = vehicleSpeedMs;
+      }
+      inner.rotation.x += visualSpeedMs / WHEEL_R * dt;
+
       // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
     });
@@ -776,16 +801,26 @@ export class Car extends Entity {
     const wi     = this._vehicle.wheelInfos;
     const speedK = Math.abs(this._vehicle.currentVehicleSpeedKmHour);
 
+    const speedMs = speedK / 3.6;
+
     for (let wIdx = 0; wIdx < 4; wIdx++) {
       const wInfo  = wi[wIdx];
       const state  = this._skidState[wIdx];
       const isRear = wIdx >= 2;
 
-      const physicsSlip = speedK > 5 && wInfo.skidInfo < 0.96;
-      const brakeSkid   = this._isBraking   && speedK > 6;
+      // Slip ratio: jak bardzo koło jest wolniejsze od pojazdu (blokada hamulcowa)
+      let slip = 0;
+      if (speedMs > 0.5) {
+        const wheelSpeedMs = Math.abs(wInfo.deltaRotation) * 60 * WHEEL_R;
+        slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
+      }
+
+      // Ślad pojawia się gdy: realne zablokowanie (slip>0.28) LUB boczny poślizg (skidInfo)
+      // LUB ręczny hamulec na tylnych kołach
+      const physicsSlip = speedK > 5 && (slip > 0.28 || wInfo.skidInfo < 0.92);
       const handSkid    = this._isHandbraking && isRear && speedK > 3;
 
-      const skidding = physicsSlip || brakeSkid || handSkid;
+      const skidding = physicsSlip || handSkid;
 
       const wx = wInfo.worldTransform.position.x;
       const wz = wInfo.worldTransform.position.z;

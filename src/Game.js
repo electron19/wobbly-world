@@ -252,11 +252,12 @@ export class Game {
       this.player._body.setNextKinematicTranslation({
         x: cp.x, y: cp.y + 0.7, z: cp.z,
       });
-      // Dźwięk poślizgu — pisk przy dużym skręcie LUB hamowaniu
+      // Dźwięk poślizgu — pisk gdy koła realnie blokują (slip ratio) LUB boczny drift
       const carOnRoad  = isOnRoad(cp.x, cp.z);
-      const bigTurn    = this._drivingCar.steerAngle > 0.38;
-      const hardBrake  = this._drivingCar.isBraking;
-      this.audio.updateSkid(this._drivingCar.isSkidding && (bigTurn || hardBrake), carOnRoad);
+      const absCarSpd  = Math.abs(this._drivingCar.speedKmh ?? 0);
+      const slip       = this._drivingCar.wheelSlip;
+      const lateralSlip = this._drivingCar.isSkidding && this._drivingCar.steerAngle > 0.30;
+      this.audio.updateSkid((slip > 0.20 || lateralSlip) && absCarSpd > 5, carOnRoad);
     } else {
       if (!exitedThisFrame) {
         const pp = this.player.root.position;
