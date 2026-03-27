@@ -728,7 +728,8 @@ export class Car extends Entity {
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
       // Obrót: prędkościozależny — działa również przy coasting (brak gazu)
-      inner.rotation.x -= wheelRotDelta;
+      // += bo: rotation.x rośnie → góra koła idzie w +Z (do przodu) — poprawny kierunek
+      inner.rotation.x += wheelRotDelta;
       // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
     });
