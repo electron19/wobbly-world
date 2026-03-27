@@ -718,12 +718,17 @@ export class Car extends Entity {
     // Gwarantuje zgodność bieżnika z nawierzchnią niezależnie od fps.
     const dt = this._dt ?? (1 / 60);  // używane dalej przez _updateExhaust
 
+    // Obrót kół: obliczany z aktualnej prędkości (nie deltaRotation — jest 0 przy coasting)
+    // Ujemny znak: koła toczą się do przodu gdy speedKmh > 0 (prawy układ współrzędnych)
+    const forwardSpeed = (this._speedKmh ?? 0) / 3.6;  // m/s (+ = do przodu)
+    const wheelRotDelta = forwardSpeed / WHEEL_R * dt;
+
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
       const w = wi[i];
       // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
       outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
-      // Obrót: deltaRotation z cannon-es = rad obrotu na krok fizyki
-      inner.rotation.x += w.deltaRotation;
+      // Obrót: prędkościozależny — działa również przy coasting (brak gazu)
+      inner.rotation.x -= wheelRotDelta;
       // Skręt przednich kół (źródło prawdy = cannon-es steering)
       if (isFront) outer.rotation.y = w.steering;
     });

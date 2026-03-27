@@ -63,10 +63,10 @@ export class Game {
     // ─── 2. Renderer + scena ───────────────────────────────────────────────
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7EC8F5);
-    // Gęstość mgły: 0.006 = widok ~200j, 0.008 = ~130j; miasto jest większe więc luzujemy
-    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.004);
+    // Gęstość mgły: 0.008 = widok ~100j — ukrywa odległe obiekty, poprawia wydajność
+    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.008);
 
-    this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 200);
+    this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 110);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));  // max 1.5 zamiast 2
     this.renderer.setSize(innerWidth, innerHeight);
@@ -133,7 +133,7 @@ export class Game {
   _updateCulling() {
     if (++this._cullFrame % 4 !== 0) return;
     const pp = this.player.root.position;
-    const DIST_SQ = 200 * 200;
+    const DIST_SQ = 85 * 85;
     for (const obj of this._worldObjects) {
       const dx = obj.root.position.x - pp.x;
       const dz = obj.root.position.z - pp.z;
@@ -185,7 +185,7 @@ export class Game {
     this._exitCarThisFrame = true;
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
-      'WASD / L‑Stick – ruch &nbsp;|&nbsp; SPACJA / ✕ – skok &nbsp;|&nbsp; Mysz / R‑Stick – kamera';
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
   }
 
   /** Obsługa wejścia/wyjścia z auta + hint UI. */

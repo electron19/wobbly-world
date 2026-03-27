@@ -34,7 +34,9 @@ export class Player extends Entity {
     this.velocityY = 0;
     this.facing    = 0;
 
-    this._walkPhase = 0;
+    this._walkPhase  = 0;
+    this._fartWasDown = false;
+    this._burpWasDown = false;
     this.spSquishY = new Spring(22, 0.80);
     this.spSquishX = new Spring(16, 0.70);
     this.spLean    = new Spring(12, 0.70);
@@ -190,6 +192,15 @@ export class Player extends Entity {
     const sy = 1 + this.spSquishY.pos;
     const sx = 1 + this.spSquishX.pos;
     this.bodyMesh.scale.set(sx, sy, sx);
+
+    // ─── Pierdnięcie (F) i beknięcie (B) ──────────────────────────────────────
+    const fartDown = input.isDown('KeyF');
+    if (fartDown && !this._fartWasDown) audio?.playFart();
+    this._fartWasDown = fartDown;
+
+    const burpDown = input.isDown('KeyB');
+    if (burpDown && !this._burpWasDown) audio?.playBurp();
+    this._burpWasDown = burpDown;
 
     // ─── Kroki (dźwięk) ────────────────────────────────────────────────────────
     audio?.checkFootstep(this._walkPhase, isMoving, this.grounded, onRoad);

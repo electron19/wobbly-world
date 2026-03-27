@@ -698,6 +698,64 @@ export class AudioManager {
     }
   }
 
+  // ─── Pierdnięcie i beknięcie ──────────────────────────────────────────────
+
+  playFart() {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+    const dur = 0.28 + Math.random() * 0.55;  // 0.28–0.83 s (losowe)
+
+    // Niskotonowy szum przez ciasny bandpass — charakter "mokrego"
+    const buf = this._makeNoise(dur + 0.05);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const lp  = ctx.createBiquadFilter();
+    lp.type = 'bandpass';
+    lp.frequency.setValueAtTime(220, now);
+    lp.frequency.exponentialRampToValueAtTime(60, now + dur);
+    lp.Q.value = 5;
+
+    // Modulacja amplitudy — "szarpanki" jak prawdziwe pierdnięcie
+    const lfo = ctx.createOscillator();
+    lfo.type = 'square';
+    lfo.frequency.value = 28 + Math.random() * 18;
+    const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.25;
+    lfo.connect(lfoGain);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.55, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+    lfoGain.connect(gain.gain);
+
+    src.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    lfo.start(now); lfo.stop(now + dur);
+    src.start(now); src.stop(now + dur + 0.05);
+  }
+
+  playBurp() {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+    const dur = 0.32 + Math.random() * 0.35;  // 0.32–0.67 s
+
+    // Piła — gardłowe, bekawe brzmienie
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(360 + Math.random() * 120, now);
+    osc.frequency.exponentialRampToValueAtTime(80 + Math.random() * 40, now + dur);
+
+    // Rezonansowy lowpass — gardłowa barwa
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    lp.Q.value = 4;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.45, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    osc.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    osc.start(now); osc.stop(now + dur + 0.05);
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   _makeNoise(duration) {
