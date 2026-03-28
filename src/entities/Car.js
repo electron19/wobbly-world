@@ -782,7 +782,7 @@ export class Car extends Entity {
     let maxSlip = 0;
     const slips = wi.map(w => {
       if (absVehicleSpeedMs < 0.5) return 0;
-      const wheelSpeedMs = Math.abs(w.deltaRotation) * 60 * WHEEL_R;
+      const wheelSpeedMs = Math.abs(w.deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
       return Math.max(0, 1 - wheelSpeedMs / absVehicleSpeedMs);
     });
     maxSlip = Math.max(...slips);
@@ -799,7 +799,7 @@ export class Car extends Entity {
       const PHYS_DT = 1 / 60;
       let visualSpeedMs = vehicleSpeedMs;
       if (absVehicleSpeedMs > 0.3 && (this._isBraking || this._isHandbraking)) {
-        const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 60 * WHEEL_R;
+        const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
         const rollingFraction = Math.min(1, wheelSpeedMs / absVehicleSpeedMs);
         visualSpeedMs = vehicleSpeedMs * rollingFraction;
       }
@@ -861,7 +861,7 @@ export class Car extends Entity {
       // Slip ratio: jak bardzo koło jest wolniejsze od pojazdu (blokada hamulcowa)
       let slip = 0;
       if (speedMs > 0.5) {
-        const wheelSpeedMs = Math.abs(wInfo.deltaRotation) * 60 * WHEEL_R;
+        const wheelSpeedMs = Math.abs(wInfo.deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
         slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
       }
 
