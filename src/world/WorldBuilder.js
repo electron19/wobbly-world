@@ -338,70 +338,78 @@ export class WorldBuilder {
   }
 
   // ─── Centrum (4 bloki między drogami wewnętrznymi) ──────────────────────────
+  //
+  // Zasady rozmieszczenia:
+  //  • Minimalne odstępy: dom-dom ≥ 14j, dom-sklep ≥ 14j, dom-szkoła ≥ 19j
+  //  • Fasada (drzwi + ścieżka) zawsze skierowana ku NAJBLIŻSZEJ drodze
+  //  • Ścieżka wejściowa (4 płytki × 1j, start d/2+0.6 od centrum):
+  //      FW → płytki w kierunku -X; FE → +X; FS → +Z; FN → -Z
+  //      Ostatnia płytka musi być POZA ROAD_CLEAR (4.5j od osi drogi).
+  //      Minimalny cofnięcie budynku od osi drogi: d/2 + 0.6 + 3 + 4.5 = 12.1j
+  //      → budynki przy x=0 muszą być x ≥ 13; przy x=65 → x ≤ 52;
+  //        przy z=0 → |z| ≥ 13; przy z=±50 → |z| ≤ 37.
 
   _addCentreBlocks() {
     const P = HOUSE_PALETTES;
 
-    // ── Blok NE — sklepy + domy (x∈[8,58], z∈[-8,-44]) ─────────────────────
-    // Sklepy wzdłuż N-S main (fasada na zachód, FW)
-    this._regCircle(10, -12, 9/2, 7/2);
-    this._add(new Shop(this.scene, this.physics, { facing: FW }, this.vehiclePhysics).placeAt(10, 0, -12));
-    this._regCircle(10, -26, 9/2, 7/2);
-    this._add(new Shop(this.scene, this.physics, { facing: FW,
-      wallColor: 0xFAD7A0, roofColor: 0xE67E22, signColor: 0x8E44AD,
-    }, this.vehiclePhysics).placeAt(10, 0, -26));
-    // Domy w głębi
-    this._house(P[0],  22, -14, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[1],  35, -14, FW, { roofStyle: 'flat', floors: 2 });
-    this._house(P[2],  48, -14, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[3],  54, -28, FE, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[4],  54, -40, FE, { roofStyle: 'flat' });
-    this._house(P[5],  38, -40, FS, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[6],  24, -40, FS, { roofStyle: 'pitched' });
-    this._house(P[7],  12, -40, FS, { roofStyle: 'flat', floors: 2 });
+    // ── Blok NE (x∈[13,52], z∈[-13,-37]) ────────────────────────────────────
+    // Budynki na obwodzie bloku, fasada ku najbliższej drodze.
+    // shop(14,-14,FW): ścieżka →-X, last tile x=6.4 > ROAD_CLEAR 4.5 ✓
+    this._regCircle(14, -14, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, { facing: FW }, this.vehiclePhysics).placeAt(14, 0, -14));
+    // house(14,-32,FW): wzdłuż x=0 (18j od shopu ✓)
+    this._house(P[0],  14, -32, FW, { roofStyle: 'pitched', hasChimney: true });
+    // house(32,-14,FS): wzdłuż z=0 (18j od shopu ✓); ścieżka →+Z, last tile z=-6.4 > 4.5 ✓
+    this._house(P[1],  32, -14, FS, { roofStyle: 'flat', floors: 2 });
+    // house(52,-24,FE): wzdłuż x=65 (23j od house(32,-14) ✓); ścieżka →+X, last tile x=59.6 < 60.5 ✓
+    this._house(P[2],  52, -24, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // house(34,-37,FN): wzdłuż z=-50 (17j od house(14,-32) ✓); ścieżka →-Z, last tile z=-44.6 > -45.5 ✓
+    this._house(P[3],  34, -37, FN, { roofStyle: 'pitched' });
 
-    // ── Blok NW — szkoła + domy (x∈[-8,-58], z∈[-8,-44]) ───────────────────
-    // Szkoła: fasada FE (wschód, w stronę centrum)
+    // ── Blok NW (x∈[-13,-52], z∈[-13,-37]) ──────────────────────────────────
+    // Szkoła (18×10) przy centrum; jej okrąg wykluczenia r≈12.2 → min 18.7j do domu.
+    // shop(-14,-14,FE): fasada ku x=0 (wschód) ✓
+    this._regCircle(-14, -14, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, { facing: FE }, this.vehiclePhysics).placeAt(-14, 0, -14));
+    // school(-34,-28,FE): dist do shopu 24.4j > 19.4j ✓
     this._regCircle(-34, -28, 18/2, 10/2);
     this._add(new School(this.scene, this.physics, { facing: FE }, this.vehiclePhysics).placeAt(-34, 0, -28));
-    // Sklep przy N-S main
-    this._regCircle(-10, -12, 9/2, 7/2);
-    this._add(new Shop(this.scene, this.physics, { facing: FE }, this.vehiclePhysics).placeAt(-10, 0, -12));
-    // Domy
-    this._house(P[8], -22, -14, FE, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[9], -54, -28, FW, { roofStyle: 'flat', floors: 2 });
-    this._house(P[0], -54, -40, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[1], -38, -40, FS, { roofStyle: 'pitched' });
-    this._house(P[2], -24, -40, FS, { roofStyle: 'flat' });
-    this._house(P[3], -12, -40, FS, { roofStyle: 'dome' });
+    // house(-14,-32,FE): wzdłuż x=0 (18j od shopu, 26j od szkoły ✓)
+    this._house(P[4], -14, -32, FE, { roofStyle: 'flat' });
+    // house(-52,-16,FW): wzdłuż x=-65 (21.6j od szkoły ✓); ścieżka →-X, last tile x=-59.6 > -60.5 ✓
+    this._house(P[5], -52, -16, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // house(-52,-34,FW): 18j od powyższego (19.0j od szkoły ✓)
+    this._house(P[6], -52, -34, FW, { roofStyle: 'pitched', hasChimney: true });
 
-    // ── Blok SE — domy (x∈[8,58], z∈[8,44]) ────────────────────────────────
-    this._regCircle(10, 12, 9/2, 7/2);
-    this._add(new Shop(this.scene, this.physics, { facing: FW,
-      wallColor: 0x98D8C8, roofColor: 0x27AE60, doorColor: 0xF39C12,
-    }, this.vehiclePhysics).placeAt(10, 0, 12));
-    this._house(P[4],  22,  14, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[5],  35,  14, FW, { roofStyle: 'dome' });
-    this._house(P[6],  48,  14, FW, { roofStyle: 'flat', floors: 2 });
-    this._house(P[7],  54,  28, FE, { roofStyle: 'pitched' });
-    this._house(P[8],  54,  40, FE, { roofStyle: 'flat' });
-    this._house(P[9],  38,  40, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[0],  24,  40, FN, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[1],  12,  40, FN, { roofStyle: 'flat' });
+    // ── Blok SE (x∈[13,52], z∈[13,37]) ──────────────────────────────────────
+    // Symetrycznie do NE względem z=0.
+    this._regCircle(14, 14, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FW, wallColor: 0x98D8C8, roofColor: 0x27AE60, doorColor: 0xF39C12,
+    }, this.vehiclePhysics).placeAt(14, 0, 14));
+    // house(14,32,FW): wzdłuż x=0 ✓
+    this._house(P[7],  14,  32, FW, { roofStyle: 'pitched', hasChimney: true });
+    // house(32,14,FN): wzdłuż z=0, fasada ku północy (→z=0) ✓; ścieżka →-Z, last tile z=6.4 > 4.5 ✓
+    this._house(P[8],  32,  14, FN, { roofStyle: 'flat', floors: 2 });
+    // house(52,24,FE): wzdłuż x=65 ✓
+    this._house(P[9],  52,  24, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // house(34,37,FS): wzdłuż z=50, fasada ku południu (→z=50) ✓; ścieżka →+Z, last tile z=44.6 < 45.5 ✓
+    this._house(P[0],  34,  37, FS, { roofStyle: 'pitched' });
 
-    // ── Blok SW — domy (x∈[-8,-58], z∈[8,44]) ──────────────────────────────
-    this._regCircle(-10, 12, 9/2, 7/2);
-    this._add(new Shop(this.scene, this.physics, { facing: FE,
-      wallColor: 0xD5DBDB, roofColor: 0x2C3E50, signColor: 0xE74C3C,
-    }, this.vehiclePhysics).placeAt(-10, 0, 12));
-    this._house(P[2], -22,  14, FE, { roofStyle: 'pitched' });
-    this._house(P[3], -35,  14, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
-    this._house(P[4], -48,  14, FE, { roofStyle: 'flat', floors: 2 });
-    this._house(P[5], -54,  28, FW, { roofStyle: 'pitched', hasChimney: true });
-    this._house(P[6], -54,  40, FW, { roofStyle: 'dome' });
-    this._house(P[7], -38,  40, FN, { roofStyle: 'pitched' });
-    this._house(P[8], -24,  40, FN, { roofStyle: 'flat' });
-    this._house(P[9], -12,  40, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // ── Blok SW (x∈[-13,-52], z∈[13,37]) ────────────────────────────────────
+    // Symetrycznie do SE względem x=0.
+    this._regCircle(-14, 14, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FE, wallColor: 0xD5DBDB, roofColor: 0x2C3E50, signColor: 0xE74C3C,
+    }, this.vehiclePhysics).placeAt(-14, 0, 14));
+    // house(-14,32,FE): wzdłuż x=0 ✓
+    this._house(P[1], -14,  32, FE, { roofStyle: 'flat' });
+    // house(-32,14,FN): wzdłuż z=0, fasada ku północy ✓
+    this._house(P[2], -32,  14, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // house(-52,24,FW): wzdłuż x=-65, fasada ku zachodowi ✓
+    this._house(P[3], -52,  24, FW, { roofStyle: 'pitched', hasChimney: true });
+    // house(-34,37,FS): wzdłuż z=50, fasada ku południu ✓
+    this._house(P[4], -34,  37, FS, { roofStyle: 'flat', floors: 2 });
   }
 
   // ─── Przedmieścia północne (z ∈ [-55, -90]) ─────────────────────────────────
