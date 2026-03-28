@@ -680,10 +680,11 @@ export class Car extends Entity {
     const rawBack= Math.max(revK, input.pad.l2 ?? 0);  // docelowy gaz/hamo. w tył
 
     // Analogowe wygładzanie — narastanie szybsze niż opadanie (jak fizyczny pedał)
+    // 1-exp(-dt/tau): prawidłowe frame-rate-independent wygładzanie (dt/tau działa tylko gdy dt<<tau)
     const tauOn  = 0.08;  // 80 ms narastania  (szybka odpowiedź)
     const tauOff = 0.05;  // 50 ms opadania    (szybkie puszczenie → brak poślizgu po puszczeniu)
-    this._throttle += (rawFwd - this._throttle) * Math.min(1, dt / (rawFwd > this._throttle ? tauOn : tauOff));
-    this._brake    += (rawBack - this._brake)    * Math.min(1, dt / (rawBack > this._brake  ? tauOn : tauOff));
+    this._throttle += (rawFwd - this._throttle) * (1 - Math.exp(-dt / (rawFwd > this._throttle ? tauOn : tauOff)));
+    this._brake    += (rawBack - this._brake)    * (1 - Math.exp(-dt / (rawBack > this._brake  ? tauOn : tauOff)));
 
     const forwAmount = this._throttle;
     const backAmount = this._brake;
@@ -698,7 +699,7 @@ export class Car extends Entity {
     // ── Skręt — wygładzony lerp, kąt maleje przy dużej prędkości ────────────
     const absSpd0   = Math.abs(this._speedKmh ?? 0);
     const steerMult = Math.max(0.30, 1 - absSpd0 / 160);  // 1.0 przy 0 → 0.3 przy 112+ km/h
-    this._steer += (steerIn * MAX_STEER_ANGLE * steerMult - this._steer) * Math.min(1, STEER_SPEED * dt);
+    this._steer += (steerIn * MAX_STEER_ANGLE * steerMult - this._steer) * (1 - Math.exp(-STEER_SPEED * dt));
     this._vehicle.setSteeringValue(this._steer, 0);  // FL
     this._vehicle.setSteeringValue(this._steer, 1);  // FR
 

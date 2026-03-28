@@ -48,6 +48,7 @@ export class Game {
     this._knockableLamps = [];
     this._eWasDown      = false;
     this._lastTs        = 0;
+    this._frameMs       = 1000 / 60;   // limit 60 FPS — jednakowa prędkość na baterii i zasilaczu
     this._interactEl       = null;
     this._uiEl             = null;
     this._exitCarThisFrame = false;
@@ -226,6 +227,7 @@ export class Game {
 
   _loop(ts) {
     requestAnimationFrame(t => this._loop(t));
+    if (ts - this._lastTs < this._frameMs - 0.5) return;  // cap 60 FPS
     const dt = Math.min((ts - this._lastTs) / 1000, 0.05);
     this._lastTs = ts;
 
