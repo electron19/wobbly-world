@@ -1,5 +1,11 @@
 # Changelog — Wobbly World
 
+## [v0.7.1] — 2026-03-28
+### Fixed
+- Slip ratio kół: `deltaRotation * 60` → `* 120` (physics step = 1/120s, nie 1/60s)
+  - Błędne `* 60` dawało stały slip=0.5 przy normalnej jeździe → ciągły dźwięk tarcia i ślady hamowania
+  - Poprawione w 3 miejscach: obliczenie maxSlip (dźwięk), wizualny obrót kół przy hamowaniu, ślady opon
+
 ## [v0.7.0] — 2026-03-27
 ### Fixed
 - `linearDamping: 0.18 → 0.04` — pojazd nie hamuje sam; 0.18 powodowało 18% straty prędkości/s
