@@ -43,6 +43,7 @@ export class WorldBuilder {
     this.objects        = [];
     this.cars           = [];
     this._circles       = []; // exclusion circles — budynki, drzewa omijają je
+    this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
   }
 
@@ -1086,7 +1087,9 @@ export class WorldBuilder {
     lamps.forEach(([x, z, rotY]) => {
       // Sprawdź czy nie koliduje z drzewem, budynkiem lub inną lampą
       if (!this._isFreeForTree(x, z, 1.5)) return;
-      this._add(new StreetLamp(this.scene, this.physics, this.vehiclePhysics).placeAt(x, SWH, z, rotY));
+      const lamp = new StreetLamp(this.scene, this.physics, this.vehiclePhysics).placeAt(x, SWH, z, rotY);
+      this._add(lamp);
+      this.knockableLamps.push(lamp);
       // Zarejestruj lampę — kolejne obiekty jej ominą
       this._regCircle(x, z, 0.5, 0.5, 1.0);  // efektywny promień ≈ 1.7j
     });

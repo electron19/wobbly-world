@@ -45,6 +45,7 @@ export class Game {
     this.cars           = [];
     this.audio          = new AudioManager();
     this._drivingCar    = null;
+    this._knockableLamps = [];
     this._eWasDown      = false;
     this._lastTs        = 0;
     this._interactEl       = null;
@@ -86,6 +87,7 @@ export class Game {
     wb.build();
     this.cars          = wb.cars;
     this._worldObjects = wb.objects;
+    this._knockableLamps = wb.knockableLamps;
 
     // ─── 6. Gracz ──────────────────────────────────────────────────────────
     this.player = new PlayerMichaelMyers(this.scene);
@@ -240,6 +242,7 @@ export class Game {
     }
 
     // ── 2. Krok cannon-es (fizyka pojazdów) ──────────────────────────────
+    for (const lamp of this._knockableLamps) lamp.update(dt);
     this.vehiclePhysics.step(dt);
 
     // ── 3. Sync: cannon-es → Three.js + Rapier body (wszystkie auta) ─────

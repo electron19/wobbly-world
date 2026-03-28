@@ -116,6 +116,7 @@ export class VehiclePhysics {
     body.position.set(x, y, z);
     body._material = material;
     this.world.addBody(body);
+    return body;
   }
 
   /**

@@ -48,6 +48,14 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake = false;
+    // Zniszczenia — progresywna deformacja zderzaków i maski
+    this._damageFront = 0;   // 0–1: 0 = brak, 1 = max
+    this._damageRear  = 0;
+    // Referencje do deformowalnych siatek (ustawiane w _build)
+    this._fBumper  = null;   // zderzak przedni (chrome bar)
+    this._rBumper  = null;   // zderzak tylny
+    this._hoodMesh = null;   // maska
+    this._trunkMesh = null;  // bagażnik
     // Wydech
     this._exhaust       = null;   // inicjalizowany w initPhysics()
     this._rpmFactor     = 0;      // 0=jałowy, 1=pełne obroty (ustawiany w update)
@@ -194,7 +202,7 @@ export class Car extends Entity {
     // ── 5. MASKA SILNIKA ─────────────────────────────────────────────────────
     const HOOD_Z  = (CAB_ZF + BODY_ZF) / 2;   // centrum maski
     const HOOD_L  = BODY_ZF - CAB_ZF;          // długość maski = 0.85
-    B(0, CAB_BOT - 0.03, HOOD_Z, 2.10, 0.14, HOOD_L, bodyMat, 0.03);
+    this._hoodMesh = B(0, CAB_BOT - 0.03, HOOD_Z, 2.10, 0.14, HOOD_L, bodyMat, 0.03);
 
     // Linia przetłoczenia na masce (ozdoba)
     B(0, CAB_BOT + 0.04, HOOD_Z, 0.60, 0.06, HOOD_L - 0.10, darkMat, 0, false);
@@ -202,11 +210,11 @@ export class Car extends Entity {
     // ── 6. POKRYWA BAGAŻNIKA ─────────────────────────────────────────────────
     const TRUNK_Z = (CAB_ZR + BODY_ZR) / 2;
     const TRUNK_L = Math.abs(BODY_ZR - CAB_ZR);
-    B(0, CAB_BOT - 0.03, TRUNK_Z, 2.10, 0.14, TRUNK_L, bodyMat, 0.03);
+    this._trunkMesh = B(0, CAB_BOT - 0.03, TRUNK_Z, 2.10, 0.14, TRUNK_L, bodyMat, 0.03);
 
     // ── 7. ZDERZAK PRZEDNI ───────────────────────────────────────────────────
     // Górna belka (chrom)
-    B(0, BODY_BOT + BODY_H * 0.68, BODY_ZF + 0.10, 2.12, 0.30, 0.18, chromeMat, 0.025);
+    this._fBumper = B(0, BODY_BOT + BODY_H * 0.68, BODY_ZF + 0.10, 2.12, 0.30, 0.18, chromeMat, 0.025);
     // Dolna warga (czarna)
     B(0, BODY_BOT + 0.08, BODY_ZF + 0.09, 1.88, 0.18, 0.14, blackMat, 0, false);
     // Kratka wlotowa
@@ -220,7 +228,7 @@ export class Car extends Entity {
     );
 
     // ── 8. ZDERZAK TYLNY ─────────────────────────────────────────────────────
-    B(0, BODY_BOT + BODY_H * 0.58, BODY_ZR - 0.09, 2.12, 0.28, 0.16, chromeMat, 0.025);
+    this._rBumper = B(0, BODY_BOT + BODY_H * 0.58, BODY_ZR - 0.09, 2.12, 0.28, 0.16, chromeMat, 0.025);
     B(0, BODY_BOT + 0.07, BODY_ZR - 0.08, 1.88, 0.16, 0.12, blackMat, 0, false);
 
     // ── 9. REFLEKTORY PRZEDNIE ───────────────────────────────────────────────
@@ -364,10 +372,22 @@ export class Car extends Entity {
 
     // Listener kolizji — dźwięk zależny od materiału przeszkody
     this._chassis.addEventListener('collide', (event) => {
-      const mat = event.body?._material;
-      if (!mat || mat === 'ground') return;
       const vel = Math.abs(event.contact.getImpactVelocityAlongNormal?.() ?? 0);
-      this._audio?.playCollision(mat, vel);
+
+      // Przewracanie lampy
+      if (event.body?._type === 'lamp' && vel > 3) {
+        const ni = event.contact.ni ?? { x: 0, z: 1 };
+        event.body._lampRef?.knockDown(vel, -ni.x, -ni.z);
+      }
+
+      // Dźwięk zderzenia
+      const mat = event.body?._material;
+      if (mat && mat !== 'ground') {
+        this._audio?.playCollision(mat, vel);
+      }
+
+      // Zniszczenia wizualne
+      if (vel >= 4) this._handleImpact(vel, event.contact);
     });
 
     this.root.position.set(x, y, z);
@@ -574,6 +594,74 @@ export class Car extends Entity {
       vy: 0.9 + rpm * 1.0 + Math.random() * 0.5,
       vz: (Math.random() - 0.5) * 0.50 - Math.cos(f) * backSpeed,
     });
+  }
+
+  // ─── Zniszczenia ──────────────────────────────────────────────────────────
+
+  /**
+   * Wywołuje się z listenera kolizji.
+   * @param {number} vel        prędkość uderzenia [m/s]
+   * @param {object} contact    cannon-es ContactEquation
+   */
+  _handleImpact(vel, contact) {
+    if (vel < 4) return;   // min. 4 m/s by powstało uszkodzenie
+
+    // Wyznacz strefę uderzenia (przód/tył) na podstawie punktu kontaktu.
+    // contact.ri = wektor od środka chassis do punktu kontaktu (world space).
+    // Zrzutuj na oś przód-tył pojazdu (oś Z rotacji chassis).
+    const ri = contact.ri;   // {x, y, z}
+    const q  = this._chassis.quaternion;
+    // Kolumna Z macierzy rotacji z kwaterniona
+    const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
+    const isfront = (ri.x * (2 * (q.x * q.z + q.w * q.y))
+                   + ri.y * (2 * (q.y * q.z - q.w * q.x))
+                   + ri.z * fz) > 0;
+
+    const dmg = Math.min(1, (vel - 4) / 20) * 0.35;   // max ~35% uszkodzenia per uderzenie
+
+    if (isfront) {
+      this._damageFront = Math.min(1, this._damageFront + dmg);
+    } else {
+      this._damageRear  = Math.min(1, this._damageRear  + dmg);
+    }
+    this._refreshDamageVisual();
+  }
+
+  /** Aktualizuje wygląd mesh'y deformowalnych na podstawie aktualnych uszkodzeń. */
+  _refreshDamageVisual() {
+    // Zderzak przedni — ściśnięty w Z, cofnięty (pozycja bazowa zapamiętana przy pierwszym wywołaniu)
+    if (this._fBumper) {
+      const f = this._damageFront;
+      if (this._fBumperBaseZ === undefined) this._fBumperBaseZ = this._fBumper.position.z;
+      this._fBumper.scale.z    = Math.max(0.15, 1 - f * 0.85);
+      this._fBumper.position.z = this._fBumperBaseZ - f * 0.25;   // bezwzględne przesunięcie
+      // Lekkie ugięcie góry/dołu przy dużym uszkodzeniu
+      this._fBumper.scale.y = 1 + f * 0.20;
+    }
+    // Zderzak tylny
+    if (this._rBumper) {
+      const r = this._damageRear;
+      if (this._rBumperBaseZ === undefined) this._rBumperBaseZ = this._rBumper.position.z;
+      this._rBumper.scale.z    = Math.max(0.15, 1 - r * 0.85);
+      this._rBumper.position.z = this._rBumperBaseZ + r * 0.25;
+      this._rBumper.scale.y = 1 + r * 0.20;
+    }
+    // Maska — lekko unosi się i przekrzywia przy dużym uszkodzeniu przodu
+    if (this._hoodMesh) {
+      const f = this._damageFront;
+      if (this._hoodBaseY === undefined) this._hoodBaseY = this._hoodMesh.position.y;
+      this._hoodMesh.rotation.x = -f * 0.25;
+      this._hoodMesh.position.y = this._hoodBaseY + f * 0.04;
+      this._hoodMesh.scale.z = Math.max(0.7, 1 - f * 0.25);
+    }
+    // Bagażnik
+    if (this._trunkMesh) {
+      const r = this._damageRear;
+      if (this._trunkBaseY === undefined) this._trunkBaseY = this._trunkMesh.position.y;
+      this._trunkMesh.rotation.x =  r * 0.25;
+      this._trunkMesh.position.y = this._trunkBaseY + r * 0.04;
+      this._trunkMesh.scale.z = Math.max(0.7, 1 - r * 0.25);
+    }
   }
 
   // ─── Cykl klatki ──────────────────────────────────────────────────────────
