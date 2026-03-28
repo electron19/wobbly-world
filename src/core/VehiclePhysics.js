@@ -42,7 +42,7 @@ export class VehiclePhysics {
   createVehicle(x, y, z, facing = 0) {
     const chassis = new CANNON.Body({
       mass:           2500,  // cięższa karoseria → więcej bezwładności
-      angularDamping: 0.12,  // niskie tłumienie obrotu → tył swobodnie wychodzi przy wheelspin
+      angularDamping: 0.30,  // tłumienie obrotu — wyższe = mniej nadsterowności (było 0.12)
       linearDamping:  0.04,  // opór powietrza + toczenia ≈ 4% v/s (vs. 18% → ciągłe hamowanie)
     });
 

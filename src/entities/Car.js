@@ -687,10 +687,11 @@ export class Car extends Entity {
     // launchT: 1.0 przy absSpd=0 + forwAmount=1, opada liniowo do 0 przy 40 km/h lub < 30% gazu
     const launching = speedKmh > -1 && absSpd < 40;
     const launchT   = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
-    // Asfalt: max(0.32, 2.6-2.28×launchT) | Beton: max(0.35, 2.3-1.95×launchT) | Trawa: 0.55
-    const fR = onRoad      ? Math.max(0.32, 2.6 - launchT * 2.28)
-             : onSidewalk  ? Math.max(0.35, 2.3 - launchT * 1.95)
-             : 0.55;
+    // Asfalt: max(0.55, 2.6-1.60×launchT) | Beton: max(0.55, 2.3-1.40×launchT) | Trawa: 0.65
+    // Zwiększone min fR (0.32→0.55) i mniejszy drop (2.28→1.60) = mniej nadsterowności
+    const fR = onRoad      ? Math.max(0.55, 2.6 - launchT * 1.60)
+             : onSidewalk  ? Math.max(0.55, 2.3 - launchT * 1.40)
+             : 0.65;
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
     wInfos[1].frictionSlip = fF;  // FR
