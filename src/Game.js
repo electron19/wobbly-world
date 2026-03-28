@@ -259,9 +259,12 @@ export class Game {
       const carOnRoad  = isOnRoad(cp.x, cp.z);
       const absCarSpd  = Math.abs(this._drivingCar.speedKmh ?? 0);
       const slip        = this._drivingCar.wheelSlip;
+      // slip tylko gdy aktywne hamowanie — bez gating cannon-es deltaRotation*=0.99
+      // powoduje fałszywy pisk po puszczeniu gazu
+      const brakingSkid = slip > 0.80 && this._drivingCar.isBraking;
       // Boczny drift: dużo skrętu + wysoka prędkość → pisk w zakrętach (GTA-feel)
       const lateralSlip = absCarSpd > 55 && this._drivingCar.steerAngle > 0.38;
-      this.audio.updateSkid((slip > 0.80 || lateralSlip) && absCarSpd > 5, carOnRoad);
+      this.audio.updateSkid((brakingSkid || lateralSlip) && absCarSpd > 5, carOnRoad);
     } else {
       if (!exitedThisFrame) {
         const pp = this.player.root.position;

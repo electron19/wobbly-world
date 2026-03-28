@@ -965,9 +965,11 @@ export class Car extends Entity {
         slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
       }
 
-      // Ślad TYLKO gdy: koła prawie zablokowane (slip>0.85) LUB hamulec ręczny na tylnych
-      // UWAGA: skidInfo celowo pominięte — triggeruje przy normalnych zakrętach
-      const physicsSlip = speedK > 5 && slip > 0.85;
+      // Ślad TYLKO gdy: koła prawie zablokowane (slip>0.85) PRZY AKTYWNYM HAMOWANIU
+      // LUB hamulec ręczny na tylnych kołach.
+      // Gating na _isBraking/_isHandbraking — bez niego cannon-es deltaRotation*=0.99
+      // per substep powoduje fałszywy slip po puszczeniu gazu (koła "zwalniają wirtualnie").
+      const physicsSlip = speedK > 5 && slip > 0.85 && (this._isBraking || this._isHandbraking);
       const handSkid    = this._isHandbraking && isRear && speedK > 3;
 
       const skidding = physicsSlip || handSkid;

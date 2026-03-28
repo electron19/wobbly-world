@@ -90,12 +90,16 @@ export class StreetLamp extends WorldObject {
     this._cannonBody.updateMassProperties();
     this._cannonBody.wakeUp();
 
-    // Impuls przyłożony w górnej 1/3 słupa → moment siły → przewracanie
-    // Punkt przyłożenia: 1.5 m ponad centrum cylindra (= ok. 3.75 m nad ziemią)
-    const kick = Math.min(vel * 0.32, 6.5);
-    const impulse    = new CANNON.Vec3(nx * kick * 120, 0, nz * kick * 120);
-    const pointLocal = new CANNON.Vec3(0, 1.5, 0);
-    this._cannonBody.applyImpulse(impulse, pointLocal);
+    // Bezpośrednie ustawienie angular velocity (NIE applyImpulse z komponentem
+    // liniowym — to by wysłało lampę do przodu i auto by przez nią przejeżdżało).
+    // Lampa obraca się w miejscu; auto zderzając się z ciężkim dynamicznym ciałem
+    // dostaje naturalny impuls wsteczny z cannon-es collision response.
+    const speed = Math.min(vel * 0.06, 1.5);
+    this._cannonBody.angularVelocity.set(
+       nz * speed + (Math.random() - 0.5) * 0.2,
+      0,
+      -nx * speed + (Math.random() - 0.5) * 0.2,
+    );
   }
 
   /**
