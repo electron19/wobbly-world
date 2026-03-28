@@ -1,5 +1,14 @@
 # Changelog — Wobbly World
 
+## [v0.7.4] — 2026-03-28
+### Fixed
+- Ślady/dźwięk podczas normalnej jazdy: usunięto `skidInfo < 0.88` z warunku — triggerował przy każdym zakręcie
+- Za mocne hamowanie na przód: usunięto dystrybucję 100/65%, równe hamowanie na 4 koła
+- `isSkidding` (bazowany na skidInfo) zastąpiony jawnym `absCarSpd > 55 && steerAngle > 0.38` dla dźwięku driftu
+### Changed
+- `MAX_BRAKE_FORCE`: 220 → 175 Nm — płynniejsze, grywalne hamowanie (GTA-feel)
+- Ślady tylko przy `slip > 0.85` (prawie zablokowane koła) lub hamulcu ręcznym na tylnych
+
 ## [v0.7.3] — 2026-03-28
 ### Fixed
 - Pojazd poruszał się skokowo: przywrócono `MAX_BRAKE_FORCE` 380→220 Nm (380 powodowało niestabilność fizyki)

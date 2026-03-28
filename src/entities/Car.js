@@ -18,7 +18,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 10800; // N na koło tylne (+20% vs 9000, wheelspin przy ruszaniu)
-const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada kół)
+const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
 const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
@@ -764,12 +764,8 @@ export class Car extends Entity {
       this._vehicle.applyEngineForce(0,           1);  // FR — brak napędu
       this._vehicle.applyEngineForce(engineForce, 2);  // RL
       this._vehicle.applyEngineForce(engineForce, 3);  // RR
-      // Rozkład hamowania przód/tył: 100%/65% → przód hamuje mocniej → brak zarzucania tyłu
-      const rearBrake = brakeForce * 0.65;
-      this._vehicle.setBrake(brakeForce, 0);  // FL
-      this._vehicle.setBrake(brakeForce, 1);  // FR
-      this._vehicle.setBrake(rearBrake,  2);  // RL
-      this._vehicle.setBrake(rearBrake,  3);  // RR
+      // Równe hamowanie na 4 koła — brak nurkowania, GTA-feel
+      for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
@@ -969,9 +965,9 @@ export class Car extends Entity {
         slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
       }
 
-      // Ślad pojawia się gdy: realne zablokowanie (slip>0.28) LUB boczny poślizg (skidInfo)
-      // LUB ręczny hamulec na tylnych kołach
-      const physicsSlip = speedK > 5 && (slip > 0.85 || wInfo.skidInfo < 0.88);
+      // Ślad TYLKO gdy: koła prawie zablokowane (slip>0.85) LUB hamulec ręczny na tylnych
+      // UWAGA: skidInfo celowo pominięte — triggeruje przy normalnych zakrętach
+      const physicsSlip = speedK > 5 && slip > 0.85;
       const handSkid    = this._isHandbraking && isRear && speedK > 3;
 
       const skidding = physicsSlip || handSkid;

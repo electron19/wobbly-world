@@ -258,8 +258,9 @@ export class Game {
       // Dźwięk poślizgu — pisk gdy koła realnie blokują (slip ratio) LUB boczny drift
       const carOnRoad  = isOnRoad(cp.x, cp.z);
       const absCarSpd  = Math.abs(this._drivingCar.speedKmh ?? 0);
-      const slip       = this._drivingCar.wheelSlip;
-      const lateralSlip = this._drivingCar.isSkidding && this._drivingCar.steerAngle > 0.30;
+      const slip        = this._drivingCar.wheelSlip;
+      // Boczny drift: dużo skrętu + wysoka prędkość → pisk w zakrętach (GTA-feel)
+      const lateralSlip = absCarSpd > 55 && this._drivingCar.steerAngle > 0.38;
       this.audio.updateSkid((slip > 0.80 || lateralSlip) && absCarSpd > 5, carOnRoad);
     } else {
       if (!exitedThisFrame) {
