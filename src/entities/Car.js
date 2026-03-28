@@ -19,7 +19,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 10800; // N na koło tylne (+20% vs 9000, wheelspin przy ruszaniu)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
-const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
+const BRAKE_GRASS_MULT   = 0.46;  // trawa: 46% siły hamowania (+20% grip)
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -213,10 +213,10 @@ export class Car extends Entity {
     this._trunkMesh = B(0, CAB_BOT - 0.03, TRUNK_Z, 2.10, 0.14, TRUNK_L, bodyMat, 0.03);
 
     // ── 7. ZDERZAK PRZEDNI ───────────────────────────────────────────────────
-    // Górna belka (chrom)
-    this._fBumper = B(0, BODY_BOT + BODY_H * 0.68, BODY_ZF + 0.10, 2.12, 0.30, 0.18, chromeMat, 0.025);
+    // Górna belka (chrom) — poniżej reflektorów (bottom reflektora = BODY_BOT + BODY_H*0.73 - 0.15 ≈ 0.924)
+    this._fBumper = B(0, BODY_BOT + 0.10, BODY_ZF + 0.10, 2.12, 0.22, 0.18, chromeMat, 0.025);
     // Dolna warga (czarna)
-    B(0, BODY_BOT + 0.08, BODY_ZF + 0.09, 1.88, 0.18, 0.14, blackMat, 0, false);
+    B(0, BODY_BOT + 0.03, BODY_ZF + 0.09, 1.88, 0.14, 0.14, blackMat, 0, false);
     // Kratka wlotowa
     B(0, BODY_BOT + 0.22, BODY_ZF + 0.08, 1.38, 0.16, 0.08, blackMat, 0, false);
     [-0.46, 0, 0.46].forEach(x =>
@@ -228,8 +228,8 @@ export class Car extends Entity {
     );
 
     // ── 8. ZDERZAK TYLNY ─────────────────────────────────────────────────────
-    this._rBumper = B(0, BODY_BOT + BODY_H * 0.58, BODY_ZR - 0.09, 2.12, 0.28, 0.16, chromeMat, 0.025);
-    B(0, BODY_BOT + 0.07, BODY_ZR - 0.08, 1.88, 0.16, 0.12, blackMat, 0, false);
+    this._rBumper = B(0, BODY_BOT + 0.08, BODY_ZR - 0.09, 2.12, 0.22, 0.16, chromeMat, 0.025);
+    B(0, BODY_BOT + 0.03, BODY_ZR - 0.08, 1.88, 0.14, 0.12, blackMat, 0, false);
 
     // ── 9. REFLEKTORY PRZEDNIE ───────────────────────────────────────────────
     [-0.73, 0.73].forEach(x => {
@@ -769,8 +769,8 @@ export class Car extends Entity {
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=0.70 (×0.22)
-    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 0.70);
+    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=0.84 (+20% grip)
+    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 0.84);
 
     // Tył: dynamiczne — zależy od trybu jazdy:
     //  • hamowanie:  fR = fF (równe przód/tył → stabilne, brak zarzucania)
@@ -789,7 +789,7 @@ export class Car extends Entity {
     } else if (onSidewalk) {
       fR = Math.max(0.55, 2.3 - launchT * 1.40 - cornerT * 0.80);
     } else {
-      fR = Math.max(0.50, 0.65 - cornerT * 0.15);  // trawa: minimalny dodatkowy drift
+      fR = Math.max(0.60, 0.78 - cornerT * 0.18);  // trawa: minimalny dodatkowy drift (+20% grip)
     }
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
