@@ -18,7 +18,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 10800; // N na koło tylne (+20% vs 9000, wheelspin przy ruszaniu)
-const MAX_BRAKE_FORCE    = 380;   // Nm hamowania na asfalcie (≥90% nacisku → blokada kół)
+const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada kół)
 const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
@@ -764,22 +764,37 @@ export class Car extends Entity {
       this._vehicle.applyEngineForce(0,           1);  // FR — brak napędu
       this._vehicle.applyEngineForce(engineForce, 2);  // RL
       this._vehicle.applyEngineForce(engineForce, 3);  // RR
-      for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
+      // Rozkład hamowania przód/tył: 100%/65% → przód hamuje mocniej → brak zarzucania tyłu
+      const rearBrake = brakeForce * 0.65;
+      this._vehicle.setBrake(brakeForce, 0);  // FL
+      this._vehicle.setBrake(brakeForce, 1);  // FR
+      this._vehicle.setBrake(rearBrake,  2);  // RL
+      this._vehicle.setBrake(rearBrake,  3);  // RR
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
     // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=0.70 (×0.22)
     const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 0.70);
 
-    // Tył: dynamiczne — przy ruszaniu z dużym gazem frictionSlip spada → wheelspin + oversteer
-    // launchT: 1.0 przy absSpd=0 + forwAmount=1, opada liniowo do 0 przy 40 km/h lub < 30% gazu
-    const launching = speedKmh > -1 && absSpd < 40;
-    const launchT   = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
-    // Asfalt: max(0.55, 2.6-1.60×launchT) | Beton: max(0.55, 2.3-1.40×launchT) | Trawa: 0.65
-    // Zwiększone min fR (0.32→0.55) i mniejszy drop (2.28→1.60) = mniej nadsterowności
-    const fR = onRoad      ? Math.max(0.55, 2.6 - launchT * 1.60)
-             : onSidewalk  ? Math.max(0.55, 2.3 - launchT * 1.40)
-             : 0.65;
+    // Tył: dynamiczne — zależy od trybu jazdy:
+    //  • hamowanie:  fR = fF (równe przód/tył → stabilne, brak zarzucania)
+    //  • zakręt:     fR maleje ze wzrostem steer×prędkość → GTA-style tail looseness
+    //  • ruszanie:   launchT obniża fR → wheelspin + kontrolowany oversteer
+    const launching   = speedKmh > -1 && absSpd < 40;
+    const launchT     = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
+    const brakingNow  = backAmount > 0.10;
+    // cornerT: 0 przy prosto lub małej prędkości, 1 przy pełnym skręcie + ≥60 km/h
+    const cornerT     = Math.abs(this._steer) * Math.min(1, absSpd / 60);
+    let fR;
+    if (brakingNow) {
+      fR = fF;  // przy hamowaniu przód i tył jednakowe → brak zarzucania tyłu
+    } else if (onRoad) {
+      fR = Math.max(0.55, 2.6 - launchT * 1.60 - cornerT * 0.90);
+    } else if (onSidewalk) {
+      fR = Math.max(0.55, 2.3 - launchT * 1.40 - cornerT * 0.80);
+    } else {
+      fR = Math.max(0.50, 0.65 - cornerT * 0.15);  // trawa: minimalny dodatkowy drift
+    }
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
     wInfos[1].frictionSlip = fF;  // FR

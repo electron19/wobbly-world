@@ -1,5 +1,14 @@
 # Changelog — Wobbly World
 
+## [v0.7.3] — 2026-03-28
+### Fixed
+- Pojazd poruszał się skokowo: przywrócono `MAX_BRAKE_FORCE` 380→220 Nm (380 powodowało niestabilność fizyki)
+- Zarzucanie tyłu przy hamowaniu: rozkład hamowania 100% przód / 65% tył — przód hamuje mocniej, tył stabilny
+- Hamowanie równe przód/tył (`fR = fF`) gdy `backAmount > 0.10` — brak nadsterowności pod hamowaniem
+### Changed
+- GTA-style cornering: `cornerT = steer × min(1, absSpd/60)` obniża `fR` w zakrętach przy prędkości — lekkie zarzucanie tyłu
+- Asfalt: `fR = max(0.55, 2.6 - launchT*1.60 - cornerT*0.90)` — zakręty ≥60 km/h z driftem
+
 ## [v0.7.2] — 2026-03-28
 ### Fixed
 - Ślady i dźwięk hamowania: próg poślizgu `0.28 → 0.85` — marks/pisk TYLKO gdy koła są faktycznie zablokowane
