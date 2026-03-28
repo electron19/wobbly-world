@@ -18,7 +18,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 10800; // N na koło tylne (+20% vs 9000, wheelspin przy ruszaniu)
-const MAX_BRAKE_FORCE    = 220;   // Nm hamowania na asfalcie (pełny nacisk → blokada)
+const MAX_BRAKE_FORCE    = 380;   // Nm hamowania na asfalcie (≥90% nacisku → blokada kół)
 const BRAKE_GRASS_MULT   = 0.38;  // trava: 38% siły hamowania → dłuższa droga
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
@@ -956,7 +956,7 @@ export class Car extends Entity {
 
       // Ślad pojawia się gdy: realne zablokowanie (slip>0.28) LUB boczny poślizg (skidInfo)
       // LUB ręczny hamulec na tylnych kołach
-      const physicsSlip = speedK > 5 && (slip > 0.28 || wInfo.skidInfo < 0.92);
+      const physicsSlip = speedK > 5 && (slip > 0.85 || wInfo.skidInfo < 0.88);
       const handSkid    = this._isHandbraking && isRear && speedK > 3;
 
       const skidding = physicsSlip || handSkid;

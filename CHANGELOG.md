@@ -1,5 +1,13 @@
 # Changelog — Wobbly World
 
+## [v0.7.2] — 2026-03-28
+### Fixed
+- Ślady i dźwięk hamowania: próg poślizgu `0.28 → 0.85` — marks/pisk TYLKO gdy koła są faktycznie zablokowane
+- Dźwięk tarcia w Game.js: próg `0.20 → 0.80` — spójnie z progiem śladów
+- Boczny poślizg (cornering): próg skidInfo `0.92 → 0.88` (mniej fałszywych alarmów na wybojach)
+### Changed
+- `MAX_BRAKE_FORCE`: 220 → 380 Nm — pełna blokada kół przy ≥90% nacisku pedału; przy <90% auto hamuje bez poślizgu
+
 ## [v0.7.1] — 2026-03-28
 ### Fixed
 - Slip ratio kół: `deltaRotation * 60` → `* 120` (physics step = 1/120s, nie 1/60s)

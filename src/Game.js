@@ -260,7 +260,7 @@ export class Game {
       const absCarSpd  = Math.abs(this._drivingCar.speedKmh ?? 0);
       const slip       = this._drivingCar.wheelSlip;
       const lateralSlip = this._drivingCar.isSkidding && this._drivingCar.steerAngle > 0.30;
-      this.audio.updateSkid((slip > 0.20 || lateralSlip) && absCarSpd > 5, carOnRoad);
+      this.audio.updateSkid((slip > 0.80 || lateralSlip) && absCarSpd > 5, carOnRoad);
     } else {
       if (!exitedThisFrame) {
         const pp = this.player.root.position;
