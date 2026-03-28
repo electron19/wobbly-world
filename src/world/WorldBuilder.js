@@ -128,9 +128,10 @@ export class WorldBuilder {
     return this._add(new BrickBuilding(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
   }
 
-  /** Trójkątny biurowiec — rejestruje koło wykluczenia, stawia budynek. */
+  /** Trójkątny budynek (a=10, b=50) — elongated, 5 pięter, stoi w polu poza miastem. */
   _triOffice(x, z, facing, opts = {}) {
-    this._regCircle(x, z, 11 / 2, 9 / 2, 2.5);
+    // W=10 → hw=5, D=50 → hd=25 (centrum geometryczne ≈ D/2 od frontu)
+    this._regCircle(x, z, 5, 25, 3.0);
     return this._add(new TriOffice(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics).placeAt(x, 0, z));
   }
 
@@ -510,8 +511,6 @@ export class WorldBuilder {
       wallColor: 0xEBDEF0, roofColor: 0x6C3483,
     }, this.vehiclePhysics).placeAt(74, 0, 38));
 
-    // Trójkątny biurowiec — pomiędzy kamieniami (100,±22), fasada na zachód
-    this._triOffice(100, 0, FW);
 
     // Domy w CBD wschodnim
     this._house(P[2],  78, -40, FW, { roofStyle: 'flat', floors: 2 });
@@ -537,8 +536,6 @@ export class WorldBuilder {
       wallColor: 0xFDEBD0, roofColor: 0xAF601A,
     }, this.vehiclePhysics).placeAt(-74, 0, 38));
 
-    // Trójkątny biurowiec CBD zachód — symetryczny, fasada na wschód
-    this._triOffice(-100, 0, FE);
 
     // Domy w CBD zachodnim
     this._house(P[6], -78, -40, FE, { roofStyle: 'flat', floors: 2 });
@@ -714,8 +711,9 @@ export class WorldBuilder {
     // Kamienice czynszowe przy głównej ulicy wschodu
     this._brick(172, -18, FW, { floors: 5, brickColor: 0x8B3A2A });
     this._brick(172,  18, FW, { floors: 4, brickColor: 0x7B5A3A });
-    // Trójkątny biurowiec w dzielnicy dalekiego wschodu
-    this._triOffice(162, -42, FW, { wallColor: 0xECF0EC, glassColor: 0x0A1520 });
+    // Trójkątny budynek w polu na dalekim wschodzie — czubek skierowany ku miastu (FE = tip → W)
+    // x=200: front fasada x=200, czubek x=150 (od drogi x=130: 15.5j > ROAD_CLEAR ✓)
+    this._triOffice(200, -25, FE, { wallColor: 0xECF0EC, glassColor: 0x0A1520 });
 
     // Sklepy przy x=130
     this._regCircle(140, -38, 9/2, 7/2);
@@ -751,6 +749,10 @@ export class WorldBuilder {
     // Kamienice z cegły (dzielnica artystyczna)
     this._brick(-172, -18, FE, { floors: 4, brickColor: 0x7B4030, stoneColor: 0xE0D4B8 });
     this._brick(-172,  18, FE, { floors: 5, brickColor: 0x8B3A2A });
+
+    // Trójkątny budynek w polu — czubek skierowany ku miastu (FW = tip → E)
+    // x=-200: front x=-200, czubek x=-150 (od drogi x=-130: 15.5j > ROAD_CLEAR ✓)
+    this._triOffice(-200, 25, FW, { wallColor: 0xF0ECE8, glassColor: 0x1A0D05 });
 
     // Sklepy przy x=-130
     this._regCircle(-140, -38, 9/2, 7/2);

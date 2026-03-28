@@ -30,8 +30,8 @@ export class TriOffice extends Building {
     const FLOORS   = 5;
     const FLOOR_H  = 3.2;
     const H        = FLOORS * FLOOR_H;   // 16.0
-    const W        = 11;                  // szerokość frontu (oś X lokalna)
-    const D        = 9;                   // głębokość (czubek w -Z lokalnym)
+    const W        = 10;                  // szerokość frontu (a=10)
+    const D        = 50;                  // głębokość — mocno rozciągnięty trójkąt (b=50)
     const GLASS_H  = FLOOR_H * 0.64;     // 2.05 — ciągłe okno niemal pełne piętro
     const TRIM_H   = 0.26;
 
@@ -156,12 +156,16 @@ export class TriOffice extends Building {
   }
 
   _buildColliders(wx, wy, wz) {
-    const W = 11, D = 9, H = 16;
+    const W = 10, D = 50, H = 16;
     const f = this.cfg.facing ?? 0;
-    // Środek kolizji przesuniemy o D/2 wzdłuż osi głębokości
-    const cx = wx - Math.sin(f) * (D / 2);
-    const cz = wz - Math.cos(f) * (D / 2);
-    // Box kwadratowy (W/2) — nadmiarowy ale symetryczny, niezależny od orientacji
-    this._addPhysicsBox(cx, wy + H / 2, cz, W / 2, H / 2, W / 2);
+    // Dwa boxy wzdłuż osi głębokości — pokrywają cały elongated kształt
+    // Box 1: przód (pierwsza połowa długości)
+    const c1x = wx - Math.sin(f) * (D * 0.25);
+    const c1z = wz - Math.cos(f) * (D * 0.25);
+    this._addPhysicsBox(c1x, wy + H / 2, c1z, W / 2, H / 2, D * 0.25);
+    // Box 2: tył (druga połowa — węższa przy czubku)
+    const c2x = wx - Math.sin(f) * (D * 0.75);
+    const c2z = wz - Math.cos(f) * (D * 0.75);
+    this._addPhysicsBox(c2x, wy + H / 2, c2z, W / 4, H / 2, D * 0.25);
   }
 }

@@ -1,5 +1,16 @@
 # Changelog — Wobbly World
 
+## [v0.7.5] — 2026-03-28
+### Fixed
+- TriOffice (x=100,z=0) i (x=-100,z=0) stały na osi drogi E-W z=0 — usunięte z CBD
+- TriOffice (x=162,z=-42) w CBD wschód — przeniesiony do pola (x=200,z=-25)
+### Changed
+- TriOffice proporcje: W=11,D=9 → W=10,D=50 — mocno rozciągnięty trójkąt (a=10, b=50), 5 pięter
+- TriOffice kolizja: 2 boxy wzdłuż elongated osi (przód + tył) zamiast 1 kwadratu
+- TriOffice `_regCircle`: hw=5.5,hd=4.5 → hw=5,hd=25 (nowe wymiary)
+- 2 budynki trójkątne w otwartych polach poza miastem: Far East (200,-25,FE) + Far West (-200,25,FW)
+  - Czubki skierowane ku centrum miasta, fasady od zewnątrz
+
 ## [v0.7.4] — 2026-03-28
 ### Fixed
 - Ślady/dźwięk podczas normalnej jazdy: usunięto `skidInfo < 0.88` z warunku — triggerował przy każdym zakręcie
