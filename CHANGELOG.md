@@ -1,5 +1,11 @@
 # Changelog — Wobbly World
 
+## [v0.9.7] — 2026-03-28
+### Fixed
+- Limit 60 FPS w pętli gry (`_frameMs = 1000/60`): na 120Hz ekranie pętla pomija co drugą klatkę — gra porusza się z tą samą prędkością na baterii i zasilaczu
+- Wygładzanie gazu/hamulca: `dt/tau` → `1 - exp(-dt/tau)` — matematycznie poprawne frame-rate-independent, eliminuje różnicę w odpowiedzi pedału między 30 a 60 FPS
+- Wygładzanie skrętu: `Math.min(1, STEER_SPEED * dt)` → `1 - exp(-STEER_SPEED * dt)` — ta sama poprawka
+
 ## [v0.7.5] — 2026-03-28
 ### Fixed
 - TriOffice (x=100,z=0) i (x=-100,z=0) stały na osi drogi E-W z=0 — usunięte z CBD

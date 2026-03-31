@@ -1,0 +1,60 @@
+#requires -RunAsAdministrator
+$ErrorActionPreference = 'Stop'
+
+$logDir = "C:\Windows\Logs\SystemRepair"
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$logFile = Join-Path $logDir ("repair-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+
+Start-Transcript -Path $logFile -Force
+
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory=$true)][string]$FilePath,
+        [Parameter(Mandatory=$false)][string]$Arguments = ""
+    )
+
+    Write-Host "`n>>> $FilePath $Arguments" -ForegroundColor Cyan
+    $p = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru -NoNewWindow
+    if ($p.ExitCode -ne 0) {
+        Write-Warning "$FilePath zakończył się kodem: $($p.ExitCode)"
+    }
+}
+
+try {
+    Write-Host "Tworzenie punktu przywracania..." -ForegroundColor Yellow
+    try {
+        Checkpoint-Computer -Description "Przed-naprawa-systemu" -RestorePointType "MODIFY_SETTINGS" | Out-Null
+    } catch {
+        Write-Warning "Nie udało się utworzyć punktu przywracania. Może być wyłączona ochrona systemu."
+    }
+
+    Write-Host "Naprawa obrazu systemu (DISM)..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "DISM.exe" -Arguments "/Online /Cleanup-Image /RestoreHealth"
+
+    Write-Host "Sprawdzanie i naprawa plików systemowych (SFC)..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "sfc.exe" -Arguments "/scannow"
+
+    Write-Host "Sprawdzanie dysku (online scan)..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "chkdsk.exe" -Arguments "C: /scan"
+
+    Write-Host "Reset stosu sieciowego..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "netsh.exe" -Arguments "winsock reset"
+    Invoke-Checked -FilePath "netsh.exe" -Arguments "int ip reset"
+
+    Write-Host "Czyszczenie DNS..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "ipconfig.exe" -Arguments "/flushdns"
+
+    Write-Host "Przywracanie zapory Windows do wartości domyślnych..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "netsh.exe" -Arguments "advfirewall reset"
+
+    Write-Host "Przywracanie domyślnych planów zasilania..." -ForegroundColor Yellow
+    Invoke-Checked -FilePath "powercfg.exe" -Arguments "-restoredefaultschemes"
+
+    Write-Host "`nGotowe. Wymagany restart komputera." -ForegroundColor Green
+}
+finally {
+    Stop-Transcript
+}
+
+Write-Host "`nJeśli chcesz pełny reset systemu do stanu początkowego, uruchom:" -ForegroundColor Yellow
+Write-Host "Start-Process systemreset.exe" -ForegroundColor Yellow
