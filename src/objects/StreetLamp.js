@@ -55,10 +55,12 @@ export class StreetLamp extends WorldObject {
     // Rapier: statyczny (gracz wchodzi w słup)
     this._bodies.push(this.physics.addStaticCylinder(x, y + POLE_HALF, z, POLE_HALF, 0.10));
 
-    // cannon-es: statyczny do momentu uderzenia
+    // cannon-es: statyczny do momentu uderzenia.
+    // Box 0.60×4.5×0.60 zamiast cienkiego cylindra r=0.10 — szeroki AABB
+    // zapobiega tunelowaniu przy wysokich prędkościach (broadphase nie pomija).
     if (this.vehiclePhysics) {
       const body = new CANNON.Body({ mass: 0 });
-      body.addShape(new CANNON.Cylinder(0.10, 0.10, POLE_H, 8));
+      body.addShape(new CANNON.Box(new CANNON.Vec3(0.30, POLE_HALF, 0.30)));
       body.position.set(x, y + POLE_HALF, z);
 
       const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY + Math.PI, 0));

@@ -132,14 +132,15 @@ export class Ground extends WorldObject {
 
     const addSW = (cx, cz, w, d) => {
       const m = new THREE.Mesh(
-        new THREE.BoxGeometry(w, SW_H, d),
+        new THREE.PlaneGeometry(w, d),
         new THREE.MeshToonMaterial({
           map: this._texFor(swCanvas, w, d, SW),
           gradientMap: toonGrad,
         }),
       );
-      m.position.set(cx, SW_H / 2, cz);
-      m.receiveShadow = m.castShadow = true;
+      m.rotation.x = -Math.PI / 2;
+      m.position.set(cx, SW_H, cz);
+      m.receiveShadow = true;
       this.root.add(m);
       this._bodies.push(
         this.physics.addStaticBox(cx, SW_H / 2, cz, w / 2, SW_H / 2, d / 2)

@@ -242,9 +242,10 @@ export class WorldBuilder {
         const swZ = center + side * (RW + SWW / 2);
         for (const [s0, s1] of swSegments) {
           const len = s1 - s0, cx = (s0 + s1) / 2;
-          const sw = new THREE.Mesh(new THREE.BoxGeometry(len, SWH, SWW),
+          const sw = new THREE.Mesh(new THREE.PlaneGeometry(len, SWW),
             makeSidewalkMat(this._swCanvas, len, SWW));
-          sw.position.set(cx, SWH / 2, swZ);
+          sw.rotation.x = -Math.PI / 2;
+          sw.position.set(cx, SWH, swZ);
           sw.receiveShadow = true;
           this.scene.add(sw);
           this.physics.addStaticBox(cx, SWH / 2, swZ, len / 2, SWH / 2, SWW / 2);
@@ -273,9 +274,10 @@ export class WorldBuilder {
         const swX = center + side * (RW + SWW / 2);
         for (const [s0, s1] of swSegments) {
           const len = s1 - s0, cz = (s0 + s1) / 2;
-          const sw = new THREE.Mesh(new THREE.BoxGeometry(SWW, SWH, len),
+          const sw = new THREE.Mesh(new THREE.PlaneGeometry(SWW, len),
             makeSidewalkMat(this._swCanvas, SWW, len));
-          sw.position.set(swX, SWH / 2, cz);
+          sw.rotation.x = -Math.PI / 2;
+          sw.position.set(swX, SWH, cz);
           sw.receiveShadow = true;
           this.scene.add(sw);
           this.physics.addStaticBox(swX, SWH / 2, cz, SWW / 2, SWH / 2, len / 2);
@@ -324,10 +326,11 @@ export class WorldBuilder {
             const cx = ns.center + sx * (RW + SWW / 2);
             const cz = ew.center + sz * (RW + SWW / 2);
             const corner = new THREE.Mesh(
-              new THREE.BoxGeometry(SWW, SWH, SWW),
+              new THREE.PlaneGeometry(SWW, SWW),
               makeSidewalkMat(this._swCanvas, SWW, SWW),
             );
-            corner.position.set(cx, SWH / 2, cz);
+            corner.rotation.x = -Math.PI / 2;
+            corner.position.set(cx, SWH, cz);
             corner.receiveShadow = true;
             this.scene.add(corner);
             this.physics.addStaticBox(cx, SWH / 2, cz, SWW / 2, SWH / 2, SWW / 2);
