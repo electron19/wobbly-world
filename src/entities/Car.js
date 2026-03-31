@@ -609,7 +609,8 @@ export class Car extends Entity {
     // Wyznacz strefę uderzenia (przód/tył) na podstawie punktu kontaktu.
     // contact.ri = wektor od środka chassis do punktu kontaktu (world space).
     // Zrzutuj na oś przód-tył pojazdu (oś Z rotacji chassis).
-    const ri = contact.ri;   // {x, y, z}
+    const ri = contact.ri;   // {x, y, z} — może być undefined przy niektórych kolizjach cannon-es
+    if (!ri) return;
     const q  = this._chassis.quaternion;
     // Kolumna Z macierzy rotacji z kwaterniona
     const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
@@ -926,7 +927,7 @@ export class Car extends Entity {
     if (this._skidState) this._updateSkidMarks();
 
     // Dym wydechu
-    this._updateExhaust(this._dt ?? 1 / 60);
+    this._updateExhaust(dt);
 
     // Światła (stop + cofania)
     this._updateLights();
