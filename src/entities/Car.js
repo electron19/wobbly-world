@@ -19,7 +19,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 18000; // N na koło tylne (mocne przyspieszenie)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
-const BRAKE_GRASS_MULT   = 0.46;  // trawa: 46% siły hamowania (+20% grip)
+const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -770,8 +770,8 @@ export class Car extends Entity {
     }
 
     // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=0.84 (+20% grip)
-    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 0.84);
+    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=1.6 (~50% asfaltu)
+    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 1.6);
 
     // Tył: dynamiczne — zależy od trybu jazdy:
     //  • hamowanie:  fR = fF (równe przód/tył → stabilne, brak zarzucania)
@@ -790,7 +790,7 @@ export class Car extends Entity {
     } else if (onSidewalk) {
       fR = Math.max(0.55, 2.3 - launchT * 1.40 - cornerT * 0.80);
     } else {
-      fR = Math.max(0.60, 0.78 - cornerT * 0.18);  // trawa: minimalny dodatkowy drift (+20% grip)
+      fR = Math.max(1.0, 1.5 - cornerT * 0.25);  // trawa: przyczepność ~50% asfaltu, lekki drift w zakrętach
     }
     const wInfos = this._vehicle.wheelInfos;
     wInfos[0].frictionSlip = fF;  // FL
@@ -860,7 +860,7 @@ export class Car extends Entity {
                      + wi[2].worldTransform.position.y + wi[3].worldTransform.position.y) / 4;
     const targetRootY = avgWheelY - WHEEL_R;
     if (this._rootY === undefined) this._rootY = targetRootY;
-    this._rootY += (targetRootY - this._rootY) * 0.2;
+    this._rootY += (targetRootY - this._rootY) * (1 - Math.exp(-dt * 12));  // frame-rate-independent (było stałe 0.2)
 
     this.root.position.set(pos.x, this._rootY, pos.z);
     this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);

@@ -42,8 +42,8 @@ export class VehiclePhysics {
   createVehicle(x, y, z, facing = 0) {
     const chassis = new CANNON.Body({
       mass:           2000,  // -20% masy → lepsze przyspieszenie
-      angularDamping: 0.30,  // tłumienie obrotu — wyższe = mniej nadsterowności (było 0.12)
-      linearDamping:  0.04,  // opór powietrza + toczenia ≈ 4% v/s (vs. 18% → ciągłe hamowanie)
+      angularDamping: 0.45,  // tłumienie obrotu — wyższe = mniej nadsterowności
+      linearDamping:  0.18,  // opór powietrza + toczenia — auto naturalnie zwalnia bez hamulca
     });
 
     // Pudło chassis — rozmiar odpowiada Car.js CAR_BOX_*
