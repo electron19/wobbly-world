@@ -782,6 +782,7 @@ export class Car extends Entity {
     const brakingNow  = backAmount > 0.10;
     // cornerT: 0 przy prosto lub małej prędkości, 1 przy pełnym skręcie + ≥60 km/h
     const cornerT     = Math.abs(this._steer) * Math.min(1, absSpd / 60);
+    this._cornerT = cornerT;  // dla _updateSkidMarks — ślady przy drifcie bocznym
     let fR;
     if (brakingNow) {
       fR = fF;  // przy hamowaniu przód i tył jednakowe → brak zarzucania tyłu
@@ -966,14 +967,16 @@ export class Car extends Entity {
         slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
       }
 
-      // Ślad TYLKO gdy: koła prawie zablokowane (slip>0.85) PRZY AKTYWNYM HAMOWANIU
-      // LUB hamulec ręczny na tylnych kołach.
+      // Ślad gdy: koła prawie zablokowane przy hamowaniu,
+      // LUB hamulec ręczny na tylnych, LUB boczny poślizg w zakręcie (drift).
       // Gating na _isBraking/_isHandbraking — bez niego cannon-es deltaRotation*=0.99
       // per substep powoduje fałszywy slip po puszczeniu gazu (koła "zwalniają wirtualnie").
-      const physicsSlip = speedK > 5 && slip > 0.85 && (this._isBraking || this._isHandbraking);
-      const handSkid    = this._isHandbraking && isRear && speedK > 3;
+      const physicsSlip  = speedK > 5 && slip > 0.85 && (this._isBraking || this._isHandbraking);
+      const handSkid     = this._isHandbraking && isRear && speedK > 3;
+      // Boczny drift: tylne koła ślizgają się gdy duży kąt skrętu + wysoka prędkość
+      const lateralSkid  = isRear && (this._cornerT ?? 0) > 0.45 && speedK > 35;
 
-      const skidding = physicsSlip || handSkid;
+      const skidding = physicsSlip || handSkid || lateralSkid;
 
       const wx = wInfo.worldTransform.position.x;
       const wz = wInfo.worldTransform.position.z;
