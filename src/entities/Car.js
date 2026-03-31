@@ -852,6 +852,7 @@ export class Car extends Entity {
   lateUpdate() {
     const pos  = this._chassis.position;
     const quat = this._chassis.quaternion;
+    const dt   = this._dt ?? (1 / 60);  // musi być przed pierwszym użyciem
 
     // ── Synchronizacja kół z cannon-es ───────────────────────────────────────
     // updateWheelTransform() przelicza: pozycję koła, obrót (rotation), skręt (steering)
@@ -875,7 +876,6 @@ export class Car extends Entity {
     // Obrót kół: bezpośrednio z cannon-es deltaRotation — kąt obrotu obliczony
     // przez fizykę na ostatni krok (1/60 s), z uwzględnieniem poślizgu i hamowania.
     // Gwarantuje zgodność bieżnika z nawierzchnią niezależnie od fps.
-    const dt = this._dt ?? (1 / 60);  // używane dalej przez _updateExhaust
 
     // ── Prędkość pojazdu (m/s, ze znakiem: + = do przodu) ───────────────────
     const vehicleSpeedMs = (this._speedKmh ?? 0) / 3.6;
