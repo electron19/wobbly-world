@@ -705,7 +705,7 @@ export class Car extends Entity {
     this._vehicle.setSteeringValue(this._steer, 1);  // FR
 
     // ── Hamulec ręczny (B) — blokuje tylne koła, umożliwia drifting ─────────
-    const handBrake = input.isDown('Space') || input.isPadButtonDown?.(1);
+    const handBrake = input.isDown('Space') || input.isPadButtonDown(1);
     if (handBrake && !this._prevHandbrake) {
       audio?.playHandbrake(this._vehicle.currentVehicleSpeedKmHour);
     }
@@ -801,11 +801,12 @@ export class Car extends Entity {
     wInfos[3].frictionSlip = fR;  // RR
 
     // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
-    const hornDown = input.isDown('KeyH') || input.isPadButtonDown?.(3);
+    const hornDown = input.isDown('KeyH') || input.isPadButtonDown(3);
     if (hornDown) audio?.startHorn(); else audio?.stopHorn();
 
-    // ── Dźwięk silnika ───────────────────────────────────────────────────────
+    // ── Dźwięk silnika + opon ────────────────────────────────────────────────
     audio?.updateEngine(speedKmh, gasIn, dt);
+    audio?.updateTires(speedKmh, onRoad);
 
     // ── Stan hamowania — TYLKO dla świateł stop ───────────────────────────────
     this._isHandbraking = handBrake && absSpd > 3;

@@ -164,6 +164,7 @@ export class Game {
     this.player.root.visible = false;
     car._audio = this.audio;
     this.audio.playEngineStart();
+    this.audio.startTires();
     // Kamera ustawia się za autem od razu
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
@@ -183,6 +184,7 @@ export class Game {
     this.player.root.visible = true;
     car._audio    = null;
     this.audio.stopEngine();
+    this.audio.stopTires();
     car.isOccupied        = false;
     this._drivingCar      = null;
     this._exitCarThisFrame = true;

@@ -367,7 +367,7 @@ export class AudioManager {
 
   // ─── Opony (ciągły dźwięk podczas jazdy) ──────────────────────────────────
 
-  _startTires() {
+  startTires() {
     const ctx  = this._ensureCtx();
     const rate = ctx.sampleRate;
     const buf  = ctx.createBuffer(1, rate * 3, rate);
@@ -425,7 +425,7 @@ export class AudioManager {
     this._tireGain.gain.setTargetAtTime(vol, now, 0.12);
   }
 
-  _stopTires() {
+  stopTires() {
     if (!this._tireRunning) return;
     if (this._tireGain) {
       this._tireGain.gain.setTargetAtTime(0, this._ctx.currentTime, 0.2);
