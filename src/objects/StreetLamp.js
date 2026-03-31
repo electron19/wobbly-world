@@ -3,20 +3,28 @@ import * as CANNON from 'cannon-es';
 import { WorldObject } from './WorldObject.js';
 import { toonMat, C } from '../core/Materials.js';
 
+const POLE_H      = 4.5;   // całkowita wysokość słupa
+const POLE_HALF   = POLE_H / 2;   // offset środka od podstawy
+const FALL_DUR    = 0.70;  // czas upadku [s]
+
 /**
  * Latarnia uliczna: słup + ramię + głowica.
  *
  * Fizyka: cannon-es body zaczyna jako static (auto się o nie odbija).
- * Po uderzeniu ≥ 3 m/s: switch na dynamic z masą — lampa pada z prawdziwą
- * grawitacją i pędem, auto jest lekko odrzucane przez collision response.
- * Mesh synchronizowany per-klatkę z cannon body.
+ * Po uderzeniu ≥ 3 m/s: cannon body usuwany, lampa pada przez kinematyczną
+ * animację — obrót dookoła podstawy (pivot y=0) z ease-in.
+ * Efekt: ciężki, płynny upadek bez wirowania i bez zapadania pod ziemię.
  */
 export class StreetLamp extends WorldObject {
   constructor(scene, physics, vehiclePhysics = null) {
     super(scene, physics, vehiclePhysics);
     this._cannonBody = null;
     this._knocked    = false;
-    this._baseQuat   = new THREE.Quaternion(); // inicjalny obrót Y (kierunek lampy)
+    // Animacja upadku
+    this._fallT         = null;  // null = nie zaczęto; ≥0 = w trakcie
+    this._fallQStart    = null;
+    this._toppleAxisX   = 0;
+    this._toppleAxisZ   = 1;
   }
 
   _build() {
@@ -24,8 +32,8 @@ export class StreetLamp extends WorldObject {
     const headMat  = new THREE.MeshBasicMaterial({ color: C.lamp });
 
     // Słup
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.10, 4.5, 6), metalMat);
-    pole.position.y = 2.25;
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.10, POLE_H, 6), metalMat);
+    pole.position.y = POLE_HALF;
     this.root.add(pole);
 
     // Ramię
@@ -45,24 +53,16 @@ export class StreetLamp extends WorldObject {
     this._build();
 
     // Rapier: statyczny (gracz wchodzi w słup)
-    this._bodies.push(this.physics.addStaticCylinder(x, y + 2.25, z, 2.25, 0.10));
+    this._bodies.push(this.physics.addStaticCylinder(x, y + POLE_HALF, z, POLE_HALF, 0.10));
 
-    // cannon-es: zaczyna jako static, po uderzeniu switch na dynamic
+    // cannon-es: statyczny do momentu uderzenia
     if (this.vehiclePhysics) {
-      const body = new CANNON.Body({
-        mass:           0,             // static na start
-        linearDamping:  0.55,
-        angularDamping: 0.65,
-      });
-      body.addShape(new CANNON.Cylinder(0.10, 0.10, 4.5, 8));
-      body.position.set(x, y + 2.25, z);
+      const body = new CANNON.Body({ mass: 0 });
+      body.addShape(new CANNON.Cylinder(0.10, 0.10, POLE_H, 8));
+      body.position.set(x, y + POLE_HALF, z);
 
-      // Zapamiętaj i przekaż inicjalny obrót Y do cannon body
-      this._baseQuat.setFromEuler(new THREE.Euler(0, rotY + Math.PI, 0));
-      body.quaternion.set(
-        this._baseQuat.x, this._baseQuat.y,
-        this._baseQuat.z, this._baseQuat.w,
-      );
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY + Math.PI, 0));
+      body.quaternion.set(q.x, q.y, q.z, q.w);
 
       body._material = 'metal';
       body._type     = 'lamp';
@@ -75,47 +75,60 @@ export class StreetLamp extends WorldObject {
 
   /**
    * Wywołane przez Car.js gdy uderzenie ≥ 3 m/s.
-   * @param {number} vel      prędkość uderzenia [m/s]
-   * @param {number} nx, nz   normalna kolizji w przestrzeni świata (xz)
+   * @param {number} vel    prędkość uderzenia [m/s]
+   * @param {number} nx, nz normalna kolizji w przestrzeni świata (XZ)
    */
   knockDown(vel, nx = 0, nz = 1) {
     if (this._knocked) return;
     this._knocked = true;
 
-    if (!this._cannonBody || !this.vehiclePhysics) return;
+    // Usuń cannon body — lampa pada przez animację, nie dalej przez fizykę
+    if (this._cannonBody && this.vehiclePhysics) {
+      this.vehiclePhysics.world.removeBody(this._cannonBody);
+      this._cannonBody = null;
+    }
 
-    // Switch static → dynamic: od teraz cannon-es liczy masę, pęd, grawitację
-    this._cannonBody.mass = 120;                      // ~120 kg latarnia
-    this._cannonBody.type = CANNON.Body.DYNAMIC;
-    this._cannonBody.updateMassProperties();
-    this._cannonBody.wakeUp();
+    // Oś upadku: prostopadła do uderzenia w płaszczyźnie XZ (praworączna)
+    // Uderzenie w +Z → oś rotacji = +X → lampa pada w kierunku +Z ✓
+    const len = Math.sqrt(nx * nx + nz * nz) || 1;
+    this._toppleAxisX = -nz / len;
+    this._toppleAxisZ =  nx / len;
 
-    // Bezpośrednie ustawienie angular velocity (NIE applyImpulse z komponentem
-    // liniowym — to by wysłało lampę do przodu i auto by przez nią przejeżdżało).
-    // Lampa obraca się w miejscu; auto zderzając się z ciężkim dynamicznym ciałem
-    // dostaje naturalny impuls wsteczny z cannon-es collision response.
-    const speed = Math.min(vel * 0.06, 1.5);
-    this._cannonBody.angularVelocity.set(
-       nz * speed + (Math.random() - 0.5) * 0.2,
-      0,
-      -nx * speed + (Math.random() - 0.5) * 0.2,
-    );
+    // Zapamiętaj rotację startową (zawiera obrót Y ustawiony w placeAt)
+    this._fallQStart = this.root.quaternion.clone();
+    this._fallT      = 0;
   }
 
   /**
-   * Synchronizuje mesh z cannon-es body — wywołuj z Game.js co klatkę.
+   * Animuje upadek i synchronizuje mesh co klatkę.
    * @param {number} dt  delta time [s]
    */
   update(dt) {
-    if (!this._knocked || !this._cannonBody) return;
+    if (!this._knocked || this._fallT === null) return;
+    if (this._fallT >= FALL_DUR) return;  // animacja zakończona
 
-    const cp = this._cannonBody.position;
-    const cq = this._cannonBody.quaternion;
+    this._fallT = Math.min(this._fallT + dt, FALL_DUR);
+    const t = this._fallT / FALL_DUR;  // [0, 1]
 
-    // Pozycja: cannon body siedzi w centrum cylindra (offset +2.25 od podstawy)
-    this.root.position.set(cp.x, cp.y - 2.25, cp.z);
+    // Ease-in: t^2 → powolny start, szybki koniec (efekt ciążenia)
+    // Mały overshoot (1.04) → lekkie odbicie przy lądowaniu
+    const rawAngle = t * t * (Math.PI / 2) * 1.04;
+    const angle    = Math.min(rawAngle, Math.PI / 2);
 
-    // Rotacja: cannon quaternion zawiera już inicjalny obrót Y (ustawiony w placeAt)
-    this.root.quaternion.set(cq.x, cq.y, cq.z, cq.w);
+    // Kwaternion upadku dookoła osi toppleAxis
+    const halfA = angle / 2;
+    const sinH  = Math.sin(halfA);
+    const qTopple = new THREE.Quaternion(
+      this._toppleAxisX * sinH,
+      0,
+      this._toppleAxisZ * sinH,
+      Math.cos(halfA),
+    );
+
+    // Wynikowy obrót = topple * startowy (zachowuje kierunek Y lampy)
+    this.root.quaternion.multiplyQuaternions(qTopple, this._fallQStart);
+
+    // Podstawa (pivot) zawsze przyczepiona do ziemi
+    this.root.position.y = 0;
   }
 }
