@@ -54,6 +54,10 @@ export class Game {
     this._exitCarThisFrame = false;
     this._worldObjects     = [];
     this._cullFrame        = 0;
+    this._fpsFrames        = 0;
+    this._fpsSec           = 0;
+    this._fpsDisplay       = 0;
+    this._debugEl          = null;
   }
 
   async init() {
@@ -110,6 +114,8 @@ export class Game {
     setTimeout(() => (loading.style.display = 'none'), 600);
     this._uiEl       = document.getElementById('ui');
     this._interactEl = document.getElementById('interact');
+    this._debugEl    = document.getElementById('debug');
+    if (this._debugEl) this._debugEl.style.display = 'block';
     this._uiEl.style.display = 'block';
     document.getElementById('hint').style.display = 'block';
     const seedEl = document.getElementById('seed-display');
@@ -289,5 +295,26 @@ export class Game {
     this.camCtrl.update(followPos, this.input.mouse, dt, autoFacing);
 
     this.renderer.render(this.scene, this.camera3);
+
+    // ── HUD: FPS + pozycja XYZ ────────────────────────────────────────────
+    if (this._debugEl) {
+      this._fpsFrames++;
+      this._fpsSec += dt;
+      if (this._fpsSec >= 0.5) {
+        this._fpsDisplay = Math.round(this._fpsFrames / this._fpsSec);
+        this._fpsFrames  = 0;
+        this._fpsSec     = 0;
+      }
+      const pos = this._drivingCar
+        ? this._drivingCar.root.position
+        : this.player.root.position;
+      const spd = this._drivingCar
+        ? `${Math.abs(Math.round(this._drivingCar.speedKmh ?? 0))} km/h`
+        : '';
+      this._debugEl.innerHTML =
+        `FPS: ${this._fpsDisplay}<br>` +
+        `X: ${pos.x.toFixed(1)}&nbsp; Y: ${pos.y.toFixed(1)}&nbsp; Z: ${pos.z.toFixed(1)}` +
+        (spd ? `<br>${spd}` : '');
+    }
   }
 }

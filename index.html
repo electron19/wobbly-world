@@ -47,6 +47,12 @@
       color: rgba(255,255,255,0.7); font: 12px monospace;
       pointer-events: none; user-select: none;
     }
+    #debug {
+      position: fixed; top: 12px; left: 16px;
+      color: rgba(255,255,255,0.85); font: 11px/1.6 monospace;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+      pointer-events: none; user-select: none; display: none;
+    }
   </style>
 </head>
 <body>
@@ -59,6 +65,7 @@
 <div id="hint">🖱️ Kliknij by sterować kamerą</div>
 <div id="interact">E — wsiądź</div>
 <div id="seed-display"></div>
+<div id="debug"></div>
 
 <script type="importmap">
 {

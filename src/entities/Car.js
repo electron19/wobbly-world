@@ -62,6 +62,11 @@ export class Car extends Entity {
     // Materiały świateł (do dynamicznej zmiany koloru)
     this._tailMat       = null;   // stop + pozycyjne tylne
     this._revMat        = null;   // cofania
+    // Uszkodzenia świateł: [lewy, prawy] — 0=ok, 1=zgaszone, 2=oderwane
+    this._headDmg = [0, 0];   // przednie reflektory
+    this._tailDmg = [0, 0];   // tylne światła stop
+    this._headMeshes = [null, null];  // soczewki przednie [L, R]
+    this._tailMeshes = [null, null];  // soczewki tylne [L, R]
     this._build();
   }
 
@@ -232,11 +237,13 @@ export class Car extends Entity {
     B(0, BODY_BOT + 0.03, BODY_ZR - 0.08, 1.88, 0.14, 0.12, blackMat, 0, false);
 
     // ── 9. REFLEKTORY PRZEDNIE ───────────────────────────────────────────────
-    [-0.73, 0.73].forEach(x => {
+    [-0.73, 0.73].forEach((x, i) => {
       // Obudowa
       B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.05, 0.56, 0.30, 0.10, darkMat, 0.025);
-      // Soczewka główna
-      B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10, 0.42, 0.22, 0.06, headMat, 0, false);
+      // Soczewka główna — indywidualny materiał żeby móc ją wyłączyć niezależnie
+      const hMat = new THREE.MeshBasicMaterial({ color: 0xFFFDE0 });
+      const lens = B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10, 0.42, 0.22, 0.06, hMat, 0, false);
+      this._headMeshes[i] = lens;
       // Pasek DRL (nad reflektorem)
       B(x, BODY_BOT + BODY_H * 0.92, BODY_ZF + 0.09, 0.54, 0.07, 0.07, drlMat, 0, false);
       // Kierunkowskaz przedni (pod reflektorem)
@@ -244,11 +251,13 @@ export class Car extends Entity {
     });
 
     // ── 10. TYLNE ŚWIATŁA ────────────────────────────────────────────────────
-    [-0.73, 0.73].forEach(x => {
+    [-0.73, 0.73].forEach((x, i) => {
       // Obudowa
       B(x, BODY_BOT + BODY_H * 0.68, BODY_ZR - 0.05, 0.56, 0.38, 0.10, darkMat, 0.025);
-      // Światło stop
-      B(x, BODY_BOT + BODY_H * 0.82, BODY_ZR - 0.10, 0.42, 0.16, 0.06, tailMat, 0, false);
+      // Światło stop — indywidualny materiał
+      const tMat = new THREE.MeshBasicMaterial({ color: 0x330000 });
+      const tLens = B(x, BODY_BOT + BODY_H * 0.82, BODY_ZR - 0.10, 0.42, 0.16, 0.06, tMat, 0, false);
+      this._tailMeshes[i] = tLens;
       // Kierunkowskaz tylny
       B(x, BODY_BOT + BODY_H * 0.60, BODY_ZR - 0.10, 0.42, 0.12, 0.06, indMat, 0, false);
       // Cofania
@@ -625,6 +634,26 @@ export class Car extends Entity {
     } else {
       this._damageRear  = Math.min(1, this._damageRear  + dmg);
     }
+
+    // ── Uszkodzenia reflektorów ───────────────────────────────────────────────
+    // Wyznacz stronę uderzenia (L/R) z projekcji ri na lokalną oś X pojazdu.
+    const wx = 1 - 2 * (q.y * q.y + q.z * q.z);   // lokalny X → world
+    const wy = 2 * (q.x * q.y + q.w * q.z);
+    const wz = 2 * (q.x * q.z - q.w * q.y);
+    const dotRight = ri.x * wx + ri.y * wy + ri.z * wz;
+    // i=0→lewy (x=-0.73), i=1→prawy (x=+0.73)
+    const lightIdx = dotRight < 0 ? 0 : 1;
+
+    if (vel >= 14) {
+      // Silne: reflektor odpada (znika)
+      if (isfront) this._headDmg[lightIdx] = 2;
+      else          this._tailDmg[lightIdx] = 2;
+    } else if (vel >= 6) {
+      // Średnie: reflektor gaśnie
+      if (isfront && this._headDmg[lightIdx] < 1) this._headDmg[lightIdx] = 1;
+      else if (!isfront && this._tailDmg[lightIdx] < 1) this._tailDmg[lightIdx] = 1;
+    }
+
     this._refreshDamageVisual();
   }
 
@@ -663,6 +692,28 @@ export class Car extends Entity {
       this._trunkMesh.position.y = this._trunkBaseY + r * 0.04;
       this._trunkMesh.scale.z = Math.max(0.7, 1 - r * 0.25);
     }
+
+    // ── Reflektory przednie ──────────────────────────────────────────────────
+    this._headDmg.forEach((dmg, i) => {
+      const m = this._headMeshes[i];
+      if (!m) return;
+      if (dmg >= 2) {
+        m.visible = false;   // odpadł
+      } else if (dmg >= 1) {
+        m.material.color.setHex(0x111108);   // zgaszone (ciemne szkło)
+      }
+    });
+
+    // ── Tylne światła stop ───────────────────────────────────────────────────
+    this._tailDmg.forEach((dmg, i) => {
+      const m = this._tailMeshes[i];
+      if (!m) return;
+      if (dmg >= 2) {
+        m.visible = false;
+      } else if (dmg >= 1) {
+        m.material.color.setHex(0x0A0200);   // zgaszone
+      }
+    });
   }
 
   // ─── Cykl klatki ──────────────────────────────────────────────────────────
@@ -936,11 +987,15 @@ export class Car extends Entity {
 
   /** Dynamicznie zmienia kolor świateł tylnych. */
   _updateLights() {
-    if (!this._tailMat || !this._revMat) return;
+    if (!this._revMat) return;
     const braking   = this._isBraking || this._isHandbraking;
     const reversing = this.speedKmh < -1;
-    this._tailMat.color.setHex(braking   ? 0xFF1100 : 0x330000);  // ON: jaskrawo czerwony
-    this._revMat.color.setHex( reversing ? 0xFFFFFF : 0x0A0800);  // ON: biały
+    // Aktualizuj każde tylne światło stop — pomijaj uszkodzone
+    this._tailMeshes.forEach((m, i) => {
+      if (!m || this._tailDmg[i] > 0) return;  // zgaszone/oderwane — nie zmieniaj
+      m.material.color.setHex(braking ? 0xFF1100 : 0x330000);
+    });
+    this._revMat.color.setHex(reversing ? 0xFFFFFF : 0x0A0800);
   }
 
   /**
