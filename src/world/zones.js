@@ -48,6 +48,12 @@ export const ROADS = [
   { name: 'E-W daleka S',      axis: 'z', center:  100, clear: ROAD_CLEAR },
   { name: 'E-W daleka-daleka N', axis: 'z', center: -150, clear: ROAD_CLEAR },
   { name: 'E-W daleka-daleka S', axis: 'z', center:  150, clear: ROAD_CLEAR },
+  { name: 'E-W nowa N',          axis: 'z', center: -200, clear: ROAD_CLEAR },
+  { name: 'E-W nowa S',          axis: 'z', center:  200, clear: ROAD_CLEAR },
+  { name: 'E-W osiedle N',       axis: 'z', center: -250, clear: ROAD_CLEAR },
+  { name: 'E-W osiedle S',       axis: 'z', center:  250, clear: ROAD_CLEAR },
+  { name: 'N-S nowa E',          axis: 'x', center:  195, clear: ROAD_CLEAR },
+  { name: 'N-S nowa W',          axis: 'x', center: -195, clear: ROAD_CLEAR },
 ];
 
 // ── Detekcja nawierzchni ───────────────────────────────────────────────────────

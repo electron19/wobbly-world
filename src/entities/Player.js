@@ -206,13 +206,13 @@ export class Player extends Entity {
     audio?.checkFootstep(this._walkPhase, isMoving, this.grounded, onRoad);
 
     // ─── Animacja kończyn — faza proporcjonalna do przebytej drogi ────────────
-    if (isMoving) this._walkPhase += SPEED * dt * 5.5; // 5.5 rad/jednostkę ≈ krok co ~1.1 m
+    if (isMoving) this._walkPhase += SPEED * dt * 2.8; // wolniejsze tempo — krok co ~2.2 m
     if (isMoving) {
-      const swing = Math.sin(this._walkPhase) * 0.50;
+      const swing = Math.sin(this._walkPhase) * 0.80;  // większa amplituda
       this.lLeg.rotation.x =  swing;
       this.rLeg.rotation.x = -swing;
-      this.lArm.rotation.x = -swing * 0.6;
-      this.rArm.rotation.x =  swing * 0.6;
+      this.lArm.rotation.x = -swing * 0.55;
+      this.rArm.rotation.x =  swing * 0.55;
     } else {
       this.lLeg.rotation.x *= 0.85;
       this.rLeg.rotation.x *= 0.85;

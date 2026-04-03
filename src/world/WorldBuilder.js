@@ -62,6 +62,8 @@ export class WorldBuilder {
     this._addFarWest();
     this._addFarFarNorth();
     this._addFarFarSouth();
+    this._addNewNorthEstate();
+    this._addNewSouthEstate();
     this._addHills();
     this._addTrees();
     this._addStreetLamps();
@@ -199,7 +201,7 @@ export class WorldBuilder {
 
   _addGround() {
     // Ground jest zawsze widoczny — nie trafia do listy cullingowej
-    new Ground(this.scene, this.physics, this.vehiclePhysics, 640);
+    new Ground(this.scene, this.physics, this.vehiclePhysics, 1280);
   }
 
   // ─── Drogi ──────────────────────────────────────────────────────────────────
@@ -290,16 +292,26 @@ export class WorldBuilder {
 
   _addRoads() {
     // Główny krzyż (x=0, z=0) jest w Ground.js — tu dodajemy pozostałe drogi.
-    this._road({ axis: 'z', center:  -50, halfLen: 200 });
-    this._road({ axis: 'z', center:   50, halfLen: 200 });
-    this._road({ axis: 'z', center: -100, halfLen: 200 });
-    this._road({ axis: 'z', center:  100, halfLen: 200 });
-    this._road({ axis: 'z', center: -150, halfLen: 145 }); // ← nowe
-    this._road({ axis: 'z', center:  150, halfLen: 145 }); // ← nowe
-    this._road({ axis: 'x', center:   65, halfLen: 200 });
-    this._road({ axis: 'x', center:  -65, halfLen: 200 });
-    this._road({ axis: 'x', center:  130, halfLen: 200 });
-    this._road({ axis: 'x', center: -130, halfLen: 200 });
+    // E-W (halfLen=210 → sięgają do x=±195+margin)
+    this._road({ axis: 'z', center:  -50, halfLen: 210 });
+    this._road({ axis: 'z', center:   50, halfLen: 210 });
+    this._road({ axis: 'z', center: -100, halfLen: 210 });
+    this._road({ axis: 'z', center:  100, halfLen: 210 });
+    this._road({ axis: 'z', center: -150, halfLen: 210 });
+    this._road({ axis: 'z', center:  150, halfLen: 210 });
+    // ── Nowe drogi E-W (z=±200 — granica osiedla, z=±250 — zewnętrzna) ────
+    this._road({ axis: 'z', center: -200, halfLen: 210 });
+    this._road({ axis: 'z', center:  200, halfLen: 210 });
+    this._road({ axis: 'z', center: -250, halfLen: 210 });
+    this._road({ axis: 'z', center:  250, halfLen: 210 });
+    // N-S (halfLen=260 → sięgają do z=±250+margin)
+    this._road({ axis: 'x', center:   65, halfLen: 260 });
+    this._road({ axis: 'x', center:  -65, halfLen: 260 });
+    this._road({ axis: 'x', center:  130, halfLen: 260 });
+    this._road({ axis: 'x', center: -130, halfLen: 260 });
+    // ── Nowe drogi N-S (x=±195 — obwodnica osiedla) ────────────────────────
+    this._road({ axis: 'x', center:  195, halfLen: 260 });
+    this._road({ axis: 'x', center: -195, halfLen: 260 });
     this._addCorners();
   }
 
@@ -854,6 +866,122 @@ export class WorldBuilder {
     this._house(P[3],  82, 184, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
   }
 
+  // ─── Nowe Osiedle Północne (z ∈ [-250, -200]) ────────────────────────────────
+  //
+  // Dwa rzędy domów między drogą E-W z=-200 a z=-250.
+  // Rząd A (z=-213): fasada FS (+Z) ku drodze z=-200 (13j > 12.1j ✓)
+  // Rząd B (z=-237): fasada FN (-Z) ku drodze z=-250 (13j > 12.1j ✓)
+  // x bezpieczne (od N-S x=0,±65,±130,±195): |x-xDrogi| > 9j
+  //   → użyte: ±22, ±50, ±90, ±118, ±148, ±175
+
+  _addNewNorthEstate() {
+    const P = HOUSE_PALETTES;
+
+    // Rząd A — z=-213, fasada FS (ku drodze z=-200)
+    const rowA = [
+      [-175, P[0], 'pitched',  true ],
+      [-148, P[1], 'flat',     false],
+      [-118, P[2], 'dome',     false],
+      [ -90, P[3], 'pitched',  true ],
+      [ -50, P[4], 'flat',     false],
+      [ -22, P[5], 'dome',     false],
+      [  22, P[6], 'pitched',  true ],
+      [  50, P[7], 'flat',     false],
+      [  90, P[8], 'dome',     false],
+      [ 118, P[9], 'pitched',  true ],
+      [ 148, P[0], 'flat',     false],
+      [ 175, P[1], 'pitched',  true ],
+    ];
+    rowA.forEach(([x, pal, roofStyle, hasChimney]) => {
+      this._house(pal, x, -213, FS, { roofStyle, hasChimney });
+    });
+
+    // Rząd B — z=-237, fasada FN (ku drodze z=-250)
+    const rowB = [
+      [-175, P[2], 'flat',    false],
+      [-148, P[3], 'dome',    false],
+      [-118, P[4], 'pitched', true ],
+      [ -90, P[5], 'flat',    false],
+      [ -50, P[6], 'dome',    false],
+      [ -22, P[7], 'pitched', true ],
+      [  22, P[8], 'flat',    false],
+      [  50, P[9], 'dome',    false],
+      [  90, P[0], 'pitched', true ],
+      [ 118, P[1], 'flat',    false],
+      [ 148, P[2], 'dome',    false],
+      [ 175, P[3], 'pitched', true ],
+    ];
+    rowB.forEach(([x, pal, roofStyle, hasChimney]) => {
+      this._house(pal, x, -237, FN, { roofStyle, hasChimney });
+    });
+
+    // Sklepy przy wjazdach (narożniki z=-200 przy x=±195)
+    this._regCircle( 184, -210, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FW, wallColor: 0xFFF0C0, roofColor: 0xC0860B,
+    }, this.vehiclePhysics).placeAt(184, 0, -210));
+    this._regCircle(-184, -210, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FE, wallColor: 0xC8E8FF, roofColor: 0x1A4A8A,
+    }, this.vehiclePhysics).placeAt(-184, 0, -210));
+  }
+
+  // ─── Nowe Osiedle Południowe (z ∈ [200, 250]) ─────────────────────────────────
+  //
+  // Symetryczne do północnego względem z=0.
+
+  _addNewSouthEstate() {
+    const P = HOUSE_PALETTES;
+
+    // Rząd A — z=213, fasada FN (ku drodze z=200)
+    const rowA = [
+      [-175, P[4], 'dome',    false],
+      [-148, P[5], 'pitched', true ],
+      [-118, P[6], 'flat',    false],
+      [ -90, P[7], 'dome',    false],
+      [ -50, P[8], 'pitched', true ],
+      [ -22, P[9], 'flat',    false],
+      [  22, P[0], 'dome',    false],
+      [  50, P[1], 'pitched', true ],
+      [  90, P[2], 'flat',    false],
+      [ 118, P[3], 'dome',    false],
+      [ 148, P[4], 'pitched', true ],
+      [ 175, P[5], 'flat',    false],
+    ];
+    rowA.forEach(([x, pal, roofStyle, hasChimney]) => {
+      this._house(pal, x, 213, FN, { roofStyle, hasChimney });
+    });
+
+    // Rząd B — z=237, fasada FS (ku drodze z=250)
+    const rowB = [
+      [-175, P[6], 'pitched', true ],
+      [-148, P[7], 'flat',    false],
+      [-118, P[8], 'dome',    false],
+      [ -90, P[9], 'pitched', true ],
+      [ -50, P[0], 'flat',    false],
+      [ -22, P[1], 'dome',    false],
+      [  22, P[2], 'pitched', true ],
+      [  50, P[3], 'flat',    false],
+      [  90, P[4], 'dome',    false],
+      [ 118, P[5], 'pitched', true ],
+      [ 148, P[6], 'flat',    false],
+      [ 175, P[7], 'dome',    false],
+    ];
+    rowB.forEach(([x, pal, roofStyle, hasChimney]) => {
+      this._house(pal, x, 237, FS, { roofStyle, hasChimney });
+    });
+
+    // Sklepy przy wjazdach
+    this._regCircle( 184, 210, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FW, wallColor: 0xE8FFE0, roofColor: 0x2A7A1A,
+    }, this.vehiclePhysics).placeAt(184, 0, 210));
+    this._regCircle(-184, 210, 9/2, 7/2);
+    this._add(new Shop(this.scene, this.physics, {
+      facing: FE, wallColor: 0xFFE8F0, roofColor: 0xAA2244,
+    }, this.vehiclePhysics).placeAt(-184, 0, 210));
+  }
+
   // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────
 
   _addHills() {
@@ -991,6 +1119,46 @@ export class WorldBuilder {
 
       // ── Daleki zachód ─────────────────────────────────────────────────
       [-144,-56],[-144, 56],[-160,-40],[-160, 40],[-178,-56],[-178, 56],
+
+      // ── Wzdłuż nowych dróg E-W z=±200 ────────────────────────────────
+      [-180,-194],[-150,-194],[-110,-194],[-70,-194],[-35,-194],[-8,-194],
+      [  8,-194],[  35,-194],[ 70,-194],[110,-194],[150,-194],[180,-194],
+      [-180,-206],[-150,-206],[-110,-206],[-70,-206],[-35,-206],[-8,-206],
+      [  8,-206],[  35,-206],[ 70,-206],[110,-206],[150,-206],[180,-206],
+      [-180, 194],[-150, 194],[-110, 194],[-70, 194],[-35, 194],[-8, 194],
+      [  8, 194],[  35, 194],[ 70, 194],[110, 194],[150, 194],[180, 194],
+      [-180, 206],[-150, 206],[-110, 206],[-70, 206],[-35, 206],[-8, 206],
+      [  8, 206],[  35, 206],[ 70, 206],[110, 206],[150, 206],[180, 206],
+
+      // ── Wzdłuż nowych dróg E-W z=±250 ────────────────────────────────
+      [-180,-244],[-150,-244],[-110,-244],[-70,-244],[-35,-244],[-8,-244],
+      [  8,-244],[  35,-244],[ 70,-244],[110,-244],[150,-244],[180,-244],
+      [-180,-256],[-150,-256],[-110,-256],[-70,-256],[-35,-256],[-8,-256],
+      [  8,-256],[  35,-256],[ 70,-256],[110,-256],[150,-256],[180,-256],
+      [-180, 244],[-150, 244],[-110, 244],[-70, 244],[-35, 244],[-8, 244],
+      [  8, 244],[  35, 244],[ 70, 244],[110, 244],[150, 244],[180, 244],
+      [-180, 256],[-150, 256],[-110, 256],[-70, 256],[-35, 256],[-8, 256],
+      [  8, 256],[  35, 256],[ 70, 256],[110, 256],[150, 256],[180, 256],
+
+      // ── Wzdłuż nowych dróg N-S x=±195 ────────────────────────────────
+      [189,-240],[201,-240],[189,-215],[201,-215],[189,-185],[201,-185],
+      [189,-160],[201,-160],[189,-130],[201,-130],[189,-100],[201,-100],
+      [189,-70], [201,-70], [189,-40], [201,-40], [189,-10], [201,-10],
+      [189,  10],[201,  10],[189,  40],[201,  40],[189,  70],[201,  70],
+      [189, 100],[201, 100],[189, 130],[201, 130],[189, 160],[201, 160],
+      [189, 185],[201, 185],[189, 215],[201, 215],[189, 240],[201, 240],
+      [-189,-240],[-201,-240],[-189,-215],[-201,-215],[-189,-185],[-201,-185],
+      [-189,-160],[-201,-160],[-189,-130],[-201,-130],[-189,-100],[-201,-100],
+      [-189,-70], [-201,-70], [-189,-40], [-201,-40], [-189,-10], [-201,-10],
+      [-189,  10],[-201,  10],[-189,  40],[-201,  40],[-189,  70],[-201,  70],
+      [-189, 100],[-201, 100],[-189, 130],[-201, 130],[-189, 160],[-201, 160],
+      [-189, 185],[-201, 185],[-189, 215],[-201, 215],[-189, 240],[-201, 240],
+
+      // ── Wewnątrz osiedla (między rzędami domów) ───────────────────────
+      [-162,-225],[-130,-225],[-100,-225],[-65,-225],[-35,-225],[-8,-225],
+      [  8,-225],[  35,-225],[  65,-225],[ 100,-225],[130,-225],[162,-225],
+      [-162, 225],[-130, 225],[-100, 225],[-65, 225],[-35, 225],[-8, 225],
+      [  8, 225],[  35, 225],[  65, 225],[ 100, 225],[130, 225],[162, 225],
     ];
 
     positions.forEach(([x, z]) => {
@@ -1087,6 +1255,50 @@ export class WorldBuilder {
       [18,144.5,FE],[52,144.5,FE],[90,144.5,FE],[120,144.5,FE],
       [-120,155.5,FW],[-90,155.5,FW],[-52,155.5,FW],[-18,155.5,FW],
       [18,155.5,FW],[52,155.5,FW],[90,155.5,FW],[120,155.5,FW],
+
+      // ── E-W z=±200 — droga graniczna osiedla ─────────────────────────────────
+      [-175,-194.5,FW],[-140,-194.5,FW],[-100,-194.5,FW],[-55,-194.5,FW],[-18,-194.5,FW],
+      [18,-194.5,FW],[55,-194.5,FW],[100,-194.5,FW],[140,-194.5,FW],[175,-194.5,FW],
+      [-175,-205.5,FE],[-140,-205.5,FE],[-100,-205.5,FE],[-55,-205.5,FE],[-18,-205.5,FE],
+      [18,-205.5,FE],[55,-205.5,FE],[100,-205.5,FE],[140,-205.5,FE],[175,-205.5,FE],
+      [-175,194.5,FE],[-140,194.5,FE],[-100,194.5,FE],[-55,194.5,FE],[-18,194.5,FE],
+      [18,194.5,FE],[55,194.5,FE],[100,194.5,FE],[140,194.5,FE],[175,194.5,FE],
+      [-175,205.5,FW],[-140,205.5,FW],[-100,205.5,FW],[-55,205.5,FW],[-18,205.5,FW],
+      [18,205.5,FW],[55,205.5,FW],[100,205.5,FW],[140,205.5,FW],[175,205.5,FW],
+
+      // ── E-W z=±250 — zewnętrzna droga osiedla ────────────────────────────────
+      [-175,-244.5,FW],[-140,-244.5,FW],[-100,-244.5,FW],[-55,-244.5,FW],[-18,-244.5,FW],
+      [18,-244.5,FW],[55,-244.5,FW],[100,-244.5,FW],[140,-244.5,FW],[175,-244.5,FW],
+      [-175,-255.5,FE],[-140,-255.5,FE],[-100,-255.5,FE],[-55,-255.5,FE],[-18,-255.5,FE],
+      [18,-255.5,FE],[55,-255.5,FE],[100,-255.5,FE],[140,-255.5,FE],[175,-255.5,FE],
+      [-175,244.5,FE],[-140,244.5,FE],[-100,244.5,FE],[-55,244.5,FE],[-18,244.5,FE],
+      [18,244.5,FE],[55,244.5,FE],[100,244.5,FE],[140,244.5,FE],[175,244.5,FE],
+      [-175,255.5,FW],[-140,255.5,FW],[-100,255.5,FW],[-55,255.5,FW],[-18,255.5,FW],
+      [18,255.5,FW],[55,255.5,FW],[100,255.5,FW],[140,255.5,FW],[175,255.5,FW],
+
+      // ── N-S x=±195 — nowe drogi obwodowe ─────────────────────────────────────
+      [189.5,-240,FN],[200.5,-240,FS],[189.5,-215,FN],[200.5,-215,FS],
+      [189.5,-180,FN],[200.5,-180,FS],[189.5,-150,FN],[200.5,-150,FS],
+      [189.5,-120,FN],[200.5,-120,FS],[189.5,-90,FN],[200.5,-90,FS],
+      [189.5,-60,FN],[200.5,-60,FS],[189.5,-26,FN],[200.5,-26,FS],
+      [189.5, 26,FN],[200.5, 26,FS],[189.5, 60,FN],[200.5, 60,FS],
+      [189.5, 90,FN],[200.5, 90,FS],[189.5,120,FN],[200.5,120,FS],
+      [189.5,150,FN],[200.5,150,FS],[189.5,180,FN],[200.5,180,FS],
+      [189.5,215,FN],[200.5,215,FS],[189.5,240,FN],[200.5,240,FS],
+      [-189.5,-240,FS],[-200.5,-240,FN],[-189.5,-215,FS],[-200.5,-215,FN],
+      [-189.5,-180,FS],[-200.5,-180,FN],[-189.5,-150,FS],[-200.5,-150,FN],
+      [-189.5,-120,FS],[-200.5,-120,FN],[-189.5,-90,FS],[-200.5,-90,FN],
+      [-189.5,-60,FS],[-200.5,-60,FN],[-189.5,-26,FS],[-200.5,-26,FN],
+      [-189.5, 26,FS],[-200.5, 26,FN],[-189.5, 60,FS],[-200.5, 60,FN],
+      [-189.5, 90,FS],[-200.5, 90,FN],[-189.5,120,FS],[-200.5,120,FN],
+      [-189.5,150,FS],[-200.5,150,FN],[-189.5,180,FS],[-200.5,180,FN],
+      [-189.5,215,FS],[-200.5,215,FN],[-189.5,240,FS],[-200.5,240,FN],
+
+      // ── N-S x=0 — przedłużenie do z=±240 ────────────────────────────────────
+      [5,-195,FS],[-5,-195,FN],[5,-210,FS],[-5,-210,FN],
+      [5,-228,FS],[-5,-228,FN],[5,-242,FS],[-5,-242,FN],
+      [5, 195,FS],[-5, 195,FN],[5, 210,FS],[-5, 210,FN],
+      [5, 228,FS],[-5, 228,FN],[5, 242,FS],[-5, 242,FN],
     ];
 
     lamps.forEach(([x, z, rotY]) => {
@@ -1121,6 +1333,9 @@ export class WorldBuilder {
       // Daleki wschód / zachód
       { x: 148, z:   2, facing: -Math.PI / 2,  color: 0x5544BB },
       { x:-148, z:  -2, facing:  Math.PI / 2,  color: 0xBB4455 },
+      // Nowe osiedla N / S
+      { x:   2, z:-225, facing:  0,            color: 0xFF6688 },
+      { x:  -2, z: 225, facing:  Math.PI,      color: 0x44BBFF },
     ];
     defs.forEach(({ x, z, facing, color }) => {
       const car = new Car(this.scene, color);
@@ -1134,8 +1349,8 @@ export class WorldBuilder {
   // ─── Granice ─────────────────────────────────────────────────────────────────
 
   _addBoundaries() {
-    // Wzgórza sięgają do ~210+30=240. Granice przy ±310.
-    const E = 312, H = 5, W = 320;
+    // Świat 4× większy. Granice przy ±660.
+    const E = 662, H = 5, W = 670;
     [
       [   0, H, -E,  W, H,  1],
       [   0, H,  E,  W, H,  1],
