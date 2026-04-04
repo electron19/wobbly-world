@@ -1,5 +1,16 @@
 # Changelog — Wobbly World
 
+## [v1.0.0] — 2026-04-04
+### Added
+- **Body roll/pitch** — nadwozie wizualnie przechyla się w zakrętach (do 4°) i kiwa przy gazie/hamowaniu (do 2.7°); koła zostają w root, tylko mesh karoserii w `_bodyPivot`
+- **Camera shake (trauma system)** — wstrząs kamery przy kolizji; intensywność zależna od prędkości uderzenia; zanika w ~0.5s
+- **Camera tilt w zakrętach** — kamera delikatnie bankuje (do 3°) przy dużym kącie skrętu + prędkości
+- **Dynamic FOV** — pole widzenia rośnie 65→85° wraz z prędkością (do 200 km/h); płynny powrót
+- **Downforce** — siła docisku F = 0.5·v² N; lepsza przyczepność przy >60 km/h
+### Fixed
+- Usunięto nieużywaną zmienną `camSteer` w `Game.js`
+- Camera tilt używa `quaternion.multiply` po `lookAt` (wcześniej `rotation.z` niespójne z eulerami)
+
 ## [v0.9.7] — 2026-03-28
 ### Fixed
 - Limit 60 FPS w pętli gry (`_frameMs = 1000/60`): na 120Hz ekranie pętla pomija co drugą klatkę — gra porusza się z tą samą prędkością na baterii i zasilaczu
