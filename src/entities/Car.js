@@ -67,6 +67,12 @@ export class Car extends Entity {
     this._tailDmg = [0, 0];   // tylne światła stop
     this._headMeshes = [null, null];  // soczewki przednie [L, R]
     this._tailMeshes = [null, null];  // soczewki tylne [L, R]
+    // Wizualny body roll/pitch — oddzielna grupa (koła zostają w root)
+    this._bodyPivot     = null;   // inicjalizowany w _build()
+    this._bodyRoll      = 0;      // wygładzone przechylenie boczne [rad]
+    this._bodyPitch     = 0;      // wygładzone pochylenie przód/tył [rad]
+    // Prędkość uderzenia z bieżącej klatki — dla camera shake
+    this._impactVelThisFrame = 0;
     this._build();
   }
 
@@ -98,13 +104,17 @@ export class Car extends Entity {
     const revMat   = this._revMat;
     const fogMat   = toonMat(0xFFFACC);   // lampy przeciwmgielne
 
-    // Pomocnik: dodaj box do this.root
+    // Pivot dla body roll/pitch — koła zostają w root (żeby nie tańczyły z nadwoziem)
+    this._bodyPivot = new THREE.Group();
+    this.root.add(this._bodyPivot);
+
+    // Pomocnik: dodaj box do _bodyPivot (nie root — żeby body roll działał tylko na nadwozie)
     const B = (x, y, z, w, h, d, mat, ol = 0, shadow = true) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       m.position.set(x, y, z);
       if (shadow) m.castShadow = true;
       if (ol > 0) addOutline(m, ol);
-      this.root.add(m);
+      this._bodyPivot.add(m);
       return m;
     };
 
@@ -329,7 +339,7 @@ export class Car extends Entity {
     );
     fuelCap.rotation.z = Math.PI / 2;
     fuelCap.position.set(1.09, BODY_BOT + BODY_H * 0.55, -0.85);
-    this.root.add(fuelCap);
+    this._bodyPivot.add(fuelCap);
     // Wgłębienie wlewu
     B(1.09, BODY_BOT + BODY_H * 0.55, -0.85, 0.04, 0.22, 0.22, darkMat, 0, false);
 
@@ -339,21 +349,21 @@ export class Car extends Entity {
     );
     exhaust.rotation.x = Math.PI / 2;
     exhaust.position.set(0.65, BODY_BOT + 0.09, BODY_ZR - 0.11);
-    this.root.add(exhaust);
+    this._bodyPivot.add(exhaust);
     // Czarna dziura rury
     const exhaustInner = new THREE.Mesh(
       new THREE.CylinderGeometry(0.046, 0.046, 0.22, 8), blackMat,
     );
     exhaustInner.rotation.x = Math.PI / 2;
     exhaustInner.position.set(0.65, BODY_BOT + 0.09, BODY_ZR - 0.12);
-    this.root.add(exhaustInner);
+    this._bodyPivot.add(exhaustInner);
 
     // ── 20. ANTENA ───────────────────────────────────────────────────────────
     const antenna = new THREE.Mesh(
       new THREE.CylinderGeometry(0.014, 0.014, 0.40, 5), blackMat,
     );
     antenna.position.set(0.52, ROOF_BOT + 0.20, CAB_ZOff - 0.55);
-    this.root.add(antenna);
+    this._bodyPivot.add(antenna);
 
   }
 
@@ -395,6 +405,9 @@ export class Car extends Entity {
         this._audio?.playCollision(mat, vel);
       }
 
+      // Zapisz dla camera shake (reset per klatkę w update())
+      this._impactVelThisFrame = Math.max(this._impactVelThisFrame, vel);
+
       // Zniszczenia wizualne
       if (vel >= 4) this._handleImpact(vel, event.contact);
     });
@@ -424,6 +437,9 @@ export class Car extends Entity {
 
   /** Maksymalny slip ratio kół [0..1]: 0 = swobodne toczenie, 1 = zablokowane. */
   get wheelSlip() { return this._maxWheelSlip ?? 0; }
+
+  /** Prędkość uderzenia z bieżącej klatki [m/s] — reset co klatkę w update(). Dla camera shake. */
+  get impactVel() { return this._impactVelThisFrame ?? 0; }
 
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
@@ -724,6 +740,8 @@ export class Car extends Entity {
    */
   update(dt, input, audio) {
     this._dt = dt;
+    this._impactVelThisFrame = 0;  // reset — kolizje z tej klatki nadpiszą wartość
+
     // Gaz do przodu: W / ArrowUp / R2
     const fwdK       = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
     // Cofanie / hamulec: S / ArrowDown / L2
@@ -851,6 +869,14 @@ export class Car extends Entity {
     wInfos[2].frictionSlip = fR;  // RL
     wInfos[3].frictionSlip = fR;  // RR
 
+    // ── Downforce — docisk aerodynamiczny przy dużej prędkości ──────────────
+    // F_down = k * v² [N]. Przy 120 km/h (33 m/s): 0.5 * 33² ≈ 544 N
+    // Poprawia przyczepność i stabilność w zakrętach powyżej ~60 km/h.
+    if (absSpd > 20) {
+      const vMs = absSpd / 3.6;
+      this._chassis.force.y -= 0.50 * vMs * vMs;
+    }
+
     // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
     const hornDown = input.isDown('KeyH') || input.isPadButtonDown(3);
     if (hornDown) audio?.startHorn(); else audio?.stopHorn();
@@ -919,6 +945,29 @@ export class Car extends Entity {
 
     this.root.position.set(pos.x, this._rootY, pos.z);
     this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);
+
+    // ── Body roll/pitch — wizualny przechył nadwozia ──────────────────────
+    // Koła zostają w root (brak roll) — tylko _bodyPivot się przechyla.
+    // speedK: im szybciej, tym silniejszy efekt; brak efektu przy parkowaniu.
+    const speedK = Math.abs(this._speedKmh ?? 0);
+    const speedFacRoll  = Math.min(1, speedK / 80);   // pełny roll od 80 km/h
+    const speedFacPitch = Math.min(1, speedK / 60);   // pełny pitch od 60 km/h
+
+    // Roll: przechył w zakręcie — przeciwny do kierunku skrętu
+    // _steer > 0 = lewy skręt → ciało przechyla się w prawo (rotation.z ujemne)
+    const targetRoll = -(this._steer ?? 0) * speedFacRoll * 0.072;  // max ≈ 4°
+
+    // Pitch: nurkowanie przy hamowaniu, squat przy gazie
+    // rotation.x > 0 = przód unosi się (gaz); < 0 = przód nurkuje (hamowanie)
+    const targetPitch = ((this._throttle ?? 0) - (this._brake ?? 0)) * speedFacPitch * 0.048; // max ≈ 2.7°
+
+    this._bodyRoll  += (targetRoll  - this._bodyRoll)  * (1 - Math.exp(-dt * 6));
+    this._bodyPitch += (targetPitch - this._bodyPitch) * (1 - Math.exp(-dt * 5));
+
+    if (this._bodyPivot) {
+      this._bodyPivot.rotation.z = this._bodyRoll;
+      this._bodyPivot.rotation.x = this._bodyPitch;
+    }
 
     // Per-koło: zawieszenie + obrót + skręt
     const avgSuspLen = (wi[0].suspensionLength + wi[1].suspensionLength

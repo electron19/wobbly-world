@@ -292,7 +292,38 @@ export class Game {
     const autoFacing = this._drivingCar
       ? this._drivingCar.facing
       : this.player.facing;
-    this.camCtrl.update(followPos, this.input.mouse, dt, autoFacing);
+
+    // Camera shake — przy uderzeniu pojazdu
+    if (this._drivingCar) {
+      const iv = this._drivingCar.impactVel;
+      if (iv > 4) {
+        // trauma 0..0.85; pełny shake dopiero przy vel ≥ 20 m/s
+        this.camCtrl.addTrauma(Math.min(0.85, (iv - 4) / 16));
+      }
+    }
+
+    // Steer/speed do przechylenia kamery (ze znakiem — kamera nachyla się w zakrętach)
+    const camSteerSign = this._drivingCar ? (this._drivingCar._steer ?? 0) : 0;
+    const camSpeedFrac = this._drivingCar
+      ? Math.min(1, Math.abs(this._drivingCar.speedKmh ?? 0) / 160)
+      : 0;
+
+    this.camCtrl.update(
+      followPos, this.input.mouse, dt, autoFacing,
+      camSteerSign, camSpeedFrac,
+    );
+
+    // ── Dynamic FOV — poczucie prędkości ────────────────────────────────────
+    if (this._drivingCar) {
+      const sf = Math.min(1, Math.abs(this._drivingCar.speedKmh ?? 0) / 200);
+      const targetFov = 65 + sf * 20;   // 65 (spoczynek) → 85 (200 km/h)
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 3));
+      this.camera3.updateProjectionMatrix();
+    } else if (Math.abs(this.camera3.fov - 65) > 0.1) {
+      // Wróć do bazowego FOV gdy pieszo
+      this.camera3.fov += (65 - this.camera3.fov) * (1 - Math.exp(-dt * 3));
+      this.camera3.updateProjectionMatrix();
+    }
 
     this.renderer.render(this.scene, this.camera3);
 
