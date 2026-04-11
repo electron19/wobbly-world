@@ -18,9 +18,9 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
 const MAX_ENGINE_FORCE   = 18000; // N na koło tylne (mocne przyspieszenie)
-const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
+const MAX_BRAKE_FORCE    = 1500;  // Nm hamowania — ~6 m/s² przy pełnym nacisku (~0.6g)
 const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
-const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
+const HAND_BRAKE_FORCE   = 4000;  // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)

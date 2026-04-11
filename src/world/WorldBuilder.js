@@ -528,8 +528,9 @@ export class WorldBuilder {
 
 
     // Domy w CBD wschodnim
-    this._house(P[2],  78, -40, FW, { roofStyle: 'flat', floors: 2 });
-    this._house(P[3],  78,  40, FW, { roofStyle: 'pitched' });
+    // Przesunięte z (78,±40) → (92,±40): sklep przy x=74 sięga do x=78.5, dom nie może nachodzić
+    this._house(P[2],  92, -40, FW, { roofStyle: 'flat', floors: 2 });
+    this._house(P[3],  92,  40, FW, { roofStyle: 'pitched' });
     this._house(P[4], 114, -20, FW, { roofStyle: 'dome', w: 4.5, d: 4.5 });
     this._house(P[5], 114,  20, FW, { roofStyle: 'flat' });
 
@@ -553,8 +554,9 @@ export class WorldBuilder {
 
 
     // Domy w CBD zachodnim
-    this._house(P[6], -78, -40, FE, { roofStyle: 'flat', floors: 2 });
-    this._house(P[7], -78,  40, FE, { roofStyle: 'pitched', hasChimney: true });
+    // Przesunięte z (-78,±40) → (-92,±40): sklep przy x=-74 sięga do x=-78.5, dom nie może nachodzić
+    this._house(P[6], -92, -40, FE, { roofStyle: 'flat', floors: 2 });
+    this._house(P[7], -92,  40, FE, { roofStyle: 'pitched', hasChimney: true });
     this._house(P[8],-114, -20, FE, { roofStyle: 'dome', w: 4.5, d: 4.5 });
     this._house(P[9],-114,  20, FE, { roofStyle: 'flat' });
   }
@@ -815,13 +817,15 @@ export class WorldBuilder {
     this._house(P[1],  50,-186, FS, { roofStyle: 'dome' });
 
     // Kamienice — zewnętrzny pas NW (x∈[-125,-70])
-    this._brick( -80,-164, FE, { floors: 3, brickColor: 0x7B4030 });
+    // Przesunięte z (-80,-164) → (-110,-162): magazyn przy x=-86 sięga do x=-75, kamienica musi być dalej
+    this._brick(-110,-162, FE, { floors: 3, brickColor: 0x7B4030 });
     this._house(P[2],-100,-170, FE, { roofStyle: 'flat' });
     this._house(P[3],-118,-164, FE, { roofStyle: 'pitched', hasChimney: true });
     this._house(P[4], -84,-184, FS, { roofStyle: 'dome', w: 4.5, d: 4.5 });
 
     // Kamienice — zewnętrzny pas NE (x∈[70,125])
-    this._brick(  80,-164, FW, { floors: 3, brickColor: 0x6B3828 });
+    // Przesunięte z (80,-164) → (110,-162): magazyn przy x=86 sięga do x=97, kamienica musi być dalej
+    this._brick( 110,-162, FW, { floors: 3, brickColor: 0x6B3828 });
     this._house(P[5],  98,-170, FW, { roofStyle: 'flat', floors: 2 });
     this._house(P[6], 118,-164, FW, { roofStyle: 'dome' });
     this._house(P[7],  84,-184, FS, { roofStyle: 'pitched' });
@@ -841,7 +845,8 @@ export class WorldBuilder {
 
     // Domy — wewnętrzny pas SW
     this._house(P[8], -16, 162, FN, { roofStyle: 'flat' });
-    this._house(P[9], -36, 168, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
+    // Przesunięty z (-36,168) → (-46,168): kościół przy x=-30 sięga do x=-35, dom nie może nachodzić
+    this._house(P[9], -46, 168, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
     this._house(P[0], -54, 162, FN, { roofStyle: 'pitched', hasChimney: true });
     this._house(P[1], -20, 182, FN, { roofStyle: 'flat', floors: 2 });
     this._house(P[2], -48, 186, FN, { roofStyle: 'pitched' });
@@ -854,13 +859,15 @@ export class WorldBuilder {
     this._house(P[7],  50, 186, FN, { roofStyle: 'pitched' });
 
     // Kamienice — zewnętrzny pas SW
-    this._brick( -80, 164, FE, { floors: 4, brickColor: 0x8B4030 });
+    // Przesunięte z (-80,164) → (-110,162): magazyn przy x=-86 sięga do x=-76, kamienica musi być dalej
+    this._brick(-110, 162, FE, { floors: 4, brickColor: 0x8B4030 });
     this._house(P[8],-100, 170, FE, { roofStyle: 'flat', floors: 2 });
     this._house(P[9],-118, 164, FE, { roofStyle: 'pitched' });
     this._house(P[0], -84, 184, FN, { roofStyle: 'dome' });
 
     // Kamienice — zewnętrzny pas SE
-    this._brick(  80, 164, FW, { floors: 4, brickColor: 0x7B3828 });
+    // Przesunięte z (80,164) → (110,162): magazyn przy x=86 sięga do x=96, kamienica musi być dalej
+    this._brick( 110, 162, FW, { floors: 4, brickColor: 0x7B3828 });
     this._house(P[1],  98, 170, FW, { roofStyle: 'flat' });
     this._house(P[2], 118, 164, FW, { roofStyle: 'pitched', hasChimney: true });
     this._house(P[3],  82, 184, FN, { roofStyle: 'dome', w: 4.5, d: 4.5 });
