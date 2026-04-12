@@ -155,8 +155,9 @@ export class VehiclePhysics {
 
   /** Krok fizyki z sub-stepowaniem — lepsza detekcja kolizji przy wysokich prędkościach. */
   step(dt) {
-    // fixedStep 1/120s + max 4 substepy = do 240 kroków/s przy 60fps
-    // Eliminuje tunelowanie przez wzgórza i mury przy Vmax 260 km/h
-    this.world.step(1 / 120, dt, 4);
+    // fixedStep 1/120s + max 8 substepów = do 480 kroków/s przy 60fps
+    // Przy 15fps (dt=67ms): potrzeba 8 substepów → fizyka nadąża za czasem rzeczywistym.
+    // Poprzednia wartość maxSubSteps=4 powodowała, że przy <25fps fizyka zwalniała (odczucie smoły).
+    this.world.step(1 / 120, dt, 8);
   }
 }

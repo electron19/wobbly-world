@@ -23,7 +23,7 @@ const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
 const HAND_BRAKE_FORCE   = 4000;  // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
-const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
+const STEER_SPEED      = 10.0;   // szybkość rampy kierownicy (1/s) — τ=0.1s → 90% skrętu w ~230ms (było 3.2 → 720ms, czuć smołę)
 const MAX_SPEED_KMH    = 400;    // limit prędkości do przodu
 const MAX_REV_KMH      = 35;     // limit cofania
 
@@ -751,8 +751,8 @@ export class Car extends Entity {
 
     // Analogowe wygładzanie — narastanie szybsze niż opadanie (jak fizyczny pedał)
     // 1-exp(-dt/tau): prawidłowe frame-rate-independent wygładzanie (dt/tau działa tylko gdy dt<<tau)
-    const tauOn  = 0.08;  // 80 ms narastania  (szybka odpowiedź)
-    const tauOff = 0.05;  // 50 ms opadania    (szybkie puszczenie → brak poślizgu po puszczeniu)
+    const tauOn  = 0.04;  // 40 ms narastania  (było 80ms — zbyt wolne, czuć smołę przy ruszaniu)
+    const tauOff = 0.04;  // 40 ms opadania
     this._throttle += (rawFwd - this._throttle) * (1 - Math.exp(-dt / (rawFwd > this._throttle ? tauOn : tauOff)));
     this._brake    += (rawBack - this._brake)    * (1 - Math.exp(-dt / (rawBack > this._brake  ? tauOn : tauOff)));
 
