@@ -789,29 +789,21 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
     }
 
-    // Tarcie wzdłużne kół — per koło (przód ≠ tył) × nawierzchnia
-    const fF = onRoad ? 1.5 : (onSidewalk ? 1.3 : 0.9);
+    // Tarcie wzdłużne kół — niskie wartości (< 1.0) eliminują oscylacje "pulsującego hamowania"
+    // frictionSlip > 1.0 powoduje, że koła generują siły poza zakresem normalnej pracy → pulsacja
+    const BASE_F = onRoad ? 0.85 : (onSidewalk ? 0.75 : 0.60);
 
-    const launching  = speedKmh > -1 && absSpd < 40;
-    const launchT    = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
-    const brakingNow = backAmount > 0.10;
-    const cornerT    = Math.abs(this._steer) * Math.min(1, absSpd / 60);
+    // Tylne koła: delikatna redukcja przy poślizgu startowym i zakrętach = naturalny oversteer
+    const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
     this._cornerT = cornerT;
+    const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 0.30;
+    const cornerSlip = cornerT * 0.28;
+    const fR = Math.max(0.28, BASE_F - launchSlip - cornerSlip);
 
-    let fR;
-    if (brakingNow) {
-      fR = fF;
-    } else if (onRoad) {
-      fR = Math.max(0.35, 1.3 - launchT * 0.80 - cornerT * 0.45);
-    } else if (onSidewalk) {
-      fR = Math.max(0.35, 1.1 - launchT * 0.70 - cornerT * 0.40);
-    } else {
-      fR = Math.max(0.6, 0.8 - cornerT * 0.15);
-    }
-    this._vehicle.setWheelFrictionSlip(0, fF);  // FL
-    this._vehicle.setWheelFrictionSlip(1, fF);  // FR
-    this._vehicle.setWheelFrictionSlip(2, fR);  // RL
-    this._vehicle.setWheelFrictionSlip(3, fR);  // RR
+    this._vehicle.setWheelFrictionSlip(0, BASE_F);  // FL
+    this._vehicle.setWheelFrictionSlip(1, BASE_F);  // FR
+    this._vehicle.setWheelFrictionSlip(2, fR);      // RL
+    this._vehicle.setWheelFrictionSlip(3, fR);      // RR
 
     // Downforce aerodynamiczny — Rapier: addForce({x,y,z}, wake)
     if (absSpd > 20) {
