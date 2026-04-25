@@ -256,10 +256,13 @@ export class Game {
 
     // ── 3. Krok Rapier — auto + gracz + świat w jednym symulatorze ───────
     if (this._drivingCar) {
-      // Gracz niewidoczny jedzie razem z autem (pozycja kinematyczna)
+      // Gracz niewidoczny — ustaw capsule NAD autem (nie w środku chassis),
+      // żeby kinematic body nie generowało sił na dynamic chassis i auto nie latało.
+      // cp.y + 0.7 trafiał w chassis box (center y≈0.75, ±0.45) → penetracja.
+      // cp.y + 4 jest nad dachem (dach ≈ cp.y + 2) — zero kontaktu.
       const cp = this._drivingCar.root.position;
       this.player._body.setNextKinematicTranslation({
-        x: cp.x, y: cp.y + 0.7, z: cp.z,
+        x: cp.x, y: cp.y + 4, z: cp.z,
       });
       // Dźwięk poślizgu
       const carOnRoad  = isOnRoad(cp.x, cp.z);
