@@ -9,10 +9,12 @@ import { SEED }                     from './core/RNG.js';
 import { AudioManager }             from './core/AudioManager.js';
 import { isOnRoad }                 from './world/zones.js';
 
-const PLAYER_SPAWN  = { x: 0, y: 1.5, z: 34 };
-const ENTER_DIST    = 3.8;   // max odległość do wejścia do auta
-const CAM_DIST_FOOT = 8;     // dystans kamery pieszo
-const CAM_DIST_CAR  = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
+const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
+const ENTER_DIST        = 3.8;   // max odległość do wejścia do auta
+const BUILDING_DIST     = 2.8;   // max odległość do drzwi budynku
+const CAM_DIST_FOOT     = 8;     // dystans kamery pieszo
+const CAM_DIST_CAR      = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
+const CAM_DIST_INTERIOR = 4.5;   // kamera wewnątrz budynku (małe pomieszczenie)
 
 /**
  * Główna klasa gry — orkiestrator.
@@ -43,8 +45,10 @@ export class Game {
     this.camCtrl        = null;
     this.player         = null;
     this.cars           = [];
+    this.buildings      = [];
     this.audio          = new AudioManager();
     this._drivingCar    = null;
+    this._insideBuilding = null;
     this._knockableLamps = [];
     this._eWasDown      = false;
     this._lastTs        = 0;
@@ -91,6 +95,7 @@ export class Game {
     const wb  = new WorldBuilder(this.scene, this.physics, this.vehiclePhysics);
     wb.build();
     this.cars          = wb.cars;
+    this.buildings     = wb.buildings;
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -150,6 +155,42 @@ export class Game {
     }
   }
 
+  // ─── Interakcja z budynkami ───────────────────────────────────────────────
+
+  /** Znajdź najbliższy dom z otwartymi drzwiami w zasięgu BUILDING_DIST. */
+  _nearestBuilding() {
+    if (this._drivingCar) return null;
+    const pp = this.player.root.position;
+    let best = null, bestD = BUILDING_DIST;
+    for (const b of this.buildings) {
+      if (!b.hasInterior) continue;
+      const dp = b.getDoorApproachPos();
+      const d  = Math.hypot(pp.x - dp.x, pp.z - dp.z);
+      if (d < bestD) { bestD = d; best = b; }
+    }
+    return best;
+  }
+
+  _enterBuilding(b) {
+    this._insideBuilding = b;
+    b.setInsideView(true);
+    const sp = b.getInteriorSpawnPos();
+    this.player._body.setNextKinematicTranslation({ x: sp.x, y: sp.y, z: sp.z });
+    this.camCtrl.dist = CAM_DIST_INTERIOR;
+    this._uiEl.innerHTML = 'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; E – wyjdź';
+  }
+
+  _exitBuilding() {
+    const b  = this._insideBuilding;
+    b.setInsideView(false);
+    this._insideBuilding = null;
+    const ep = b.getExitPos();
+    this.player._body.setNextKinematicTranslation({ x: ep.x, y: ep.y, z: ep.z });
+    this.camCtrl.dist = CAM_DIST_FOOT;
+    this._uiEl.innerHTML =
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
+  }
+
   // ─── Interakcja z autem ───────────────────────────────────────────────────
 
   /** Znajdź najbliższe auto w zasięgu ENTER_DIST. */
@@ -199,7 +240,7 @@ export class Game {
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
   }
 
-  /** Obsługa wejścia/wyjścia z auta + hint UI. */
+  /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
   _updateInteraction() {
     const eDown    = this.input.isDown('KeyE');
     const ePressed = (eDown && !this._eWasDown) || this.input.isPadButtonPressed(2);
@@ -208,21 +249,36 @@ export class Game {
     if (ePressed) {
       if (this._drivingCar) {
         this._exitCar();
+      } else if (this._insideBuilding) {
+        this._exitBuilding();
       } else {
-        const near = this._nearestCar();
-        if (near) this._enterCar(near);
+        const nearCar  = this._nearestCar();
+        const nearBldg = this._nearestBuilding();
+        if (nearCar)        this._enterCar(nearCar);
+        else if (nearBldg)  this._enterBuilding(nearBldg);
       }
     }
 
-    // Hint "E — wsiądź / wysiądź"
+    // Hint UI
     if (this._interactEl) {
       if (this._drivingCar) {
         this._interactEl.textContent = 'E — wysiądź';
         this._interactEl.style.display = 'block';
+      } else if (this._insideBuilding) {
+        this._interactEl.textContent = 'E — wyjdź';
+        this._interactEl.style.display = 'block';
       } else {
-        const near = this._nearestCar();
-        this._interactEl.style.display = near ? 'block' : 'none';
-        if (near) this._interactEl.textContent = 'E — wsiądź';
+        const nearCar  = this._nearestCar();
+        const nearBldg = this._nearestBuilding();
+        if (nearCar) {
+          this._interactEl.textContent = 'E — wsiądź';
+          this._interactEl.style.display = 'block';
+        } else if (nearBldg) {
+          this._interactEl.textContent = 'E — wejdź';
+          this._interactEl.style.display = 'block';
+        } else {
+          this._interactEl.style.display = 'none';
+        }
       }
     }
   }

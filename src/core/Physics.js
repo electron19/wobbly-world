@@ -55,6 +55,18 @@ export class PhysicsWorld {
     return body;
   }
 
+  /** Statyczny prostopadłościan z rotacją Y — dla ścian obracanych budynków. */
+  addStaticBoxRotated(x, y, z, hw, hh, hd, rotY = 0) {
+    const sinH = Math.sin(rotY / 2), cosH = Math.cos(rotY / 2);
+    const body = this.world.createRigidBody(
+      R.RigidBodyDesc.fixed()
+        .setTranslation(x, y, z)
+        .setRotation({ x: 0, y: sinH, z: 0, w: cosH })
+    );
+    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    return body;
+  }
+
   /** Statyczny cylinder (pnie drzew, słupy, poręcze) */
   addStaticCylinder(x, y, z, hh, r) {
     const body = this.world.createRigidBody(

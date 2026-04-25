@@ -54,6 +54,7 @@ export class House extends Building {
       facing:     0,
       ...cfg,
     }, vehiclePhysics);
+    this.hasInterior = true;
   }
 
   _buildGeometry() {
@@ -75,33 +76,7 @@ export class House extends Building {
     // ── ŚCIANY ────────────────────────────────────────────────────────────────
     this._box(0, H / 2, 0, w, H, d, wallMat);
 
-    // ── DACH ──────────────────────────────────────────────────────────────────
-    if (roofStyle === 'pitched') {
-      const cone = new THREE.Mesh(
-        new THREE.ConeGeometry(Math.max(w, d) * 0.76, roofH, 4),
-        roofMat,
-      );
-      cone.position.set(0, H + roofH / 2, 0);
-      cone.rotation.y = Math.PI / 4;
-      cone.castShadow = true;
-      addOutline(cone, 0.04);
-      this.root.add(cone);
-    } else if (roofStyle === 'flat') {
-      this._box(0, H + 0.175, 0, w + 0.4, 0.35, d + 0.4, roofMat);
-      // Gzyms górny
-      const edge = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.3, d + 0.5), trimMat);
-      edge.position.set(0, H + 0.5, 0);
-      this.root.add(edge);
-    } else if (roofStyle === 'dome') {
-      const dome = new THREE.Mesh(
-        new THREE.SphereGeometry(Math.max(w, d) * 0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
-        roofMat,
-      );
-      dome.position.set(0, H, 0);
-      dome.castShadow = true;
-      addOutline(dome, 0.04);
-      this.root.add(dome);
-    }
+    // Dach tworzony jest w _buildRoofMesh() (po scalaniu) — tutaj pominięty.
 
     // ── KOMIN ─────────────────────────────────────────────────────────────────
     if (hasChimney) {
@@ -254,16 +229,159 @@ export class House extends Building {
     });
   }
 
+  // ─── Dach (osobny mesh — ukrywany gdy gracz jest w środku) ──────────────────
+
+  _buildRoofMesh() {
+    const { w, h, d, roofColor, trimColor, roofStyle, roofH, floors, hasChimney } = this.cfg;
+    const roofMat = toonMat(roofColor);
+    const trimMat = toonMat(trimColor);
+    const H = h * floors;
+
+    const roofGroup = new THREE.Group();
+
+    if (roofStyle === 'pitched') {
+      const cone = new THREE.Mesh(
+        new THREE.ConeGeometry(Math.max(w, d) * 0.76, roofH, 4),
+        roofMat,
+      );
+      cone.position.set(0, H + roofH / 2, 0);
+      cone.rotation.y = Math.PI / 4;
+      cone.castShadow = true;
+      addOutline(cone, 0.04);
+      roofGroup.add(cone);
+    } else if (roofStyle === 'flat') {
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.35, d + 0.4), roofMat);
+      slab.position.set(0, H + 0.175, 0);
+      roofGroup.add(slab);
+      const edge = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.3, d + 0.5), trimMat);
+      edge.position.set(0, H + 0.5, 0);
+      roofGroup.add(edge);
+    } else if (roofStyle === 'dome') {
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(Math.max(w, d) * 0.6, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.5),
+        roofMat,
+      );
+      dome.position.set(0, H, 0);
+      dome.castShadow = true;
+      addOutline(dome, 0.04);
+      roofGroup.add(dome);
+    }
+
+    if (hasChimney) {
+      const ch = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.6, 0.55), toonMat(0x8B5E3C));
+      ch.position.set(w * 0.28, H + roofH * 0.4, -d * 0.2);
+      ch.castShadow = true;
+      addOutline(ch, 0.04);
+      roofGroup.add(ch);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.32, 0.2, 8), toonMat(0x6B4226));
+      cap.position.set(w * 0.28, H + roofH * 0.4 + 0.9, -d * 0.2);
+      roofGroup.add(cap);
+    }
+
+    this.root.add(roofGroup);
+    this._roofMesh = roofGroup;
+  }
+
+  // ─── Wnętrze (podłoga + meble) ────────────────────────────────────────────
+
+  _buildInterior() {
+    const { w, h, d, floors } = this.cfg;
+    const H = h * floors;
+
+    const g = new THREE.Group();
+
+    // Podłoga — jaśniejszy drewniany kolor
+    const floorMat = toonMat(0xC8954A);
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(w - 0.46, 0.06, d - 0.46), floorMat);
+    floor.position.set(0, 0.03, 0);
+    g.add(floor);
+
+    // Dywan — ciemno-czerwony, pośrodku pokoju
+    const rugMat = toonMat(0xA02020);
+    const rug = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.04, d * 0.55), rugMat);
+    rug.position.set(0, 0.05, 0);
+    g.add(rug);
+
+    // Stół — brązowy blat + 4 nogi
+    const tableMat = toonMat(0x8B5E3C);
+    const tabTop = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.07, 0.75), tableMat);
+    tabTop.position.set(0, 0.75, 0.2);
+    g.add(tabTop);
+    [[-0.56, -0.30], [0.56, -0.30], [-0.56, 0.70], [0.56, 0.70]].forEach(([lx, lz]) => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.75, 0.08), tableMat);
+      leg.position.set(lx, 0.375, lz);
+      g.add(leg);
+    });
+
+    // Krzesła — 2 po obu stronach stołu
+    const chairMat = toonMat(0x6D4C2A);
+    [[-0.9, 0.2], [0.9, 0.2]].forEach(([lx, lz]) => {
+      const seat = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.46), chairMat);
+      seat.position.set(lx, 0.46, lz);
+      g.add(seat);
+      const back = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.48, 0.06), chairMat);
+      back.position.set(lx, 0.70, lz + (lx < 0 ? 0.20 : -0.20));
+      g.add(back);
+      [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].forEach(([cx, cz]) => {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.46, 0.06), chairMat);
+        leg.position.set(lx + cx, 0.23, lz + cz);
+        g.add(leg);
+      });
+    });
+
+    // Kanapa — przy tylnej ścianie
+    const sofaMat = toonMat(0x4A7A8A);
+    const sofaSeat = new THREE.Mesh(new THREE.BoxGeometry(1.80, 0.36, 0.55), sofaMat);
+    sofaSeat.position.set(0, 0.28, -(d / 2 - 0.62));
+    g.add(sofaSeat);
+    const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(1.80, 0.50, 0.18), sofaMat);
+    sofaBack.position.set(0, 0.61, -(d / 2 - 0.34));
+    g.add(sofaBack);
+    [-0.84, 0.84].forEach(lx => {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.52, 0.55), sofaMat);
+      arm.position.set(lx, 0.36, -(d / 2 - 0.62));
+      g.add(arm);
+    });
+
+    // Telewizor — na stoliku przy ścianie bocznej
+    const tvStandMat = toonMat(0x333333);
+    const tvStand = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.35, 0.38), tvStandMat);
+    tvStand.position.set(w / 2 - 0.44, 0.175, -(d / 2 - 0.70));
+    g.add(tvStand);
+    const tvMat = toonMat(0x111111);
+    const tv = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.78), tvMat);
+    tv.position.set(w / 2 - 0.38, 0.70, -(d / 2 - 0.70));
+    g.add(tv);
+    // Ekran (lekko jaśniejszy)
+    const screenMat = toonMat(0x1A2A3A);
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.44, 0.66), screenMat);
+    screen.position.set(w / 2 - 0.34, 0.70, -(d / 2 - 0.70));
+    g.add(screen);
+
+    g.visible = false;
+    this.root.add(g);
+    this._interiorGroup = g;
+  }
+
+  // ─── Pozycje dla interakcji z graczem ─────────────────────────────────────
+
+  /** Punkt przed drzwiami (do wykrywania gracz ← → budynek). */
+  getDoorApproachPos()  { return this._localToWorld(0, 0, this.cfg.d / 2 + 1.8); }
+  /** Pozycja spawnu gracza wewnątrz (tuż za progiem). */
+  getInteriorSpawnPos() { return this._localToWorld(0, 1.0, this.cfg.d / 2 - 1.0); }
+  /** Pozycja wysiadania — przed drzwiami. */
+  getExitPos()          { return this._localToWorld(0, 1.0, this.cfg.d / 2 + 2.2); }
+
+  // ─── Kolizje ──────────────────────────────────────────────────────────────
+
   /**
-   * Kolider budynku obejmuje pełną wysokość łącznie z dachem,
-   * dzięki czemu dachy są solidne i można po nich chodzić.
-   *
-   *   pitched → ściana + ostrosłup (totalH = H + roofH)
-   *   flat    → ściana + płaski dach (totalH = H + 0.50)
-   *   dome    → ściana + kopuła (totalH = H + promień kopuły)
+   * Dom z wnętrzem: 1 solid box (exterior) + 5 hollow wall bodies.
+   * Solid włączony domyślnie; hollow włączane przez setInsideView(true).
+   * Solid obejmuje cały budynek łącznie z dachem.
+   * Hollow to 4 ściany z otworem drzwiowym + cap dachu (zawsze solid).
    */
   _buildColliders(wx, wy, wz) {
-    const { w, h, d, floors, roofStyle, roofH } = this.cfg;
+    const { w, h, d, floors, roofStyle, roofH, facing = 0 } = this.cfg;
     const H = h * floors;
 
     let capH;
@@ -276,14 +394,53 @@ export class House extends Building {
     }
 
     const totalH = H + capH;
-    this._addPhysicsBox(wx, wy + totalH / 2, wz, w / 2, totalH / 2, d / 2);
+
+    // ── Solid box (exterior) — wyłączany gdy gracz wewnątrz ─────────────────
+    this._solidBody = this._addPhysicsBoxRotated(wx, wy + totalH / 2, wz, w / 2, totalH / 2, d / 2, facing);
+
+    // ── Hollow walls — włączane gdy gracz wewnątrz ───────────────────────────
+    const WT   = 0.22;   // grubość ściany
+    const DW   = 0.95;   // szerokość otworu drzwiowego
+    const DH   = 1.92;   // wysokość otworu drzwiowego
+    const cosF = Math.cos(facing), sinF = Math.sin(facing);
+
+    // Przelicz lokalną pozycję ściany na world space
+    const wp = (lx, ly, lz) => ({
+      x: wx + lx * cosF + lz * sinF,
+      y: wy + ly,
+      z: wz - lx * sinF + lz * cosF,
+    });
+
+    const addWall = (lx, ly, lz, hw, hh, hd) => {
+      const p = wp(lx, ly, lz);
+      const b = this._addPhysicsBoxRotated(p.x, p.y, p.z, hw, hh, hd, facing);
+      b.setEnabled(false);
+      this._hollowBodies.push(b);
+    };
+
+    // Ściana przednia (z otworem na drzwi) — 2 panele boczne + opcjonalny nadproże
+    const sideW = (w - DW) / 2;
+    if (sideW > 0.05) {
+      addWall(-(DW / 2 + sideW / 2), H / 2, d / 2 - WT / 2, sideW / 2, H / 2, WT / 2);
+      addWall( (DW / 2 + sideW / 2), H / 2, d / 2 - WT / 2, sideW / 2, H / 2, WT / 2);
+    }
+    if (H > DH) {
+      const nadH = H - DH;
+      addWall(0, DH + nadH / 2, d / 2 - WT / 2, w / 2, nadH / 2, WT / 2);
+    }
+    // Ściana tylna
+    addWall(0, H / 2, -(d / 2 - WT / 2), w / 2, H / 2, WT / 2);
+    // Ściany boczne
+    addWall(-(w / 2 - WT / 2), H / 2, 0, WT / 2, H / 2, d / 2);
+    addWall( (w / 2 - WT / 2), H / 2, 0, WT / 2, H / 2, d / 2);
+
+    // Cap dachu (zawsze solid — uniemożliwia wejście przez dach z zewnątrz)
+    this._addPhysicsBox(wx, wy + H + capH / 2, wz, w / 2, capH / 2, d / 2);
 
     // ── Kolumny ganku ─────────────────────────────────────────────────────────
-    const { hasPorch, facing = 0 } = this.cfg;
+    const { hasPorch } = this.cfg;
     if (hasPorch) {
       const postHH = H * 0.35;          // połowa wysokości kolumny
-      const cosF = Math.cos(facing);
-      const sinF = Math.sin(facing);
       [-1, 1].forEach(s => {
         const lx = s * w * 0.33;        // pozycja lokalna X
         const lz = d / 2 + 1.4;        // pozycja lokalna Z (przed wejściem)

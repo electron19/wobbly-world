@@ -33,6 +33,12 @@ export class Building extends WorldObject {
       winColor:  C.window,
       ...cfg,
     };
+    // Wnętrze budynku
+    this.hasInterior   = false;  // subklasy ustawiają true jeśli obsługują wejście
+    this._roofMesh     = null;   // Group/Mesh dachu — ukrywany gdy gracz jest w środku
+    this._interiorGroup = null;  // Group mebli/podłogi — widoczny tylko w środku
+    this._solidBody    = null;   // główny solid kolider (wyłączany gdy w środku)
+    this._hollowBodies = [];     // ściany z otworem na drzwi (włączane gdy w środku)
   }
 
   // ─── Pomocniki dla subklas ─────────────────────────────────────────────────
@@ -110,10 +116,50 @@ export class Building extends WorldObject {
     return body;
   }
 
+  /** Dodaj rotowany statyczny box (dla ścian obracanych budynków). */
+  _addPhysicsBoxRotated(wx, wy, wz, hw, hh, hd, rotY = 0) {
+    const body = this.physics.addStaticBoxRotated(wx, wy, wz, hw, hh, hd, rotY);
+    this._bodies.push(body);
+    return body;
+  }
+
+  /**
+   * Przelicz lokalne współrzędne budynku na world space.
+   * Używa pozycji i rotacji Y tego.root (ustawianej przez facing w _buildGeometry).
+   */
+  _localToWorld(lx, ly, lz) {
+    const f  = this.root.rotation.y;
+    const cf = Math.cos(f), sf = Math.sin(f);
+    return new THREE.Vector3(
+      this.root.position.x + lx * cf + lz * sf,
+      this.root.position.y + ly,
+      this.root.position.z - lx * sf + lz * cf,
+    );
+  }
+
+  /**
+   * Przełącz widok wnętrza/zewnętrza.
+   * Subklasy z hasInterior=true muszą mieć _solidBody i _hollowBodies.
+   */
+  setInsideView(inside) {
+    this._solidBody?.setEnabled(!inside);
+    for (const b of this._hollowBodies) b.setEnabled(inside);
+    if (this._roofMesh)      this._roofMesh.visible      = !inside;
+    if (this._interiorGroup) this._interiorGroup.visible  =  inside;
+  }
+
   // ─── Cykl tworzenia ────────────────────────────────────────────────────────
 
-  /** Subklasy nadpisują: dodają meshy do this.root */
+  /** Subklasy nadpisują: dodają meshy do this.root (BEZ dachu). */
   _buildGeometry() {}
+
+  /** Subklasy nadpisują: tworzą dach PO merge jako osobny mesh/grupę.
+   *  Wywoływana po _mergeRoot() — dach NIE jest scalany z resztą geometrii. */
+  _buildRoofMesh(wx, wy, wz) {}
+
+  /** Subklasy nadpisują: tworzą wnętrze (podłoga, meble) PO merge.
+   *  Domyślnie widoczność = false; setInsideView(true) odkrywa. */
+  _buildInterior(wx, wy, wz) {}
 
   /**
    * Domyślne kolizje: jeden box na cały budynek.
@@ -182,11 +228,13 @@ export class Building extends WorldObject {
     for (const m of keepMeshes) this.root.add(m);
   }
 
-  /** Ustaw pozycję + zbuduj geometrię + scal + kolizje */
+  /** Ustaw pozycję + zbuduj geometrię + scal + dach + wnętrze + kolizje */
   placeAt(x, y, z) {
     super.placeAt(x, y, z);
-    this._buildGeometry();
-    this._mergeRoot();
+    this._buildGeometry();         // ściany, okna, drzwi — BEZ dachu
+    this._mergeRoot();             // scala ściany/okna w jeden mesh per materiał
+    this._buildRoofMesh(x, y, z); // dach dodany PO scalaniu → osobny, można ukryć
+    this._buildInterior(x, y, z); // meble/podłoga: początkowo niewidoczne
     this._buildColliders(x, y, z);
     return this;
   }

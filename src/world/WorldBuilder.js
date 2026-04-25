@@ -42,6 +42,7 @@ export class WorldBuilder {
     this.vehiclePhysics = vehiclePhysics;
     this.objects        = [];
     this.cars           = [];
+    this.buildings      = [];  // domy z hasInterior=true — do interakcji E
     this._circles       = []; // exclusion circles — budynki, drzewa omijają je
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
@@ -113,14 +114,16 @@ export class WorldBuilder {
     const w = opts.w ?? 6, d = opts.d ?? 8;
     this._regCircle(x, z, w / 2, d / 2);
     this._addGarden(x, z, facing, w, d);
-    return this._add(new House(this.scene, this.physics, {
+    const h = new House(this.scene, this.physics, {
       wallColor: pal.wall,
       roofColor: pal.roof,
       doorColor: pal.door,
       trimColor:  pal.trim,
       facing,
       ...opts,
-    }, this.vehiclePhysics).placeAt(x, 0, z));
+    }, this.vehiclePhysics).placeAt(x, 0, z);
+    this.buildings.push(h);
+    return this._add(h);
   }
 
   /** Kamienica z cegły — rejestruje koło wykluczenia, stawia budynek. */
