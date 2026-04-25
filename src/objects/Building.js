@@ -102,7 +102,7 @@ export class Building extends WorldObject {
     return mesh;
   }
 
-  /** Dodaj statyczny box w Rapier i (opcjonalnie) cannon-es. */
+  /** Dodaj statyczny box w Rapier. */
   _addPhysicsBox(wx, wy, wz, hw, hh, hd) {
     const body = this.physics.addStaticBox(wx, wy, wz, hw, hh, hd);
     if (this.vehiclePhysics) this.vehiclePhysics.addStaticBox(wx, wy, wz, hw, hh, hd, 'wall');

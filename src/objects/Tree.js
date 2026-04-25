@@ -52,7 +52,7 @@ export class Tree extends WorldObject {
   placeAt(x, y, z) {
     super.placeAt(x, y, z);
     this._build();
-    // Kolizja tylko na pień (cylinder) — Rapier + cannon-es
+    // Kolizja tylko na pień (cylinder) — Rapier
     const { trunkH, trunkR } = this.cfg;
     this._bodies.push(
       this.physics.addStaticCylinder(x, y + trunkH / 2, z, trunkH / 2, trunkR)

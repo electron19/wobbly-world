@@ -1,102 +1,179 @@
-# Wobbly World 🏘️
+# Wobbly World
 
-Gra 3D przeglądarkowa inspirowana Wobbly Life — wobbly postać spaceruje po osiedlu.
+Przeglądarkowa gra 3D w klimacie sandboxowego miasta. Gracz porusza się pieszo, może wsiadać do auta i jeździć po proceduralnie zbudowanym świecie z własną fizyką pojazdu, audio i prostym HUD-em debugowym.
 
 ## Demo
 
-> GitHub Pages: https://electron19.github.io/wobbly-world/
+Produkcja: https://wobbly-world.vercel.app/
+
+## Aktualny stan projektu
+
+- Gameplay jest dziś głównie samochodowy. Piesza postać nadal istnieje, ale służy głównie do poruszania się po świecie i wejścia do auta.
+- Rendering opiera się o Three.js i natywne ES modules, bez bundlera.
+- Projekt używa dziś dwóch silników fizyki:
+- `Rapier` dla gracza, statycznego świata i kolizji postaci.
+- `cannon-es` dla aktualnej dynamiki pojazdu (`RaycastVehicle`).
+- W repo istnieje też izolowany spike `JoltPhysics.js`, uruchamiany osobno przez `?joltSpike=1`. To nie jest jeszcze część głównego gameplayu.
+- Świat budowany jest proceduralnie przez `WorldBuilder`: drogi, chodniki, dzielnice, budynki, lampy, drzewa, wzgórza, auta i granice mapy.
+- Audio jest proceduralne przez Web Audio API: silnik, opony, poślizg, klakson, kroki, skok/lądowanie, pierdnięcie i beknięcie.
 
 ## Stack
 
 | Warstwa | Technologia |
-|---|---|
-| Rendering | Three.js r165 (CDN + ES importmap) |
-| Fizyka | Rapier3D (Rust→WASM, CharacterController) |
-| Format modeli | Proceduralna geometria Three.js (przyszłość: GLTF) |
-| Build tool | brak — ES modules natywnie w przeglądarce |
+| --- | --- |
+| Rendering | Three.js r165 |
+| Fizyka postaci i świata | Rapier3D |
+| Fizyka pojazdu | `cannon-es` (`main`) + eksperymentalnie `JoltPhysics.js` (`?joltSpike=1`) |
+| Audio | Web Audio API |
+| Losowość / seed | `seedrandom` |
+| Build tool | brak, natywne ES modules w przeglądarce |
 
 ## Sterowanie
 
-| Klawisz | Akcja |
-|---|---|
-| `WASD` / strzałki | Ruch |
-| `Spacja` / `Z` | Skok |
-| `Mysz` (klik) | Kamera — pointer lock |
+### Pieszo
+
+| Klawisz / wejście | Akcja |
+| --- | --- |
+| `WASD` / strzałki / lewy analog | ruch |
+| `Spacja` / `Z` / pad `A` | skok |
+| `E` / pad `X` | wejdź do auta / wyjdź z auta |
+| `F` | pierdnięcie |
+| `B` | beknięcie |
+| mysz / prawy analog | kamera |
+| klik w ekran | pointer lock |
+
+### W aucie
+
+| Klawisz / wejście | Akcja |
+| --- | --- |
+| `WASD` / lewy analog / triggery pada | jazda, cofanie, skręt |
+| `Spacja` / pad `B` | hamulec ręczny |
+| `H` / pad `Y` | klakson |
+| `E` / pad `X` | wysiądź |
+| mysz / prawy analog | kamera |
+
+## Główne systemy
+
+- `ThirdPersonCamera`: auto-align za graczem lub autem, tilt w zakrętach i płynny follow bez shake.
+- `Car`: proceduralny model auta, światła, uszkodzenia, wheel slip, body roll/pitch, dym wydechu i synchronizacja `cannon-es` -> `Rapier`.
+- `AudioManager`: proceduralny dźwięk silnika z biegami, opon, poślizgu i efektów postaci.
+- `WorldBuilder`: kompozycja mapy oraz rejestracja obiektów do cullingu i kolizji.
+- `zones.js`: definicje dróg, bezpiecznych punktów oraz typów nawierzchni.
+- `VehiclePhysicsJolt`: osobny spike backendu pojazdu pod przyszłą migrację z `cannon-es`.
 
 ## Architektura
 
-```
+```text
 src/
-├── main.js                  ← async bootstrap
-├── Game.js                  ← game loop (init, _loop)
+├── main.js
+├── Game.js
 ├── core/
-│   ├── Physics.js           ← Rapier3D wrapper
-│   ├── InputManager.js      ← klawiatura + mysz
-│   ├── Camera.js            ← kamera third-person
-│   └── Materials.js         ← toon shading + paleta
+│   ├── AudioManager.js
+│   ├── Camera.js
+│   ├── InputManager.js
+│   ├── Materials.js
+│   ├── Physics.js
+│   ├── RNG.js
+│   ├── VehiclePhysics.js
+│   └── VehiclePhysicsJolt.js
 ├── entities/
-│   ├── Entity.js            ← baza (root + physics body)
-│   └── Player.js            ← gracz (spring squish + CharacterController)
-├── objects/                 ← BIBLIOTEKA obiektów
-│   ├── WorldObject.js       ← baza statycznych obiektów
-│   ├── Building.js          ← abstrakcja budynku
-│   ├── House.js             ← konkretny dom
-│   ├── Tree.js              ← drzewo
-│   └── StreetLamp.js        ← latarnia
+│   ├── Car.js
+│   ├── Entity.js
+│   ├── Player.js
+│   └── PlayerMichaelMyers.js
+├── objects/
+│   ├── BrickBuilding.js
+│   ├── Church.js
+│   ├── Ground.js
+│   ├── Hill.js
+│   ├── House.js
+│   ├── School.js
+│   ├── Shop.js
+│   ├── Skyscraper.js
+│   ├── StreetLamp.js
+│   ├── TowerBlock.js
+│   ├── Tree.js
+│   ├── TriOffice.js
+│   ├── Warehouse.js
+│   ├── WorldObject.js
+│   └── Building.js
 └── world/
-    └── WorldBuilder.js      ← kompozycja sceny
+    ├── WorldBuilder.js
+    └── zones.js
 ```
 
-### Cykl klatki
+## Pętla gry
 
-```
+```text
 input.flush()
-  → player.update(dt)         // oblicz ruch → nextKinematicTranslation
-  → physics.step(dt)          // Rapier rozwiązuje kolizje
-  → player.lateUpdate()       // sync visual z physics
-  → camera.update()
-  → renderer.render()
+  -> updateInteraction()
+  -> car.update(dt) lub player.update(dt)
+  -> vehiclePhysics.step(dt)        // cannon-es
+  -> car.lateUpdate()               // sync vehicle -> Three.js / Rapier
+  -> physics.step(dt)               // Rapier
+  -> player.lateUpdate()
+  -> camera.update(...)
+  -> dynamic FOV + HUD
+  -> renderer.render()
 ```
 
-### Dodawanie nowego obiektu
+## Funkcje aktualne na `main`
 
-```javascript
-// src/objects/Bench.js
-import { WorldObject } from './WorldObject.js';
-export class Bench extends WorldObject {
-  placeAt(x, y, z) {
-    super.placeAt(x, y, z);
-    // 1. Dodaj meshy do this.root (local space)
-    // 2. Dodaj kolizje przez this.physics.addStaticBox(...) (world space)
-    return this;
-  }
-}
+- wejście i wyjście z auta
+- dynamiczne FOV zależne od prędkości
+- płynna kamera z tilt w zakrętach
+- body roll i pitch nadwozia
+- proceduralne audio silnika, opon, poślizgu i klaksonu
+- rozległy świat z kilkoma strefami zabudowy
+- debug HUD z FPS, pozycją i prędkością
+- uszkodzenia reflektorów i tylnych świateł
 
-// W WorldBuilder.js:
-import { Bench } from '../objects/Bench.js';
-this._add(new Bench(this.scene, this.physics).placeAt(3, 0, 5));
+## Jolt Spike
+
+Repo zawiera izolowany spike pod przyszłą migrację warstwy pojazdu z `cannon-es` do `JoltPhysics.js`.
+
+Uruchomienie:
+
+```text
+http://localhost:8080/?joltSpike=1
 ```
 
-### Wnętrza budynków (roadmap)
+Aktualny zakres spike'a:
 
-Drzwi = Rapier sensor collider → game.transitionTo(new HouseInterior(building))
+- ładuje `JoltPhysics.js` bez bundlera przez importmapę
+- uruchamia osobny backend `src/core/VehiclePhysicsJolt.js`
+- stawia płaską scenę testową i jedno proste testowe auto/chassis
+- działa osobno od głównego świata i nie przepina jeszcze `Car.js`
+
+Obecne ograniczenia spike'a:
+
+- nie zastępuje jeszcze gameplayu na `main`
+- nie ma jeszcze sterowania autem Jolta
+- nie ma jeszcze integracji z `WorldBuilder`, nawierzchniami i wheel state z docelowego adaptera
 
 ## Uruchomienie lokalne
 
-Wymaga serwera HTTP (ES modules nie działają na `file://`):
+Wymagany jest lokalny serwer HTTP.
 
 ```bash
 npx serve .
-# lub
+# albo
 python3 -m http.server 8080
 ```
 
-Następnie otwórz: http://localhost:8080/
+Następnie otwórz `http://localhost:8080/`.
 
 ## Deploy
 
 ```bash
-bash deploy.sh "opis zmian" "v0.2.0"
+bash deploy.sh "opis zmian" "vX.Y.Z"
 ```
 
-Commituje + pushuje → GitHub Pages automatycznie aktualizuje.
+Skrypt robi commit i push na GitHub, a GitHub Pages publikuje aktualny stan.
+
+## Dokumentacja
+
+- [CHANGELOG.md](./CHANGELOG.md) jest źródłem historii zmian per wersja.
+- [docs/JOLT_MIGRATION.md](./docs/JOLT_MIGRATION.md) opisuje plan migracji warstwy pojazdu do `JoltPhysics.js`.
+- Ten README opisuje aktualny stan `main`.
+- Archiwalna wersja single-file nadal leży w `wobbly-world.html`.

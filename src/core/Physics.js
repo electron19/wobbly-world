@@ -18,6 +18,10 @@ export async function initRapier() {
   await R.init();
 }
 
+/** Returns the initialised Rapier module (call after initRapier()). */
+export function getRapier() { return R; }
+}
+
 export class PhysicsWorld {
   constructor() {
     if (!R) throw new Error('Najpierw wywołaj initRapier()');
@@ -96,63 +100,6 @@ export class PhysicsWorld {
       z: pos.z + mv.z,
     });
     return { grounded: this._cc.computedGrounded() };
-  }
-
-  // ─── Loop ─────────────────────────────────────────────────────────────────
-
-  // ─── Pojazdy ──────────────────────────────────────────────────────────────
-
-  /**
-   * Kinematyczny pojazd — dwa collidery na jednym body:
-   *   1. Dolny kadłub (body + maska + bagażnik)
-   *   2. Górna kabina + dach — gracz może stanąć na masce / dachu
-   * Zwraca { body }.
-   */
-  addVehicleBox(x, y, z, hw, hh, hd) {
-    const body = this.world.createRigidBody(
-      R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y, z)
-    );
-    // Dolny kadłub
-    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
-    // Kabina + dach: środek y = +0.87 nad centrum podwozia (chassis center y=0.75)
-    // Pokrywa wizualną kabinę (y≈1.22–2.00) + margines
-    const cabinDesc = R.ColliderDesc.cuboid(0.92, 0.42, 1.32);
-    cabinDesc.setTranslation(0, 0.87, 0);
-    this.world.createCollider(cabinDesc, body);
-    return { body };
-  }
-
-  /**
-   * Tworzy CharacterController dla pojazdu.
-   * Każde auto ma swój własny CC (inne ustawienia niż gracz).
-   */
-  createVehicleCC() {
-    const cc = this.world.createCharacterController(0.01);
-    cc.setSlideEnabled(true);
-    cc.setMaxSlopeClimbAngle(18 * Math.PI / 180);  // auta nie wspinają się
-    cc.setMinSlopeSlideAngle(12 * Math.PI / 180);
-    cc.enableAutostep(0.15, 0.25, false);           // mały skok na krawężnik
-    cc.enableSnapToGround(0.25);                    // trzyma auto przy ziemi
-    cc.setApplyImpulsesToDynamicBodies(true);
-    return cc;
-  }
-
-  /**
-   * Przesuwa pojazd przez Rapier z collision detection.
-   * Analogiczne do movePlayer() — używaj PRZED physics.step().
-   *
-   * @returns {{ movement: {x,y,z}, grounded: boolean }}
-   */
-  moveVehicle(cc, body, collider, desired) {
-    cc.computeColliderMovement(collider, desired);
-    const mv  = cc.computedMovement();
-    const pos = body.translation();
-    body.setNextKinematicTranslation({
-      x: pos.x + mv.x,
-      y: pos.y + mv.y,
-      z: pos.z + mv.z,
-    });
-    return { movement: mv, grounded: cc.computedGrounded() };
   }
 
   step(dt) {

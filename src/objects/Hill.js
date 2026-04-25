@@ -102,10 +102,8 @@ export class Hill extends WorldObject {
     const indices = new Uint32Array(physGeo.index.array);
     this._bodies.push(this.physics.addStaticTrimesh(verts, indices));
 
-    // ── Cannon-es: Heightfield — stabilna kolizja bez tunelowania ──────────
-    // Trimesh w cannon-es tuneluje przy dużych prędkościach (>100 km/h).
-    // Heightfield z profilem kosinusowym jest stabilny niezależnie od prędkości.
-    // Dla pojazdu wystarczy aproksymacja round — kształt wizualny zachowany w Rapier.
+    // vehiclePhysics.addHillHeightfield jest no-op — auto jest w Rapier,
+    // kolizja z wzgórzem przechodzi przez Rapier trimesh powyżej.
     if (this.vehiclePhysics) {
       this.vehiclePhysics.addHillHeightfield(wx, wz, radius, height);
     }

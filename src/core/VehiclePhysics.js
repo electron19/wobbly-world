@@ -1,162 +1,98 @@
 /**
- * Fizyka pojazdów — cannon-es RaycastVehicle.
+ * Vehicle physics — Rapier DynamicRayCastVehicleController.
  *
- * Rapier obsługuje: ziemię, budynki, drzewa, gracza.
- * cannon-es obsługuje: dynamikę pojazdów (zawieszenie, tarcie kół, obroty).
- *
- * Połączenie: lateUpdate() każdego auta synchronizuje pozycję
- * z cannon-es do Rapier kinematic body (kolizja gracza z autem).
+ * All objects (car, player, buildings, hills) share one Rapier world,
+ * so car collisions with the environment are natural — no duplicate
+ * static bodies and no kinematic ghost body sync needed.
  */
 
-import * as CANNON from 'cannon-es';
+import { getRapier } from './Physics.js';
 
-// Stałe — muszą być spójne z Car.js
-// Równowaga: ground(0.01) + WHEEL_R(0.40) + susp_eq(0.34) ≈ 0.75
-export const CANNON_CHASSIS_OFFSET = 0.75;  // chassis center Y ponad root (ziemią)
+// Chassis center Y above road level (same value as before for visual continuity)
+export const CHASSIS_OFFSET_Y = 0.75;
 
 export class VehiclePhysics {
-  constructor() {
-    this.world = new CANNON.World({
-      gravity: new CANNON.Vec3(0, -20, 0),
-    });
-    this.world.broadphase     = new CANNON.SAPBroadphase(this.world);
-    this.world.defaultContactMaterial.friction    = 0.4;
-    this.world.defaultContactMaterial.restitution = 0.28;  // sprężyste uderzenia (0.1→0.28)
-
-    // Płaska ziemia y=0.01 — wyrównana z wizualną drogą (Ground.js: road y=0.01)
-    // Trawa jest na y=0, więc na trawie koła unosza się 1cm — niezauważalne
-    const ground = new CANNON.Body({ mass: 0 });
-    ground.addShape(new CANNON.Plane());
-    ground.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    ground.position.y = 0.01;
-    this.world.addBody(ground);
-  }
-
   /**
-   * Tworzy chassis + RaycastVehicle dla jednego pojazdu.
+   * Creates a dynamic Rapier chassis + DynamicRayCastVehicleController.
    *
-   * @param {number} x, y, z  pozycja spawnu (y=0 = na drodze)
-   * @param {number} facing   obrót Y w radianach (0 = ku +Z)
-   * @returns {{ vehicle: CANNON.RaycastVehicle, chassis: CANNON.Body }}
+   * @param {RAPIER.World} rapierWorld  shared physics world (from PhysicsWorld)
+   * @param {number} x, y, z           spawn position (y = road level, ignored)
+   * @param {number} facing            initial Y-rotation in radians
+   * @returns {{ vehicle: VehicleController, chassis: RigidBody }}
    */
-  createVehicle(x, y, z, facing = 0) {
-    const chassis = new CANNON.Body({
-      mass:           2000,  // -20% masy → lepsze przyspieszenie
-      angularDamping: 0.45,  // tłumienie obrotu — wyższe = mniej nadsterowności
-      linearDamping:  0.02,  // minimalny opór toczenia — nic nie hamuje auta sztucznie
-    });
+  createVehicle(rapierWorld, x, y, z, facing = 0) {
+    const R = getRapier();
 
-    // Pudło chassis — rozmiar odpowiada Car.js CAR_BOX_*
-    chassis.addShape(new CANNON.Box(new CANNON.Vec3(1.07, 0.45, 2.20)));
+    // Dynamic chassis — same mass and damping as previous cannon-es setup
+    const chassisDesc = R.RigidBodyDesc.dynamic()
+      .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
+      .setLinearDamping(0.02)
+      .setAngularDamping(0.45);
 
-    // Spawn: lekko wyżej niż CANNON_CHASSIS_OFFSET żeby zawieszenie się ustabilizowało
-    chassis.position.set(x, CANNON_CHASSIS_OFFSET + 0.1, z);
-    chassis.quaternion.setFromEuler(0, facing, 0);
-    chassis._material = 'metal';   // dźwięk zderzenia aut
-    this.world.addBody(chassis);
+    const chassis = rapierWorld.createRigidBody(chassisDesc);
 
-    const vehicle = new CANNON.RaycastVehicle({
-      chassisBody:      chassis,
-      indexForwardAxis: 2,   // Z = przód pojazdu
-      indexRightAxis:   0,   // X = prawa strona
-      indexUpAxis:      1,   // Y = góra
-    });
+    // Apply initial heading rotation (Y-axis quaternion)
+    if (facing !== 0) {
+      chassis.setRotation(
+        { x: 0, y: Math.sin(facing / 2), z: 0, w: Math.cos(facing / 2) },
+        true,
+      );
+    }
 
-    const wheelOpts = {
-      radius:               0.40,
-      directionLocal:       new CANNON.Vec3(0, -1, 0),  // suspensja w dół
-      axleLocal:            new CANNON.Vec3(-1, 0, 0),  // oś = -X
-      suspensionRestLength: 0.45,   // dłuższy skok = miękkość jazdy
-      suspensionStiffness:  36,     // miększe sprężyny → większe kołysanie, komfort
-      maxSuspensionTravel:  0.28,   // więcej skoku → nie "odbija" na nierównościach
-      maxSuspensionForce:   100000,
-      dampingRelaxation:    2.4,    // wolniejszy powrót → "płynące" zawieszenie
-      dampingCompression:   3.2,
-      frictionSlip:         2.5,    // bazowa przyczepność (nadpisywana per koło w Car.js)
-      rollInfluence:        0.01,   // minimalne wywracanie — auto nie przewraca się o krawężnik
-    };
+    // Chassis box collider — matches Car.js CAR_BOX_* visual dimensions
+    rapierWorld.createCollider(
+      R.ColliderDesc.cuboid(1.07, 0.45, 2.20)
+        .setMass(2000)
+        .setFriction(0.4)
+        .setRestitution(0.28),
+      chassis,
+    );
 
-    // FL, FR, RL, RR — punkty przyłączenia zawieszenia do chassis
-    // (y=0 = na poziomie center chassis → suspensja zwisa 0.30 w dół → koła na y=0.40)
-    [
-      new CANNON.Vec3(-1.12,  0,  1.52),
-      new CANNON.Vec3( 1.12,  0,  1.52),
-      new CANNON.Vec3(-1.12,  0, -1.52),
-      new CANNON.Vec3( 1.12,  0, -1.52),
-    ].forEach(pos => vehicle.addWheel({ ...wheelOpts, chassisConnectionPointLocal: pos }));
+    // DynamicRayCastVehicleController — attached to the chassis body
+    const vehicle = rapierWorld.createVehicleController(chassis);
+    vehicle.indexUpAxis = 1;   // Y = up (default, but explicit)
+    // indexForwardAxis = 2 (Z = forward) is the Rapier default
 
-    vehicle.addToWorld(this.world);
-    // frictionSlip ustawiany per-klatkę w Car.js (różny dla drogi/trawy)
+    // Wheel attachment points (local chassis space): FL, FR, RL, RR
+    const positions = [
+      { x: -1.12, y: 0, z:  1.52 }, // FL
+      { x:  1.12, y: 0, z:  1.52 }, // FR
+      { x: -1.12, y: 0, z: -1.52 }, // RL
+      { x:  1.12, y: 0, z: -1.52 }, // RR
+    ];
+
+    for (const pos of positions) {
+      vehicle.addWheel(
+        pos,                      // chassisConnectionPointCs
+        { x: 0, y: -1, z: 0 },   // direction (down)
+        { x: -1, y: 0, z: 0 },   // axle (-X)
+        0.45,                     // suspensionRestLength
+        0.40,                     // wheelRadius
+      );
+    }
+
+    // Suspension & friction tuning — mirrors previous cannon-es wheelOpts
+    for (let i = 0; i < 4; i++) {
+      vehicle.setWheelSuspensionStiffness(i,   36);
+      vehicle.setWheelSuspensionCompression(i,  3.2);
+      vehicle.setWheelSuspensionRelaxation(i,   2.4);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.28);
+      vehicle.setWheelMaxSuspensionForce(i,     100000);
+      vehicle.setWheelFrictionSlip(i,           2.5);
+      vehicle.setWheelSideFrictionStiffness(i,  0.5);
+    }
+
     return { vehicle, chassis };
   }
 
-  /**
-   * Statyczny trimesh — dokładna kolizja ze stokiem wzgórza dla pojazdów.
-   * Wierzchołki muszą być już w koordynatach świata (body siedzi w 0,0,0).
-   */
-  addStaticTrimesh(vertices, indices) {
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(new CANNON.Trimesh(Array.from(vertices), Array.from(indices)));
-    this.world.addBody(body);
-  }
+  // ── No-ops — static colliders are already in the shared Rapier world ──────
+  // WorldBuilder / building objects still call these; they are harmless here.
 
-  /** Statyczny box (budynek, mur) — taki sam interfejs jak Rapier.addStaticBox */
-  addStaticBox(x, y, z, hw, hh, hd, material = 'wall') {
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(new CANNON.Box(new CANNON.Vec3(hw, hh, hd)));
-    body.position.set(x, y, z);
-    body._material = material;
-    this.world.addBody(body);
-  }
+  addStaticBox()       {}
+  addStaticTrimesh()   {}
+  addStaticCylinder()  {}
+  addHillHeightfield() {}
 
-  /** Statyczny cylinder (pień drzewa, słup) */
-  addStaticCylinder(x, y, z, hh, r, material = 'wall') {
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(new CANNON.Cylinder(r, r, hh * 2, 8));
-    body.position.set(x, y, z);
-    body._material = material;
-    this.world.addBody(body);
-    return body;
-  }
-
-  /**
-   * Dodaje Heightfield dla wzgórza do cannon-es — stabilniejszy od Trimesh przy dużych prędkościach.
-   * @param {number} cx, cz  centrum wzgórza w world space
-   * @param {number} radius  promień wzgórza
-   * @param {number} height  wysokość szczytu
-   * @param {number} sy      skala Y (dla nie-round wzgórz)
-   */
-  addHillHeightfield(cx, cz, radius, height, sy = 1) {
-    const N    = 20;     // rozdzielczość siatki (20×20 punktów)
-    const span = radius * 2 * 1.05;  // margines 5% poza promień
-    const step = span / (N - 1);
-    const data = [];
-
-    for (let i = 0; i < N; i++) {
-      const row = [];
-      for (let j = 0; j < N; j++) {
-        const lx = (i / (N - 1) - 0.5) * span;
-        const lz = (j / (N - 1) - 0.5) * span;
-        const r  = Math.sqrt(lx * lx + lz * lz) / radius;
-        // Profil kosinusowy: h(r) = height × cos(r × π/2), zeruje się przy r=1
-        row.push(r < 1 ? height * sy * Math.cos(r * Math.PI / 2) : 0);
-      }
-      data.push(row);
-    }
-
-    const hf = new CANNON.Heightfield(data, { elementSize: step });
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(hf);
-    // Heightfield corner to (0,0) → przesuń żeby centrum było w (cx, cz)
-    body.position.set(cx - span / 2, 0, cz - span / 2);
-    body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);  // Heightfield leży w XZ, obróć
-    this.world.addBody(body);
-  }
-
-  /** Krok fizyki z sub-stepowaniem — lepsza detekcja kolizji przy wysokich prędkościach. */
-  step(dt) {
-    // fixedStep 1/120s + max 4 substepy = do 240 kroków/s przy 60fps
-    // Eliminuje tunelowanie przez wzgórza i mury przy Vmax 260 km/h
-    this.world.step(1 / 120, dt, 4);
-  }
+  /** No-op — vehicles are now stepped via updateVehicle() inside Car.update(). */
+  step() {}
 }

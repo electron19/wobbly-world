@@ -1,30 +1,27 @@
 import * as THREE from 'three';
-import * as CANNON from 'cannon-es';
 import { WorldObject } from './WorldObject.js';
 import { toonMat, C } from '../core/Materials.js';
 
-const POLE_H      = 4.5;   // całkowita wysokość słupa
-const POLE_HALF   = POLE_H / 2;   // offset środka od podstawy
-const FALL_DUR    = 0.70;  // czas upadku [s]
+const POLE_H    = 4.5;
+const POLE_HALF = POLE_H / 2;
+const FALL_DUR  = 0.70;  // czas upadku [s]
 
 /**
  * Latarnia uliczna: słup + ramię + głowica.
  *
- * Fizyka: cannon-es body zaczyna jako static (auto się o nie odbija).
- * Po uderzeniu ≥ 3 m/s: cannon body usuwany, lampa pada przez kinematyczną
+ * Fizyka: Rapier statyczny cylinder (auto Rapier się o niego odbija).
+ * Po uderzeniu (proximity check z Game.js): lampa pada przez kinematyczną
  * animację — obrót dookoła podstawy (pivot y=0) z ease-in.
- * Efekt: ciężki, płynny upadek bez wirowania i bez zapadania pod ziemię.
  */
 export class StreetLamp extends WorldObject {
   constructor(scene, physics, vehiclePhysics = null) {
     super(scene, physics, vehiclePhysics);
-    this._cannonBody = null;
-    this._knocked    = false;
+    this._knocked  = false;
     // Animacja upadku
-    this._fallT         = null;  // null = nie zaczęto; ≥0 = w trakcie
-    this._fallQStart    = null;
-    this._toppleAxisX   = 0;
-    this._toppleAxisZ   = 1;
+    this._fallT       = null;
+    this._fallQStart  = null;
+    this._toppleAxisX = 0;
+    this._toppleAxisZ = 1;
   }
 
   _build() {
@@ -52,43 +49,19 @@ export class StreetLamp extends WorldObject {
     this.root.rotation.y = rotY + Math.PI;
     this._build();
 
-    // Rapier: statyczny (gracz wchodzi w słup)
-    this._bodies.push(this.physics.addStaticCylinder(x, y + POLE_HALF, z, POLE_HALF, 0.10));
-
-    // cannon-es: statyczny do momentu uderzenia.
-    // Box 0.60×4.5×0.60 zamiast cienkiego cylindra r=0.10 — szeroki AABB
-    // zapobiega tunelowaniu przy wysokich prędkościach (broadphase nie pomija).
-    if (this.vehiclePhysics) {
-      const body = new CANNON.Body({ mass: 0 });
-      body.addShape(new CANNON.Box(new CANNON.Vec3(0.30, POLE_HALF, 0.30)));
-      body.position.set(x, y + POLE_HALF, z);
-
-      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY + Math.PI, 0));
-      body.quaternion.set(q.x, q.y, q.z, q.w);
-
-      body._material = 'metal';
-      body._type     = 'lamp';
-      body._lampRef  = this;
-      this.vehiclePhysics.world.addBody(body);
-      this._cannonBody = body;
-    }
+    // Rapier: statyczny cylinder — auto (Rapier) i gracz odbijają się od słupa
+    this._bodies.push(this.physics.addStaticCylinder(x, y + POLE_HALF, z, POLE_HALF, 0.30));
     return this;
   }
 
   /**
-   * Wywołane przez Car.js gdy uderzenie ≥ 3 m/s.
+   * Wywołane z Game.js po wykryciu uderzenia auta (proximity + impactVel).
    * @param {number} vel    prędkość uderzenia [m/s]
-   * @param {number} nx, nz normalna kolizji w przestrzeni świata (XZ)
+   * @param {number} nx, nz kierunek uderzenia w XZ (znormalizowany)
    */
   knockDown(vel, nx = 0, nz = 1) {
     if (this._knocked) return;
     this._knocked = true;
-
-    // Usuń cannon body — lampa pada przez animację, nie dalej przez fizykę
-    if (this._cannonBody && this.vehiclePhysics) {
-      this.vehiclePhysics.world.removeBody(this._cannonBody);
-      this._cannonBody = null;
-    }
 
     // Oś upadku: prostopadła do uderzenia w płaszczyźnie XZ (praworączna)
     // Uderzenie w +Z → oś rotacji = +X → lampa pada w kierunku +Z ✓

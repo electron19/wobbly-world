@@ -7,7 +7,7 @@ import * as THREE from 'three';
  * Funkcje:
  *  - auto-wyrównanie za pojazdem/graczem
  *  - przechylenie kamery przy skrętach (body roll mirroring)
- *  - trauma/shake — addTrauma(0..1) wywołaj przy kolizji
+ *  - płynny follow bez screen shake
  */
 export class ThirdPersonCamera {
   constructor(camera) {
@@ -17,8 +17,6 @@ export class ThirdPersonCamera {
     this.dist    = 8;
     this.sensitivity = 0.003;
     this._lookTarget = new THREE.Vector3();
-    // Trauma/shake
-    this._trauma = 0;    // 0–1; maleje z czasem
     this._tiltZ  = 0;    // wygładzone przechylenie boczne [rad]
   }
 
@@ -27,7 +25,7 @@ export class ThirdPersonCamera {
    * @param {number} amount 0–1 (1 = maksymalny wstrząs)
    */
   addTrauma(amount) {
-    this._trauma = Math.min(1, this._trauma + amount);
+    void amount;
   }
 
   /**
@@ -56,8 +54,10 @@ export class ThirdPersonCamera {
       this.yaw += diff * Math.min(1, dt * 1.5);
     }
 
-    const hz = Math.cos(this.pitch) * this.dist;
-    const hy = Math.sin(this.pitch) * this.dist;
+    const speedDistPull = autoAlignFacing !== undefined ? speedFrac * 1.15 : 0;
+    const camDist = this.dist + speedDistPull;
+    const hz = Math.cos(this.pitch) * camDist;
+    const hy = Math.sin(this.pitch) * camDist;
 
     const desired = new THREE.Vector3(
       followPos.x + Math.sin(this.yaw) * hz,
@@ -65,7 +65,7 @@ export class ThirdPersonCamera {
       followPos.z + Math.cos(this.yaw) * hz
     );
 
-    this.camera.position.lerp(desired, 0.12);
+    this.camera.position.lerp(desired, 0.16);
 
     this._lookTarget.lerp(
       new THREE.Vector3(followPos.x, followPos.y + 1.0, followPos.z),
@@ -85,15 +85,6 @@ export class ThirdPersonCamera {
       this.camera.quaternion.multiply(tiltQ);
     }
 
-    // ── Screen shake (trauma system) ────────────────────────────────────────
-    // Trauma maleje 1.8×/s; intensywność shake = trauma² (curve → łagodne starty)
-    this._trauma = Math.max(0, this._trauma - dt * 1.8);
-    const shake = this._trauma * this._trauma;
-    if (shake > 0.001) {
-      const s = shake * 0.35;
-      this.camera.position.x += (Math.random() - 0.5) * s;
-      this.camera.position.y += (Math.random() - 0.5) * s * 0.5;
-    }
   }
 
   /** Kierunek "do przodu" gracza względem yaw kamery */

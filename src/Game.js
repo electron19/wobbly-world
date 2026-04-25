@@ -12,7 +12,7 @@ import { isOnRoad }                 from './world/zones.js';
 const PLAYER_SPAWN  = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST    = 3.8;   // max odległość do wejścia do auta
 const CAM_DIST_FOOT = 8;     // dystans kamery pieszo
-const CAM_DIST_CAR  = 12;    // dystans kamery w aucie
+const CAM_DIST_CAR  = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
 
 /**
  * Główna klasa gry — orkiestrator.
@@ -72,7 +72,7 @@ export class Game {
     // Gęstość mgły: 0.008 = widok ~100j — ukrywa odległe obiekty, poprawia wydajność
     this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.008);
 
-    this.camera3 = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 110);
+    this.camera3 = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 110);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));  // max 1.5 zamiast 2
     this.renderer.setSize(innerWidth, innerHeight);
@@ -180,7 +180,7 @@ export class Game {
 
   _exitCar() {
     const car = this._drivingCar;
-    const pos = car.root.position;   // pozycja z cannon-es (synced w lateUpdate)
+    const pos = car.root.position;   // pozycja z Rapier (synced w lateUpdate)
     // Wysiądź z boku (prostopadle do kierunku jazdy)
     const sideX = pos.x + Math.cos(car.facing) * 2.8;
     const sideZ = pos.z - Math.sin(car.facing) * 2.8;
@@ -246,33 +246,26 @@ export class Game {
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
 
-    // ── 1. Wejście → cannon-es (siły pojazdu) ────────────────────────────
+    // ── 1. Wejście → Rapier vehicle controller (siły pojazdu + updateVehicle) ──
     if (this._drivingCar) {
       this._drivingCar.update(dt, this.input, this.audio);
     }
 
-    // ── 2. Krok cannon-es (fizyka pojazdów) ──────────────────────────────
+    // ── 2. Krok Rapier (auto + gracz + kolizje świata — jeden silnik) ─────
     for (const lamp of this._knockableLamps) lamp.update(dt);
-    this.vehiclePhysics.step(dt);
 
-    // ── 3. Sync: cannon-es → Three.js + Rapier body (wszystkie auta) ─────
-    for (const car of this.cars) car.lateUpdate();
-
-    // ── 4. Krok Rapier (gracz + kolizje świata) ───────────────────────────
+    // ── 3. Krok Rapier — auto + gracz + świat w jednym symulatorze ───────
     if (this._drivingCar) {
-      // Gracz niewidoczny jedzie razem z autem
+      // Gracz niewidoczny jedzie razem z autem (pozycja kinematyczna)
       const cp = this._drivingCar.root.position;
       this.player._body.setNextKinematicTranslation({
         x: cp.x, y: cp.y + 0.7, z: cp.z,
       });
-      // Dźwięk poślizgu — pisk gdy koła realnie blokują (slip ratio) LUB boczny drift
+      // Dźwięk poślizgu
       const carOnRoad  = isOnRoad(cp.x, cp.z);
       const absCarSpd  = Math.abs(this._drivingCar.speedKmh ?? 0);
       const slip        = this._drivingCar.wheelSlip;
-      // slip tylko gdy aktywne hamowanie — bez gating cannon-es deltaRotation*=0.99
-      // powoduje fałszywy pisk po puszczeniu gazu
       const brakingSkid = slip > 0.80 && this._drivingCar.isBraking;
-      // Boczny drift: dużo skrętu + wysoka prędkość → pisk w zakrętach (GTA-feel)
       const lateralSlip = absCarSpd > 55 && this._drivingCar.steerAngle > 0.38;
       this.audio.updateSkid((brakingSkid || lateralSlip) && absCarSpd > 5, carOnRoad);
     } else {
@@ -283,7 +276,25 @@ export class Game {
       }
     }
     this.physics.step(dt);
+
+    // ── 4. Sync Rapier → Three.js (auto + gracz) ─────────────────────────
+    for (const car of this.cars) car.lateUpdate();
     this.player.lateUpdate();
+
+    // ── Lamp knockdown — proximity check po detekcji uderzenia ───────────
+    if (this._drivingCar && this._drivingCar.impactVel > 3) {
+      const cp  = this._drivingCar.root.position;
+      const lv  = this._drivingCar._chassis?.linvel?.() ?? { x: 0, z: 1 };
+      const len = Math.hypot(lv.x, lv.z) || 1;
+      for (const lamp of this._knockableLamps) {
+        if (!lamp._knocked) {
+          const lp = lamp.root.position;
+          if (Math.hypot(cp.x - lp.x, cp.z - lp.z) < 3.5) {
+            lamp.knockDown(this._drivingCar.impactVel, lv.x / len, lv.z / len);
+          }
+        }
+      }
+    }
 
     // ── 5. Kamera + render ────────────────────────────────────────────────
     const followPos = this._drivingCar
@@ -315,13 +326,14 @@ export class Game {
 
     // ── Dynamic FOV — poczucie prędkości ────────────────────────────────────
     if (this._drivingCar) {
-      const sf = Math.min(1, Math.abs(this._drivingCar.speedKmh ?? 0) / 200);
-      const targetFov = 65 + sf * 20;   // 65 (spoczynek) → 85 (200 km/h)
-      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 3));
+      const spd = Math.abs(this._drivingCar.speedKmh ?? 0);
+      const sf = Math.min(1, spd / 140);
+      const targetFov = 72 + sf * 26;   // 72 (spoczynek) → 98 (≈140 km/h)
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 4.2));
       this.camera3.updateProjectionMatrix();
-    } else if (Math.abs(this.camera3.fov - 65) > 0.1) {
+    } else if (Math.abs(this.camera3.fov - 72) > 0.1) {
       // Wróć do bazowego FOV gdy pieszo
-      this.camera3.fov += (65 - this.camera3.fov) * (1 - Math.exp(-dt * 3));
+      this.camera3.fov += (72 - this.camera3.fov) * (1 - Math.exp(-dt * 4));
       this.camera3.updateProjectionMatrix();
     }
 

@@ -325,10 +325,13 @@ export class AudioManager {
     }
 
     // ── Target RPM na podstawie prędkości i biegu ─────────────────────────
-    const targetRpm = Math.max(RPM_IDLE, absSpd * RPM_PER_KMH[this._gear]);
+    const targetRpm = Math.max(
+      RPM_IDLE,
+      absSpd * RPM_PER_KMH[this._gear] + Math.max(0, gas) * 1200,
+    );
 
-    // Wolne narastanie RPM gdy gaz (0.27s), wolne opadanie przy zwalnianiu (0.70s)
-    const tau = Math.abs(gas) > 0.05 ? 0.27 : 0.70;
+    // Szybsza odpowiedź audio przy przyspieszaniu, wolniejsza przy odpuszczaniu.
+    const tau = Math.abs(gas) > 0.05 ? 0.16 : 0.45;
     this._rpm += (targetRpm - this._rpm) * Math.min(1, dt / tau);
     this._rpm  = Math.min(RPM_MAX, Math.max(RPM_IDLE, this._rpm));
 
@@ -338,8 +341,9 @@ export class AudioManager {
     this._engineOsc2.frequency.setTargetAtTime(hz * 3, now, 0.06);
 
     // Głośność: rośnie trochę z obrotami + lekko z gazem
-    const vol = 0.055 + (this._rpm - RPM_IDLE) / (RPM_MAX - RPM_IDLE) * 0.07
-              + Math.abs(gas) * 0.025;
+    const rpmNorm = (this._rpm - RPM_IDLE) / (RPM_MAX - RPM_IDLE);
+    const spdNorm = Math.min(1, absSpd / 140);
+    const vol = 0.06 + rpmNorm * 0.10 + spdNorm * 0.03 + Math.abs(gas) * 0.04;
     this._engineGain.gain.setTargetAtTime(vol, now, 0.06);
   }
 
@@ -420,8 +424,18 @@ export class AudioManager {
       }
     }
 
-    // Głośność: 0 przy niskiej prędkości, rośnie
-    const vol = absSpd < 3 ? 0 : Math.min((absSpd - 3) / 60, 1) * (onRoad ? 0.10 : 0.14);
+    if (onRoad) {
+      const roadFreq = 900 + Math.min(absSpd, 160) * 11;
+      const roadQ = 1.3 + Math.min(absSpd, 140) / 120;
+      this._tireFilter.frequency.setTargetAtTime(roadFreq, now, 0.10);
+      this._tireFilter.Q.setTargetAtTime(roadQ, now, 0.12);
+    } else {
+      const grassFreq = 180 + Math.min(absSpd, 120) * 1.8;
+      this._tireFilter.frequency.setTargetAtTime(grassFreq, now, 0.14);
+    }
+
+    // Głośność: szybciej rośnie na asfalcie, żeby mocniej sprzedać prędkość.
+    const vol = absSpd < 2 ? 0 : Math.min((absSpd - 2) / 42, 1) * (onRoad ? 0.17 : 0.16);
     this._tireGain.gain.setTargetAtTime(vol, now, 0.12);
   }
 

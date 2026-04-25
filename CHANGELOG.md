@@ -1,5 +1,16 @@
 # Changelog — Wobbly World
 
+## [Unreleased]
+### Changed
+- Kamera: usunięto speed shake i trauma shake, pozostawiając płynny follow oraz tilt w zakrętach
+### Fixed
+- Wycofano eksperymentalny boost napędu i zmianę animacji kół, które powodowały zbyt gwałtowne ruszanie i niespójny obrót kół względem ruchu auta
+### Docs
+- README zaktualizowany do obecnej architektury projektu, aktualnego gameplayu samochodowego, produkcyjnego deploymentu na Vercelu i trybu `?joltSpike=1`
+- Dodano `docs/JOLT_MIGRATION.md` z planem migracji warstwy pojazdu z `cannon-es` do `JoltPhysics.js`, opisem obecnego spike'a i kolejnymi etapami wdrożenia
+### Added
+- Dodano `src/core/VehiclePhysicsJolt.js` oraz izolowany tryb spike `?joltSpike=1`, który ładuje `JoltPhysics.js` i stawia jedno testowe auto na płaskiej scenie
+
 ## [v1.0.0] — 2026-04-04
 ### Added
 - **Body roll/pitch** — nadwozie wizualnie przechyla się w zakrętach (do 4°) i kiwa przy gazie/hamowaniu (do 2.7°); koła zostają w root, tylko mesh karoserii w `_bodyPivot`

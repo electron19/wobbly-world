@@ -1,13 +1,8 @@
 import * as THREE from 'three';
 import { Entity } from './Entity.js';
 import { toonMat, addOutline } from '../core/Materials.js';
-import { CANNON_CHASSIS_OFFSET } from '../core/VehiclePhysics.js';
+import { CHASSIS_OFFSET_Y } from '../core/VehiclePhysics.js';
 import { isOnRoad, isOnHardSurface } from '../world/zones.js';
-
-// ─── Rozmiar Rapier collidera (kinematic box, dla kolizji gracza z autem) ─────
-export const CAR_BOX_HH = 0.70;   // half-height
-export const CAR_BOX_HW = 1.07;   // half-width
-export const CAR_BOX_HD = 2.20;   // half-depth
 
 // ─── Stałe geometrii kół ──────────────────────────────────────────────────────
 const WHEEL_R  = 0.40;   // promień opony
@@ -16,7 +11,7 @@ const WHEEL_X  = 1.12;   // half-track
 const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
-// ─── Stałe jazdy (cannon-es RaycastVehicle) ───────────────────────────────────
+// ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
 const MAX_ENGINE_FORCE   = 18000; // N na koło tylne (mocne przyspieszenie)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
 const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
@@ -35,14 +30,13 @@ export class Car extends Entity {
     this.facing     = 0;
     this.isOccupied = false;
     this._wheels    = [];
-    // cannon-es
-    this._vehicle   = null;   // CANNON.RaycastVehicle
-    this._chassis   = null;   // CANNON.Body
+    // Rapier DynamicRayCastVehicleController
+    this._vehicle   = null;   // Rapier VehicleController
+    this._chassis   = null;   // Rapier RigidBody (dynamic)
     this._steer     = 0;      // wygładzona wartość kierownicy [-1..1]
     this._throttle  = 0;      // wygładzony gaz [0..1]
     this._brake     = 0;      // wygładzone hamowanie [0..1]
-    // Rapier kinematic body (kolizja gracza z autem)
-    this._body      = null;
+    this._prevSpeed = 0;      // prędkość poprzedniej klatki [m/s] — do detekcji kolizji
     // Ślady hamowania
     this._skidState     = null;   // inicjalizowany w initPhysics()
     // Dźwięki
@@ -371,46 +365,18 @@ export class Car extends Entity {
 
   /**
    * Inicjalizuje fizykę pojazdu.
-   * @param {VehiclePhysics} vehiclePhysics  cannon-es świat pojazdów
-   * @param {PhysicsWorld}   rapierPhysics   Rapier świat (dla kolizji gracza z autem)
+   * @param {VehiclePhysics} vehiclePhysics  Rapier vehicle controller factory
+   * @param {PhysicsWorld}   rapierPhysics   shared Rapier world
    */
   initPhysics(vehiclePhysics, rapierPhysics, x, y, z) {
-    const { vehicle, chassis } = vehiclePhysics.createVehicle(x, y, z, this.facing);
+    const { vehicle, chassis } = vehiclePhysics.createVehicle(
+      rapierPhysics.world, x, y, z, this.facing,
+    );
     this._vehicle = vehicle;
     this._chassis = chassis;
 
-    // Rapier kinematic body — tylko dla kolizji gracza z autem
-    const { body } = rapierPhysics.addVehicleBox(
-      x, CANNON_CHASSIS_OFFSET, z,
-      CAR_BOX_HW, CAR_BOX_HH, CAR_BOX_HD,
-    );
-    this._body = body;
-
     // Zaparkowane auto stoi w miejscu (hamulec)
-    for (let i = 0; i < 4; i++) this._vehicle.setBrake(MAX_BRAKE_FORCE, i);
-
-    // Listener kolizji — dźwięk zależny od materiału przeszkody
-    this._chassis.addEventListener('collide', (event) => {
-      const vel = Math.abs(event.contact.getImpactVelocityAlongNormal?.() ?? 0);
-
-      // Przewracanie lampy
-      if (event.body?._type === 'lamp' && vel > 3) {
-        const ni = event.contact.ni ?? { x: 0, z: 1 };
-        event.body._lampRef?.knockDown(vel, -ni.x, -ni.z);
-      }
-
-      // Dźwięk zderzenia
-      const mat = event.body?._material;
-      if (mat && mat !== 'ground') {
-        this._audio?.playCollision(mat, vel);
-      }
-
-      // Zapisz dla camera shake (reset per klatkę w update())
-      this._impactVelThisFrame = Math.max(this._impactVelThisFrame, vel);
-
-      // Zniszczenia wizualne
-      if (vel >= 4) this._handleImpact(vel, event.contact);
-    });
+    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
 
     this.root.position.set(x, y, z);
     this.root.rotation.y = this.facing;
@@ -422,7 +388,7 @@ export class Car extends Entity {
   // ─── Gettery ──────────────────────────────────────────────────────────────
 
   get speedKmh() {
-    return this._vehicle ? this._vehicle.currentVehicleSpeedKmHour : 0;
+    return this._vehicle ? this._vehicle.currentVehicleSpeed() * 3.6 : 0;
   }
 
   /** Aktualny kąt skrętu kół (wygładzony, radiany, wartość bezwzględna). */
@@ -624,48 +590,41 @@ export class Car extends Entity {
   // ─── Zniszczenia ──────────────────────────────────────────────────────────
 
   /**
-   * Wywołuje się z listenera kolizji.
-   * @param {number} vel        prędkość uderzenia [m/s]
-   * @param {object} contact    cannon-es ContactEquation
+   * Wywołuje się po detekcji spadku prędkości (kolizja).
+   * Używa bieżącej prędkości chassis do wyznaczenia strefy uderzenia.
+   * @param {number} vel  szacowana siła uderzenia [m/s]
    */
-  _handleImpact(vel, contact) {
-    if (vel < 4) return;   // min. 4 m/s by powstało uszkodzenie
+  _handleImpact(vel) {
+    if (vel < 4) return;
 
-    // Wyznacz strefę uderzenia (przód/tył) na podstawie punktu kontaktu.
-    // contact.ri = wektor od środka chassis do punktu kontaktu (world space).
-    // Zrzutuj na oś przód-tył pojazdu (oś Z rotacji chassis).
-    const ri = contact.ri;   // {x, y, z} — może być undefined przy niektórych kolizjach cannon-es
-    if (!ri) return;
-    const q  = this._chassis.quaternion;
-    // Kolumna Z macierzy rotacji z kwaterniona
-    const fz = 1 - 2 * (q.x * q.x + q.y * q.y);
-    const isfront = (ri.x * (2 * (q.x * q.z + q.w * q.y))
-                   + ri.y * (2 * (q.y * q.z - q.w * q.x))
-                   + ri.z * fz) > 0;
+    // Wyznacz przód/tył z kierunku ruchu chassis w chwili kolizji
+    const q  = this._chassis.rotation();
+    const lv = this._chassis.linvel();
+    // Kolumna Z macierzy rotacji z kwaterniona (oś do przodu lokalnie)
+    const fwdX = 2 * (q.x * q.z + q.w * q.y);
+    const fwdY = 2 * (q.y * q.z - q.w * q.x);
+    const fwdZ = 1 - 2 * (q.x * q.x + q.y * q.y);
+    // Auto jechało do przodu (dot > 0) → przód uderzył w przeszkodę
+    const isfront = (lv.x * fwdX + lv.y * fwdY + lv.z * fwdZ) > 0;
 
-    const dmg = Math.min(1, (vel - 4) / 20) * 0.35;   // max ~35% uszkodzenia per uderzenie
-
+    const dmg = Math.min(1, (vel - 4) / 20) * 0.35;
     if (isfront) {
       this._damageFront = Math.min(1, this._damageFront + dmg);
     } else {
       this._damageRear  = Math.min(1, this._damageRear  + dmg);
     }
 
-    // ── Uszkodzenia reflektorów ───────────────────────────────────────────────
-    // Wyznacz stronę uderzenia (L/R) z projekcji ri na lokalną oś X pojazdu.
-    const wx = 1 - 2 * (q.y * q.y + q.z * q.z);   // lokalny X → world
-    const wy = 2 * (q.x * q.y + q.w * q.z);
-    const wz = 2 * (q.x * q.z - q.w * q.y);
-    const dotRight = ri.x * wx + ri.y * wy + ri.z * wz;
-    // i=0→lewy (x=-0.73), i=1→prawy (x=+0.73)
+    // Uszkodzenia reflektorów — strona L/R z składowej bocznej velocity
+    const rgtX = 1 - 2 * (q.y * q.y + q.z * q.z);
+    const rgtY = 2 * (q.x * q.y + q.w * q.z);
+    const rgtZ = 2 * (q.x * q.z - q.w * q.y);
+    const dotRight = lv.x * rgtX + lv.y * rgtY + lv.z * rgtZ;
     const lightIdx = dotRight < 0 ? 0 : 1;
 
     if (vel >= 14) {
-      // Silne: reflektor odpada (znika)
       if (isfront) this._headDmg[lightIdx] = 2;
       else          this._tailDmg[lightIdx] = 2;
     } else if (vel >= 6) {
-      // Średnie: reflektor gaśnie
       if (isfront && this._headDmg[lightIdx] < 1) this._headDmg[lightIdx] = 1;
       else if (!isfront && this._tailDmg[lightIdx] < 1) this._tailDmg[lightIdx] = 1;
     }
@@ -735,24 +694,23 @@ export class Car extends Entity {
   // ─── Cykl klatki ──────────────────────────────────────────────────────────
 
   /**
-   * Wywołaj PRZED vehiclePhysics.step().
-   * Aplikuje siły wejściowe do cannon-es RaycastVehicle.
+   * Wywołaj PRZED physics.step().
+   * Aplikuje siły wejściowe do Rapier VehicleController,
+   * a na końcu wywołuje updateVehicle() żeby przeliczył siły przed krokiem fizyki.
    */
   update(dt, input, audio) {
     this._dt = dt;
-    this._impactVelThisFrame = 0;  // reset — kolizje z tej klatki nadpiszą wartość
+    this._impactVelThisFrame = 0;  // reset — lateUpdate nadpisze po detekcji
 
     // Gaz do przodu: W / ArrowUp / R2
-    const fwdK       = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
-    // Cofanie / hamulec: S / ArrowDown / L2
-    const revK       = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
-    const rawFwd = Math.max(fwdK, input.pad.r2 ?? 0);  // docelowy gaz/hamo. w przód
-    const rawBack= Math.max(revK, input.pad.l2 ?? 0);  // docelowy gaz/hamo. w tył
+    const fwdK   = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
+    const revK   = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
+    const rawFwd = Math.max(fwdK, input.pad.r2 ?? 0);
+    const rawBack= Math.max(revK, input.pad.l2 ?? 0);
 
-    // Analogowe wygładzanie — narastanie szybsze niż opadanie (jak fizyczny pedał)
-    // 1-exp(-dt/tau): prawidłowe frame-rate-independent wygładzanie (dt/tau działa tylko gdy dt<<tau)
-    const tauOn  = 0.08;  // 80 ms narastania  (szybka odpowiedź)
-    const tauOff = 0.05;  // 50 ms opadania    (szybkie puszczenie → brak poślizgu po puszczeniu)
+    // Frame-rate-independent wygładzanie pedałów (1-exp(-dt/tau))
+    const tauOn  = 0.08;
+    const tauOff = 0.05;
     this._throttle += (rawFwd - this._throttle) * (1 - Math.exp(-dt / (rawFwd > this._throttle ? tauOn : tauOff)));
     this._brake    += (rawBack - this._brake)    * (1 - Math.exp(-dt / (rawBack > this._brake  ? tauOn : tauOff)));
 
@@ -760,206 +718,191 @@ export class Car extends Entity {
     const backAmount = this._brake;
     const gasIn = forwAmount - backAmount;
 
-    // Skręt: A/D / ArrowLeft/Right / lewy analog X
-    const steerKL = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
-    const steerKR = (input.isDown('KeyD') || input.isDown('ArrowRight')) ? 1 : 0;
+    // Skręt: A/D / analog
+    const steerKL  = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
+    const steerKR  = (input.isDown('KeyD') || input.isDown('ArrowRight')) ? 1 : 0;
     const padSteer = Math.abs(input.pad.leftX) > 0.12 ? -input.pad.leftX : 0;
-    const steerIn = padSteer !== 0 ? padSteer : (steerKL - steerKR);
+    const steerIn  = padSteer !== 0 ? padSteer : (steerKL - steerKR);
 
-    // ── Skręt — wygładzony lerp, kąt maleje przy dużej prędkości ────────────
+    // Wygładzony skręt, kąt maleje przy dużej prędkości
     const absSpd0   = Math.abs(this._speedKmh ?? 0);
-    const steerMult = Math.max(0.30, 1 - absSpd0 / 160);  // 1.0 przy 0 → 0.3 przy 112+ km/h
+    const steerMult = Math.max(0.30, 1 - absSpd0 / 160);
     this._steer += (steerIn * MAX_STEER_ANGLE * steerMult - this._steer) * (1 - Math.exp(-STEER_SPEED * dt));
-    this._vehicle.setSteeringValue(this._steer, 0);  // FL
-    this._vehicle.setSteeringValue(this._steer, 1);  // FR
+    this._vehicle.setWheelSteering(0, this._steer);  // FL
+    this._vehicle.setWheelSteering(1, this._steer);  // FR
 
-    // ── Hamulec ręczny (B) — blokuje tylne koła, umożliwia drifting ─────────
+    // Hamulec ręczny (SPACJA / pad B)
     const handBrake = input.isDown('Space') || input.isPadButtonDown(1);
     if (handBrake && !this._prevHandbrake) {
-      audio?.playHandbrake(this._vehicle.currentVehicleSpeedKmHour);
+      audio?.playHandbrake(this._vehicle.currentVehicleSpeed() * 3.6);
     }
     this._prevHandbrake = handBrake;
 
-    // ── Nawierzchnia — raz dla całego bloku ──────────────────────────────────
-    const cx = this._chassis.position.x;
-    const cz = this._chassis.position.z;
-    const onRoad      = isOnRoad(cx, cz);
-    // μ_peak: asfalt≈0.85, beton≈0.75 (×0.88), trawa≈0.35 (×0.41 → grywalnie 0.22)
-    const onSidewalk  = !onRoad && isOnHardSurface(cx, cz);
-    const brakeSurf   = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
+    // Nawierzchnia — raz dla całego bloku
+    const cp       = this._chassis.translation();
+    const onRoad   = isOnRoad(cp.x, cp.z);
+    const onSidewalk = !onRoad && isOnHardSurface(cp.x, cp.z);
+    const brakeSurf  = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
 
-    // ── Gaz / hamulec ────────────────────────────────────────────────────────
-    const speedKmh = this._vehicle.currentVehicleSpeedKmHour;
+    // Prędkość (Rapier: m/s → km/h)
+    const speedKmh = this._vehicle.currentVehicleSpeed() * 3.6;
     const absSpd   = Math.abs(speedKmh);
     let engineForce = 0;
-    let brakeForce  = 0;   // domyślnie 0 — auto toczy się swobodnie (opór = linearDamping)
+    let brakeForce  = 0;
 
     if (handBrake) {
       // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
       if (gasIn > 0 && speedKmh > -1) {
-        engineForce = -MAX_ENGINE_FORCE * forwAmount;
+        engineForce = MAX_ENGINE_FORCE * forwAmount;  // Rapier: + = do przodu
       }
-      this._vehicle.applyEngineForce(engineForce, 2);  // RL — napęd (donut gdy gaz)
-      this._vehicle.applyEngineForce(engineForce, 3);  // RR — napęd (donut gdy gaz)
-      this._vehicle.applyEngineForce(0,            0);  // FL — brak napędu
-      this._vehicle.applyEngineForce(0,            1);  // FR — brak napędu
-      this._vehicle.setBrake(0,                            0);  // FL — wolne
-      this._vehicle.setBrake(0,                            1);  // FR — wolne
-      this._vehicle.setBrake(HAND_BRAKE_FORCE * brakeSurf, 2);  // RL — zablokowane
-      this._vehicle.setBrake(HAND_BRAKE_FORCE * brakeSurf, 3);  // RR — zablokowane
+      this._vehicle.setWheelEngineForce(2, engineForce);   // RL
+      this._vehicle.setWheelEngineForce(3, engineForce);   // RR
+      this._vehicle.setWheelEngineForce(0, 0);             // FL
+      this._vehicle.setWheelEngineForce(1, 0);             // FR
+      this._vehicle.setWheelBrake(0, 0);
+      this._vehicle.setWheelBrake(1, 0);
+      this._vehicle.setWheelBrake(2, HAND_BRAKE_FORCE * brakeSurf);  // RL — zablokowane
+      this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
         if (speedKmh < -1) {
-          // Hamowanie podczas cofania
           brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
         } else if (speedKmh < MAX_SPEED_KMH) {
-          engineForce = -MAX_ENGINE_FORCE * gasIn;
-          brakeForce  = 0;
+          engineForce = MAX_ENGINE_FORCE * gasIn;  // Rapier: + = do przodu
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
-          // Hamowanie podczas jazdy do przodu — skalowane przez nawierzchnię
           brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
         } else if (speedKmh > -MAX_REV_KMH) {
-          engineForce = MAX_ENGINE_FORCE * (-gasIn);
-          brakeForce  = 0;
+          engineForce = MAX_ENGINE_FORCE * gasIn;  // Rapier: ujemny = wstecz
         }
       } else {
-        // Brak gazu i brak hamulca — swobodne toczenie
-        // Parking: zatrzymaj gdy prawie stoi (zabezpieczenie na stoku)
         if (absSpd < 1.5) brakeForce = IDLE_BRAKE;
       }
 
-      // Otwarty dyferencjał tylny (RWD)
-      this._vehicle.applyEngineForce(0,           0);  // FL — brak napędu
-      this._vehicle.applyEngineForce(0,           1);  // FR — brak napędu
-      this._vehicle.applyEngineForce(engineForce, 2);  // RL
-      this._vehicle.applyEngineForce(engineForce, 3);  // RR
-      // Równe hamowanie na 4 koła — brak nurkowania, GTA-feel
-      for (let i = 0; i < 4; i++) this._vehicle.setBrake(brakeForce, i);
+      // RWD — napęd tylny
+      this._vehicle.setWheelEngineForce(0, 0);             // FL
+      this._vehicle.setWheelEngineForce(1, 0);             // FR
+      this._vehicle.setWheelEngineForce(2, engineForce);   // RL
+      this._vehicle.setWheelEngineForce(3, engineForce);   // RR
+      for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
     }
 
-    // ── Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia ────────────
-    // Nawierzchnie: asfalt fF=3.2, beton fF=2.8 (×0.88), trawa fF=1.6 (~50% asfaltu)
+    // Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia
     const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 1.6);
 
-    // Tył: dynamiczne — zależy od trybu jazdy:
-    //  • hamowanie:  fR = fF (równe przód/tył → stabilne, brak zarzucania)
-    //  • zakręt:     fR maleje ze wzrostem steer×prędkość → GTA-style tail looseness
-    //  • ruszanie:   launchT obniża fR → wheelspin + kontrolowany oversteer
-    const launching   = speedKmh > -1 && absSpd < 40;
-    const launchT     = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
-    const brakingNow  = backAmount > 0.10;
-    // cornerT: 0 przy prosto lub małej prędkości, 1 przy pełnym skręcie + ≥60 km/h
-    const cornerT     = Math.abs(this._steer) * Math.min(1, absSpd / 60);
-    this._cornerT = cornerT;  // dla _updateSkidMarks — ślady przy drifcie bocznym
+    const launching  = speedKmh > -1 && absSpd < 40;
+    const launchT    = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
+    const brakingNow = backAmount > 0.10;
+    const cornerT    = Math.abs(this._steer) * Math.min(1, absSpd / 60);
+    this._cornerT = cornerT;
+
     let fR;
     if (brakingNow) {
-      fR = fF;  // przy hamowaniu przód i tył jednakowe → brak zarzucania tyłu
+      fR = fF;
     } else if (onRoad) {
       fR = Math.max(0.55, 2.6 - launchT * 1.60 - cornerT * 0.90);
     } else if (onSidewalk) {
       fR = Math.max(0.55, 2.3 - launchT * 1.40 - cornerT * 0.80);
     } else {
-      fR = Math.max(1.0, 1.5 - cornerT * 0.25);  // trawa: przyczepność ~50% asfaltu, lekki drift w zakrętach
+      fR = Math.max(1.0, 1.5 - cornerT * 0.25);
     }
-    const wInfos = this._vehicle.wheelInfos;
-    wInfos[0].frictionSlip = fF;  // FL
-    wInfos[1].frictionSlip = fF;  // FR
-    wInfos[2].frictionSlip = fR;  // RL
-    wInfos[3].frictionSlip = fR;  // RR
+    this._vehicle.setWheelFrictionSlip(0, fF);  // FL
+    this._vehicle.setWheelFrictionSlip(1, fF);  // FR
+    this._vehicle.setWheelFrictionSlip(2, fR);  // RL
+    this._vehicle.setWheelFrictionSlip(3, fR);  // RR
 
-    // ── Downforce — docisk aerodynamiczny przy dużej prędkości ──────────────
-    // F_down = k * v² [N]. Przy 120 km/h (33 m/s): 0.5 * 33² ≈ 544 N
-    // Poprawia przyczepność i stabilność w zakrętach powyżej ~60 km/h.
+    // Downforce aerodynamiczny — Rapier: addForce({x,y,z}, wake)
     if (absSpd > 20) {
       const vMs = absSpd / 3.6;
-      this._chassis.force.y -= 0.50 * vMs * vMs;
+      this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
 
-    // ── Klakson (H / Y-pad) — ciągły gdy trzymasz ────────────────────────────
+    // Klakson (H / Y-pad)
     const hornDown = input.isDown('KeyH') || input.isPadButtonDown(3);
     if (hornDown) audio?.startHorn(); else audio?.stopHorn();
 
-    // ── Dźwięk silnika + opon ────────────────────────────────────────────────
+    // Dźwięk silnika + opon
     audio?.updateEngine(speedKmh, gasIn, dt);
     audio?.updateTires(speedKmh, onRoad);
 
-    // ── Stan hamowania — TYLKO dla świateł stop ───────────────────────────────
+    // Stan hamowania — dla świateł stop
     this._isHandbraking = handBrake && absSpd > 3;
     this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1;
 
-    // ── RPM factor — używany przez wydech i inne efekty ──────────────────────
-    // 0 = jałowy, 1 = pełne obroty; kombinacja prędkości i gazu
-    const speedNorm = Math.min(1, Math.abs(speedKmh) / 120);
+    // RPM factor — używany przez wydech
+    const speedNorm  = Math.min(1, absSpd / 120);
     this._rpmFactor  = Math.min(1, speedNorm * 0.5 + Math.max(0, gasIn) * 0.8);
-    // Zachowaj prędkość i gaz dla lateUpdate (obrót kół)
     this._speedKmh   = speedKmh;
     this._gasIn      = gasIn;
 
-    // ── Auto-flip recovery: koziołkowanie → po 2 s auto wyprostowanie ────────
-    // Oś Y chassis po rotacji: Ry = 1 - 2*(qx²+qz²). Ujemne = wywrotka.
-    const q = this._chassis.quaternion;
+    // Auto-flip recovery: po 2 s wywrotka → wyprostowanie
+    const q = this._chassis.rotation();
     const worldUpY = 1 - 2 * (q.x * q.x + q.z * q.z);
-    const isFlipped = worldUpY < -0.2;
-
-    if (isFlipped) {
+    if (worldUpY < -0.2) {
       this._flippedTimer = (this._flippedTimer ?? 0) + dt;
       if (this._flippedTimer > 2.0) {
-        // Zachowaj kierunek jazdy (kąt Y), ustaw chassis prosto
         const heading = Math.atan2(2 * (q.w * q.y + q.x * q.z),
                                    1 - 2 * (q.y * q.y + q.z * q.z));
         const sinH = Math.sin(heading / 2), cosH = Math.cos(heading / 2);
-        const p = this._chassis.position;
-        this._chassis.position.set(p.x, Math.max(p.y, 1.2) + 1.5, p.z);
-        this._chassis.quaternion.set(0, sinH, 0, cosH);  // tylko rotacja Y
-        this._chassis.velocity.set(0, 0, 0);
-        this._chassis.angularVelocity.set(0, 0, 0);
+        const p = this._chassis.translation();
+        this._chassis.setTranslation({ x: p.x, y: Math.max(p.y, 1.2) + 1.5, z: p.z }, true);
+        this._chassis.setRotation({ x: 0, y: sinH, z: 0, w: cosH }, true);
+        this._chassis.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        this._chassis.setAngvel({ x: 0, y: 0, z: 0 }, true);
         this._flippedTimer = 0;
       }
     } else {
       this._flippedTimer = 0;
     }
+
+    // Krok vehicle controllera — musi być PO ustawieniu sił, PRZED world.step()
+    this._vehicle.updateVehicle(dt, 0, null, null);
   }
 
   /**
-   * Wywołaj PO vehiclePhysics.step() i PRZED rapier.step().
-   * Synchronizuje: cannon-es → Three.js mesh + Rapier kinematic body.
+   * Wywołaj PO physics.step().
+   * Synchronizuje: Rapier chassis → Three.js mesh.
+   * Wykrywa kolizje przez delta prędkości.
    */
   lateUpdate() {
-    const pos  = this._chassis.position;
-    const quat = this._chassis.quaternion;
-    const dt   = this._dt ?? (1 / 60);  // musi być przed pierwszym użyciem
+    const pos  = this._chassis.translation();  // {x, y, z}
+    const quat = this._chassis.rotation();     // {x, y, z, w}
+    const dt   = this._dt ?? (1 / 60);
 
-    // ── Synchronizacja kół z cannon-es ───────────────────────────────────────
-    // updateWheelTransform() przelicza: pozycję koła, obrót (rotation), skręt (steering)
-    for (let i = 0; i < 4; i++) this._vehicle.updateWheelTransform(i);
-    const wi = this._vehicle.wheelInfos;
+    // ── Detekcja kolizji przez spadek prędkości ───────────────────────────
+    const linvel = this._chassis.linvel();
+    const speed  = Math.sqrt(linvel.x ** 2 + linvel.y ** 2 + linvel.z ** 2);
+    const deltaV = this._prevSpeed - speed;
+    if (deltaV > 2 && speed < this._prevSpeed) {
+      this._impactVelThisFrame = deltaV;
+      this._audio?.playCollision('wall', deltaV);
+      if (deltaV >= 4) this._handleImpact(deltaV);
+    }
+    this._prevSpeed = speed;
 
-    // Root Y: uśredniona pozycja środków kół → brak zapadania przy drganiach zawieszenia
-    const avgWheelY = (wi[0].worldTransform.position.y + wi[1].worldTransform.position.y
-                     + wi[2].worldTransform.position.y + wi[3].worldTransform.position.y) / 4;
-    const targetRootY = avgWheelY - WHEEL_R;
+    // ── Root Y — wygładzona pozycja kół na zawieszeniu ────────────────────
+    const s0 = this._vehicle.wheelSuspensionLength(0);
+    const s1 = this._vehicle.wheelSuspensionLength(1);
+    const s2 = this._vehicle.wheelSuspensionLength(2);
+    const s3 = this._vehicle.wheelSuspensionLength(3);
+
+    // Średnia pozycja Y kontaktu kół z podłożem
+    const avgSuspLen = (s0 + s1 + s2 + s3) / 4;
+    const targetRootY = pos.y - CHASSIS_OFFSET_Y;
     if (this._rootY === undefined) this._rootY = targetRootY;
-    this._rootY += (targetRootY - this._rootY) * (1 - Math.exp(-dt * 12));  // frame-rate-independent (było stałe 0.2)
+    this._rootY += (targetRootY - this._rootY) * (1 - Math.exp(-dt * 12));
 
     this.root.position.set(pos.x, this._rootY, pos.z);
     this.root.quaternion.set(quat.x, quat.y, quat.z, quat.w);
 
     // ── Body roll/pitch — wizualny przechył nadwozia ──────────────────────
-    // Koła zostają w root (brak roll) — tylko _bodyPivot się przechyla.
-    // speedK: im szybciej, tym silniejszy efekt; brak efektu przy parkowaniu.
     const speedK = Math.abs(this._speedKmh ?? 0);
-    const speedFacRoll  = Math.min(1, speedK / 80);   // pełny roll od 80 km/h
-    const speedFacPitch = Math.min(1, speedK / 60);   // pełny pitch od 60 km/h
+    const speedFacRoll  = Math.min(1, speedK / 80);
+    const speedFacPitch = Math.min(1, speedK / 60);
 
-    // Roll: przechył w zakręcie — przeciwny do kierunku skrętu
-    // _steer > 0 = lewy skręt → ciało przechyla się w prawo (rotation.z ujemne)
-    const targetRoll = -(this._steer ?? 0) * speedFacRoll * 0.072;  // max ≈ 4°
-
-    // Pitch: nurkowanie przy hamowaniu, squat przy gazie
-    // rotation.x > 0 = przód unosi się (gaz); < 0 = przód nurkuje (hamowanie)
-    const targetPitch = ((this._throttle ?? 0) - (this._brake ?? 0)) * speedFacPitch * 0.048; // max ≈ 2.7°
+    const targetRoll  = -(this._steer ?? 0) * speedFacRoll  * 0.072;
+    const targetPitch = ((this._throttle ?? 0) - (this._brake ?? 0)) * speedFacPitch * 0.048;
 
     this._bodyRoll  += (targetRoll  - this._bodyRoll)  * (1 - Math.exp(-dt * 6));
     this._bodyPitch += (targetPitch - this._bodyPitch) * (1 - Math.exp(-dt * 5));
@@ -969,62 +912,36 @@ export class Car extends Entity {
       this._bodyPivot.rotation.x = this._bodyPitch;
     }
 
-    // Per-koło: zawieszenie + obrót + skręt
-    const avgSuspLen = (wi[0].suspensionLength + wi[1].suspensionLength
-                      + wi[2].suspensionLength + wi[3].suspensionLength) / 4;
-
-    // Obrót kół: bezpośrednio z cannon-es deltaRotation — kąt obrotu obliczony
-    // przez fizykę na ostatni krok (1/60 s), z uwzględnieniem poślizgu i hamowania.
-    // Gwarantuje zgodność bieżnika z nawierzchnią niezależnie od fps.
-
-    // ── Prędkość pojazdu (m/s, ze znakiem: + = do przodu) ───────────────────
-    const vehicleSpeedMs = (this._speedKmh ?? 0) / 3.6;
-    const absVehicleSpeedMs = Math.abs(vehicleSpeedMs);
-
-    // ── Slip ratio per koło + zapis dla dźwięku / śladów ────────────────────
-    // slip = 0: koło toczy się swobodnie; slip = 1: koło zablokowane
+    // ── Per-koło: zawieszenie + obrót + skręt ────────────────────────────
+    // Slip ratio — przybliżony z siły hamowania
+    const absSpeedMs = Math.abs(this._speedKmh ?? 0) / 3.6;
     let maxSlip = 0;
-    const slips = wi.map(w => {
-      if (absVehicleSpeedMs < 0.5) return 0;
-      const wheelSpeedMs = Math.abs(w.deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
-      return Math.max(0, 1 - wheelSpeedMs / absVehicleSpeedMs);
-    });
-    maxSlip = Math.max(...slips);
-    this._maxWheelSlip = maxSlip;
 
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
-      const w = wi[i];
-      // Zawieszenie niezależne: koło wyżej gdy ściśnięte bardziej niż średnia
-      outer.position.y = WHEEL_R + (avgSuspLen - w.suspensionLength);
+      // Zawieszenie niezależne
+      const suspLen = this._vehicle.wheelSuspensionLength(i);
+      outer.position.y = WHEEL_R + (avgSuspLen - suspLen);
 
-      // Obrót wizualny: stały krok fizyki 1/60s (niezależny od FPS renderowania).
-      // Przy swobodnym toczeniu / gazie: vehicleSpeedMs / WHEEL_R × (1/60) = kąt obrotu [rad/krok].
-      // Przy hamowaniu: blend ze slip ratio → koło wizualnie zwalnia proporcjonalnie do blokady.
-      const PHYS_DT = 1 / 60;
-      let visualSpeedMs = vehicleSpeedMs;
-      if (absVehicleSpeedMs > 0.3 && (this._isBraking || this._isHandbraking)) {
-        const wheelSpeedMs = Math.abs(wi[i].deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
-        const rollingFraction = Math.min(1, wheelSpeedMs / absVehicleSpeedMs);
-        visualSpeedMs = vehicleSpeedMs * rollingFraction;
-      }
-      inner.rotation.x += visualSpeedMs / WHEEL_R * PHYS_DT;
+      // Obrót kół: Rapier zwraca kumulatywny kąt → ustawiamy bezpośrednio
+      inner.rotation.x = -this._vehicle.wheelRotation(i);
 
-      // Skręt przednich kół (źródło prawdy = cannon-es steering)
-      if (isFront) outer.rotation.y = w.steering;
+      // Skręt przednich kół
+      if (isFront) outer.rotation.y = this._vehicle.wheelSteering(i);
+
+      // Slip ratio z siły hamowania (dla śladów / dźwięku)
+      const brakeF = this._vehicle.wheelBrake(i);
+      const slip   = absSpeedMs > 0.5 ? Math.min(1, brakeF / MAX_BRAKE_FORCE) : 0;
+      if (slip > maxSlip) maxSlip = slip;
     });
+    this._maxWheelSlip = maxSlip;
 
-    // Wyciągnij kąt obrotu Y (heading) z kwaterniona — dla kamery i wychodzenia
+    // Kąt obrotu Y (heading) z kwaterniona — kamera i wysiadanie
     this.facing = Math.atan2(
       2 * (quat.w * quat.y + quat.x * quat.z),
       1 - 2 * (quat.y * quat.y + quat.z * quat.z),
     );
 
-    // Synchronizuj Rapier kinematic body (kolizja gracza z autem)
-    // Translacja + rotacja → compound collidery (kadłub + kabina) obracają się z autem
-    this._body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
-    this._body.setNextKinematicRotation({ x: quat.x, y: quat.y, z: quat.z, w: quat.w });
-
-    // Ślady hamowania (tylne koła)
+    // Ślady opon
     if (this._skidState) this._updateSkidMarks();
 
     // Dym wydechu
@@ -1056,36 +973,28 @@ export class Car extends Entity {
    *  - hamulec ręczny na tylnych kołach (_isHandbraking)
    */
   _updateSkidMarks() {
-    const wi     = this._vehicle.wheelInfos;
-    const speedK = Math.abs(this._vehicle.currentVehicleSpeedKmHour);
-
+    const speedK  = Math.abs(this._vehicle.currentVehicleSpeed() * 3.6);
     const speedMs = speedK / 3.6;
 
     for (let wIdx = 0; wIdx < 4; wIdx++) {
-      const wInfo  = wi[wIdx];
       const state  = this._skidState[wIdx];
       const isRear = wIdx >= 2;
 
-      // Slip ratio: jak bardzo koło jest wolniejsze od pojazdu (blokada hamulcowa)
-      let slip = 0;
-      if (speedMs > 0.5) {
-        const wheelSpeedMs = Math.abs(wInfo.deltaRotation) * 120 * WHEEL_R;  // 120 Hz physics step
-        slip = Math.max(0, 1 - wheelSpeedMs / speedMs);
-      }
+      // Slip ratio — przybliżony z siły hamowania
+      const brakeF = this._vehicle.wheelBrake(wIdx);
+      const slip   = speedMs > 0.5 ? Math.min(1, brakeF / MAX_BRAKE_FORCE) : 0;
 
-      // Ślad gdy: koła prawie zablokowane przy hamowaniu,
-      // LUB hamulec ręczny na tylnych, LUB boczny poślizg w zakręcie (drift).
-      // Gating na _isBraking/_isHandbraking — bez niego cannon-es deltaRotation*=0.99
-      // per substep powoduje fałszywy slip po puszczeniu gazu (koła "zwalniają wirtualnie").
-      const physicsSlip  = speedK > 5 && slip > 0.85 && (this._isBraking || this._isHandbraking);
-      const handSkid     = this._isHandbraking && isRear && speedK > 3;
-      // Boczny drift: tylne koła ślizgają się gdy duży kąt skrętu + wysoka prędkość
-      const lateralSkid  = isRear && (this._cornerT ?? 0) > 0.45 && speedK > 35;
+      const physicsSlip = speedK > 5 && slip > 0.85 && (this._isBraking || this._isHandbraking);
+      const handSkid    = this._isHandbraking && isRear && speedK > 3;
+      const lateralSkid = isRear && (this._cornerT ?? 0) > 0.45 && speedK > 35;
 
       const skidding = physicsSlip || handSkid || lateralSkid;
 
-      const wx = wInfo.worldTransform.position.x;
-      const wz = wInfo.worldTransform.position.z;
+      // Pozycja koła w world space — punkt kontaktu lub estymacja z pozycji auta
+      const contactPt = this._vehicle.wheelContactPoint(wIdx);
+      const pos = this._chassis.translation();
+      const wx = contactPt ? contactPt.x : pos.x;
+      const wz = contactPt ? contactPt.z : pos.z;
 
       const onHard = isOnHardSurface(wx, wz);
       const TRANS_PTS = 12;   // ≈12 punktów brązowych po wjeździe na asfalt z trawy
