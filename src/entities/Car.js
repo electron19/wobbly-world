@@ -373,19 +373,8 @@ export class Car extends Entity {
     const { vehicle, chassis } = vehiclePhysics.createVehicle(
       rapierPhysics.world, x, y, z, this.facing,
     );
-    this._vehicle     = vehicle;
-    this._chassis     = chassis;
-    this._rapierWorld = rapierPhysics.world;  // do predykatu wykluczającego dynamic bodies
-
-    // Predykat: koła trafiają tylko w static/kinematic bodies — nie w inne auta (dynamic).
-    // Bez tego promień koła ląduje na chassis innego auta i zawieszenie gwałtownie się ściska.
-    const world = this._rapierWorld;
-    this._wheelRayPredicate = (collider) => {
-      const handle = collider.parent();
-      if (handle == null) return true;
-      const body = world.getRigidBody(handle);
-      return body ? !body.isDynamic() : true;
-    };
+    this._vehicle = vehicle;
+    this._chassis = chassis;
 
     // Zaparkowane auto stoi w miejscu (hamulec)
     for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
@@ -777,16 +766,18 @@ export class Car extends Entity {
       this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
-        if (speedKmh < -1) {
+        // Próg -5 (nie -1): chwilowe fluktuacje prędkości Rapiera (±1 km/h przy zderzeniu
+        // lub skręcie) nie wyzwalają już hamulca podczas jazdy do przodu.
+        if (speedKmh < -5) {
           brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
         } else if (speedKmh < MAX_SPEED_KMH) {
-          engineForce = MAX_ENGINE_FORCE * gasIn;  // Rapier: + = do przodu
+          engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else if (gasIn < 0) {
         if (speedKmh > 1) {
           brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
         } else if (speedKmh > -MAX_REV_KMH) {
-          engineForce = MAX_ENGINE_FORCE * gasIn;  // Rapier: ujemny = wstecz
+          engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else {
         if (absSpd < 1.5) brakeForce = IDLE_BRAKE;
@@ -800,16 +791,17 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
     }
 
-    // Tarcie wzdłużne kół — niskie wartości (< 1.0) eliminują oscylacje "pulsującego hamowania"
-    // frictionSlip > 1.0 powoduje, że koła generują siły poza zakresem normalnej pracy → pulsacja
-    const BASE_F = onRoad ? 0.85 : (onSidewalk ? 0.75 : 0.60);
+    // frictionSlip = 4.0: duże "kółko tarcia" → siły podłużna i boczna działają niezależnie.
+    // Przy niskich wartościach (< 1.0) siły boczne (skręt) konsumowały budżet tarcia
+    // i redukowały siłę podłużną = hamowanie w zakrętach (cornering drag).
+    const BASE_F = onRoad ? 4.0 : (onSidewalk ? 3.5 : 2.5);
 
-    // Tylne koła: delikatna redukcja przy poślizgu startowym i zakrętach = naturalny oversteer
+    // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do BASE_F
     const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
     this._cornerT = cornerT;
-    const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 0.30;
-    const cornerSlip = cornerT * 0.28;
-    const fR = Math.max(0.28, BASE_F - launchSlip - cornerSlip);
+    const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 2.5;
+    const cornerSlip = cornerT * 1.5;
+    const fR = Math.max(0.30, BASE_F - launchSlip - cornerSlip);
 
     this._vehicle.setWheelFrictionSlip(0, BASE_F);  // FL
     this._vehicle.setWheelFrictionSlip(1, BASE_F);  // FR
@@ -861,9 +853,9 @@ export class Car extends Entity {
     }
 
     // Krok vehicle controllera — musi być PO ustawieniu sił, PRZED world.step()
-    // Predykat wyklucza dynamic bodies (inne auta) z promieni kół — bez tego koła
-    // "lądują" na chassis zaparkowanego auta i powodują niespodziewane hamowanie.
-    this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, this._wheelRayPredicate);
+    // filterGroups 0x0001FFFD: promienie kół omijają grupę 2 (chassis innych aut).
+    // Chassis jest w grupie 2 (setCollisionGroups 0x0002FFFF w VehiclePhysics.js).
+    this._vehicle.updateVehicle(dt, 0, 0x0001FFFD, null);
   }
 
   /**
@@ -871,7 +863,10 @@ export class Car extends Entity {
    * Wywołaj PRZED physics.step() dla każdego auta które NIE jest prowadzone.
    */
   idleStep(dt) {
-    if (this._vehicle) this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, this._wheelRayPredicate);
+    if (!this._vehicle) return;
+    // Re-aplikuj hamulec co klatkę — bez tego zaparkowane auto może się stoczyć po zejściu gracza.
+    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
+    this._vehicle.updateVehicle(dt, 0, 0x0001FFFD, null);
   }
 
   /**

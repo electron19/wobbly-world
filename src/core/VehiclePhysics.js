@@ -40,11 +40,15 @@ export class VehiclePhysics {
     }
 
     // Chassis box collider — matches Car.js CAR_BOX_* visual dimensions
+    // CollisionGroups 0x0002FFFF: chassis is in group 2.
+    // Wheel raycasts use filterGroups 0x0001FFFD (exclude group 2),
+    // so wheel rays never hit other car chassis bodies.
     rapierWorld.createCollider(
       R.ColliderDesc.cuboid(1.07, 0.45, 2.20)
         .setMass(2000)
         .setFriction(0.4)
-        .setRestitution(0.28),
+        .setRestitution(0.28)
+        .setCollisionGroups(0x0002FFFF),
       chassis,
     );
 
