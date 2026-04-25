@@ -373,8 +373,19 @@ export class Car extends Entity {
     const { vehicle, chassis } = vehiclePhysics.createVehicle(
       rapierPhysics.world, x, y, z, this.facing,
     );
-    this._vehicle = vehicle;
-    this._chassis = chassis;
+    this._vehicle     = vehicle;
+    this._chassis     = chassis;
+    this._rapierWorld = rapierPhysics.world;  // do predykatu wykluczającego dynamic bodies
+
+    // Predykat: koła trafiają tylko w static/kinematic bodies — nie w inne auta (dynamic).
+    // Bez tego promień koła ląduje na chassis innego auta i zawieszenie gwałtownie się ściska.
+    const world = this._rapierWorld;
+    this._wheelRayPredicate = (collider) => {
+      const handle = collider.parent();
+      if (handle == null) return true;
+      const body = world.getRigidBody(handle);
+      return body ? !body.isDynamic() : true;
+    };
 
     // Zaparkowane auto stoi w miejscu (hamulec)
     for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
@@ -850,8 +861,9 @@ export class Car extends Entity {
     }
 
     // Krok vehicle controllera — musi być PO ustawieniu sił, PRZED world.step()
-    // filterGroups 0xFFFFFFFF = promienie kół trafią we wszystkie kolizory (podłoga, wzgórza)
-    this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, null);
+    // Predykat wyklucza dynamic bodies (inne auta) z promieni kół — bez tego koła
+    // "lądują" na chassis zaparkowanego auta i powodują niespodziewane hamowanie.
+    this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, this._wheelRayPredicate);
   }
 
   /**
@@ -859,7 +871,7 @@ export class Car extends Entity {
    * Wywołaj PRZED physics.step() dla każdego auta które NIE jest prowadzone.
    */
   idleStep(dt) {
-    if (this._vehicle) this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, null);
+    if (this._vehicle) this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, this._wheelRayPredicate);
   }
 
   /**
