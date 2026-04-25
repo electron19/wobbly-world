@@ -20,7 +20,6 @@ export async function initRapier() {
 
 /** Returns the initialised Rapier module (call after initRapier()). */
 export function getRapier() { return R; }
-}
 
 export class PhysicsWorld {
   constructor() {
