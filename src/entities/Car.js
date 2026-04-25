@@ -12,7 +12,7 @@ const AXLE_ZF  =  1.52;  // Z osi przedniej
 const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
-const MAX_ENGINE_FORCE   = 18000; // N na koło tylne (mocne przyspieszenie)
+const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
 const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
@@ -42,6 +42,7 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake = false;
+    this._wheelAngle    = 0;      // akumulowany kąt obrotu kół (bazowany na prędkości)
     // Zniszczenia — progresywna deformacja zderzaków i maski
     this._damageFront = 0;   // 0–1: 0 = brak, 1 = max
     this._damageRear  = 0;
@@ -788,8 +789,8 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
     }
 
-    // Tarcie boczne kół — per koło (przód ≠ tył) × nawierzchnia
-    const fF = onRoad ? 3.2 : (onSidewalk ? 2.8 : 1.6);
+    // Tarcie wzdłużne kół — per koło (przód ≠ tył) × nawierzchnia
+    const fF = onRoad ? 1.5 : (onSidewalk ? 1.3 : 0.9);
 
     const launching  = speedKmh > -1 && absSpd < 40;
     const launchT    = launching ? forwAmount * Math.max(0, 1 - absSpd / 40) : 0;
@@ -801,11 +802,11 @@ export class Car extends Entity {
     if (brakingNow) {
       fR = fF;
     } else if (onRoad) {
-      fR = Math.max(0.55, 2.6 - launchT * 1.60 - cornerT * 0.90);
+      fR = Math.max(0.35, 1.3 - launchT * 0.80 - cornerT * 0.45);
     } else if (onSidewalk) {
-      fR = Math.max(0.55, 2.3 - launchT * 1.40 - cornerT * 0.80);
+      fR = Math.max(0.35, 1.1 - launchT * 0.70 - cornerT * 0.40);
     } else {
-      fR = Math.max(1.0, 1.5 - cornerT * 0.25);
+      fR = Math.max(0.6, 0.8 - cornerT * 0.15);
     }
     this._vehicle.setWheelFrictionSlip(0, fF);  // FL
     this._vehicle.setWheelFrictionSlip(1, fF);  // FR
@@ -922,8 +923,13 @@ export class Car extends Entity {
     }
 
     // ── Per-koło: zawieszenie + obrót + skręt ────────────────────────────
+    // Obrót kół akumulowany z prędkości pojazdu (wheelRotation() Rapiera nie działa poprawnie
+    // dla kół swobodnych i zwraca odwróconą orientację osi).
+    const speedMs = this._vehicle.currentVehicleSpeed();  // m/s, + = do przodu
+    this._wheelAngle += (speedMs / WHEEL_R) * dt;
+
     // Slip ratio — przybliżony z siły hamowania
-    const absSpeedMs = Math.abs(this._speedKmh ?? 0) / 3.6;
+    const absSpeedMs = Math.abs(speedMs);
     let maxSlip = 0;
 
     this._wheels.forEach(({ outer, inner, isFront }, i) => {
@@ -931,8 +937,8 @@ export class Car extends Entity {
       const suspLen = this._vehicle.wheelSuspensionLength(i);
       outer.position.y = WHEEL_R + (avgSuspLen - suspLen);
 
-      // Obrót kół: Rapier zwraca kumulatywny kąt → ustawiamy bezpośrednio
-      inner.rotation.x = -this._vehicle.wheelRotation(i);
+      // Obrót kół z akumulowanego kąta
+      inner.rotation.x = this._wheelAngle;
 
       // Skręt przednich kół
       if (isFront) outer.rotation.y = this._vehicle.wheelSteering(i);

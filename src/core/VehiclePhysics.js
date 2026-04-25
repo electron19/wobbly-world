@@ -71,14 +71,14 @@ export class VehiclePhysics {
       );
     }
 
-    // Suspension & friction tuning — mirrors previous cannon-es wheelOpts
+    // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   36);
-      vehicle.setWheelSuspensionCompression(i,  3.2);
-      vehicle.setWheelSuspensionRelaxation(i,   2.4);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.28);
+      vehicle.setWheelSuspensionStiffness(i,   22);     // miększe: mniej skoków, brak pulsacji
+      vehicle.setWheelSuspensionCompression(i,  4.8);   // mocne tłumienie (zapobiega oscylacjom)
+      vehicle.setWheelSuspensionRelaxation(i,   3.8);   // wolniejszy powrót = płynność
+      vehicle.setWheelMaxSuspensionTravel(i,    0.40);  // więcej skoku = lepszy kontakt z podłożem
       vehicle.setWheelMaxSuspensionForce(i,     100000);
-      vehicle.setWheelFrictionSlip(i,           2.5);
+      vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
       vehicle.setWheelSideFrictionStiffness(i,  0.5);
     }
 
