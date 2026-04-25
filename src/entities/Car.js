@@ -857,7 +857,16 @@ export class Car extends Entity {
     }
 
     // Krok vehicle controllera — musi być PO ustawieniu sił, PRZED world.step()
-    this._vehicle.updateVehicle(dt, 0, null, null);
+    // filterGroups 0xFFFFFFFF = promienie kół trafią we wszystkie kolizory (podłoga, wzgórza)
+    this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, null);
+  }
+
+  /**
+   * Krok vehicle controllera dla zaparkowanego auta (bez wejścia gracza).
+   * Wywołaj PRZED physics.step() dla każdego auta które NIE jest prowadzone.
+   */
+  idleStep(dt) {
+    if (this._vehicle) this._vehicle.updateVehicle(dt, 0, 0xFFFFFFFF, null);
   }
 
   /**
@@ -887,9 +896,9 @@ export class Car extends Entity {
     const s2 = this._vehicle.wheelSuspensionLength(2);
     const s3 = this._vehicle.wheelSuspensionLength(3);
 
-    // Średnia pozycja Y kontaktu kół z podłożem
-    const avgSuspLen = (s0 + s1 + s2 + s3) / 4;
-    const targetRootY = pos.y - CHASSIS_OFFSET_Y;
+    // Średnia długość zawieszenia → root na poziomie drogi (chassis center - suspLen - wheelR)
+    const avgSuspLen  = (s0 + s1 + s2 + s3) / 4;
+    const targetRootY = pos.y - avgSuspLen - WHEEL_R;
     if (this._rootY === undefined) this._rootY = targetRootY;
     this._rootY += (targetRootY - this._rootY) * (1 - Math.exp(-dt * 12));
 

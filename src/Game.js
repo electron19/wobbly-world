@@ -250,6 +250,10 @@ export class Game {
     if (this._drivingCar) {
       this._drivingCar.update(dt, this.input, this.audio);
     }
+    // Zaparkowane auta też muszą dostać updateVehicle — inaczej zawieszenie nie działa
+    for (const car of this.cars) {
+      if (car !== this._drivingCar) car.idleStep(dt);
+    }
 
     // ── 2. Krok Rapier (auto + gracz + kolizje świata — jeden silnik) ─────
     for (const lamp of this._knockableLamps) lamp.update(dt);
