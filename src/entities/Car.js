@@ -747,15 +747,9 @@ export class Car extends Entity {
     const brakeSurf  = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
 
     // Prędkość (Rapier: m/s → km/h)
+    // currentVehicleSpeed() projection na lokalną oś Z — używana tylko do absSpd (magnitude OK).
     const speedKmh = this._vehicle.currentVehicleSpeed() * 3.6;
     const absSpd   = Math.abs(speedKmh);
-
-    // Wygładzona prędkość (τ=0.15s) — filtruje chwilowe spike'i z kontaktu kół z krawędziami.
-    // currentVehicleSpeed() zmienia znak gdy chassis przechyla się w skręcie (projekcja na
-    // lokalną oś Z), przez co 1-2 klatki fałszywej ujemnej prędkości włączały hamulce i światła.
-    const k = 1 - Math.exp(-dt / 0.15);
-    this._smoothSpd = (this._smoothSpd ?? speedKmh) + (speedKmh - (this._smoothSpd ?? speedKmh)) * k;
-    const sSpd = this._smoothSpd;  // używać zamiast speedKmh do decyzji o kierunku
 
     // ── Maszyna stanów kierunku jazdy ────────────────────────────────────────
     // Używa bezwzględnej prędkości poziomej chassis (linvel XZ) — odporna na skręty.
@@ -780,8 +774,7 @@ export class Car extends Entity {
 
     if (handBrake) {
       // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
-      // sSpd (wygładzona projekcja) używana tylko tutaj do detekcji "czy cofa szybko"
-      if (gasIn > 0 && sSpd > -1) {
+      if (gasIn > 0 && this._dirState !== 'reverse') {
         engineForce = MAX_ENGINE_FORCE * forwAmount;  // Rapier: + = do przodu
       }
       this._vehicle.setWheelEngineForce(2, engineForce);   // RL
@@ -853,10 +846,9 @@ export class Car extends Entity {
     audio?.updateTires(speedKmh, onRoad);
 
     // Stan hamowania — dla świateł stop
-    // backAmount > 0.05: wymagany rzeczywisty input gracza (filtruje phantom z sSpd < -5)
     this._isHandbraking = handBrake && absSpd > 3;
     this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1
-                          && (backAmount > 0.05 || sSpd < -3);
+                          && (backAmount > 0.05 || (this._dirState === 'reverse' && _horizSpeedKmh > 3));
 
     // RPM factor — używany przez wydech
     const speedNorm  = Math.min(1, absSpd / 120);
@@ -954,11 +946,11 @@ export class Car extends Entity {
     }
 
     // ── Per-koło: zawieszenie + obrót + skręt ────────────────────────────
-    // Obrót kół akumulowany z prędkości pojazdu (wheelRotation() Rapiera nie działa poprawnie
-    // dla kół swobodnych i zwraca odwróconą orientację osi).
-    // Wygładzona prędkość kół (m/s) — eliminuje spike'i currentVehicleSpeed() podczas skrętów
-    // które powodowały pulsacyjny obrót prawych kół do tyłu.
-    const speedMs = (this._smoothSpd ?? 0) / 3.6;
+    // Obrót kół: prędkość z modułu linvel (zawsze ≥0), znak z _dirState.
+    // currentVehicleSpeed() zmienia znak podczas skrętów (projekcja na lokalną oś Z)
+    // — powodowało cofanie kół podczas jazdy w prawo.
+    const wheelSign = this._dirState === 'reverse' ? -1 : 1;
+    const speedMs   = wheelSign * _horizSpeedKmh / 3.6;
     this._wheelAngle += (speedMs / WHEEL_R) * dt;
 
     // Slip ratio — przybliżony z siły hamowania
