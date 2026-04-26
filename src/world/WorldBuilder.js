@@ -253,9 +253,9 @@ export class WorldBuilder {
           sw.position.set(cx, SWH, swZ);
           sw.receiveShadow = true;
           this.scene.add(sw);
-          this.physics.addStaticBox(cx, SWH / 2, swZ, len / 2, SWH / 2, SWW / 2);
+          this.physics.addStaticBox(cx, 0, swZ, len / 2, SWH, SWW / 2);
           if (this.vehiclePhysics)
-            this.vehiclePhysics.addStaticBox(cx, SWH / 2, swZ, len / 2, SWH / 2, SWW / 2, 'ground');
+            this.vehiclePhysics.addStaticBox(cx, 0, swZ, len / 2, SWH, SWW / 2, 'ground');
         }
       });
     } else {
@@ -285,9 +285,9 @@ export class WorldBuilder {
           sw.position.set(swX, SWH, cz);
           sw.receiveShadow = true;
           this.scene.add(sw);
-          this.physics.addStaticBox(swX, SWH / 2, cz, SWW / 2, SWH / 2, len / 2);
+          this.physics.addStaticBox(swX, 0, cz, SWW / 2, SWH, len / 2);
           if (this.vehiclePhysics)
-            this.vehiclePhysics.addStaticBox(swX, SWH / 2, cz, SWW / 2, SWH / 2, len / 2, 'ground');
+            this.vehiclePhysics.addStaticBox(swX, 0, cz, SWW / 2, SWH, len / 2, 'ground');
         }
       });
     }
@@ -348,9 +348,9 @@ export class WorldBuilder {
             corner.position.set(cx, SWH, cz);
             corner.receiveShadow = true;
             this.scene.add(corner);
-            this.physics.addStaticBox(cx, SWH / 2, cz, SWW / 2, SWH / 2, SWW / 2);
+            this.physics.addStaticBox(cx, 0, cz, SWW / 2, SWH, SWW / 2);
             if (this.vehiclePhysics)
-              this.vehiclePhysics.addStaticBox(cx, SWH / 2, cz, SWW / 2, SWH / 2, SWW / 2, 'ground');
+              this.vehiclePhysics.addStaticBox(cx, 0, cz, SWW / 2, SWH, SWW / 2, 'ground');
           });
         });
       });

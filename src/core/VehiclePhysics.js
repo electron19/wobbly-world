@@ -23,11 +23,11 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Dynamic chassis — same mass and damping as previous cannon-es setup
+    // Dynamic chassis
     const chassisDesc = R.RigidBodyDesc.dynamic()
       .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
-      .setLinearDamping(0.02)
-      .setAngularDamping(0.45);
+      .setLinearDamping(0.15)
+      .setAngularDamping(0.55);
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
@@ -47,7 +47,7 @@ export class VehiclePhysics {
       R.ColliderDesc.cuboid(1.07, 0.45, 2.20)
         .setMass(2000)
         .setFriction(0.4)
-        .setRestitution(0.28)
+        .setRestitution(0.0)
         .setCollisionGroups(0x0002FFFF),
       chassis,
     );
@@ -77,11 +77,11 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   20);     // miękkie = płynna jazda
-      vehicle.setWheelSuspensionCompression(i,  6.0);   // wyższe tłumienie = brak wheel-bounce przy hamowaniu
-      vehicle.setWheelSuspensionRelaxation(i,   6.0);   // identyczne z compression (symetria)
-      vehicle.setWheelMaxSuspensionTravel(i,    0.40);  // więcej skoku = lepszy kontakt z podłożem
-      vehicle.setWheelMaxSuspensionForce(i,     100000);
+      vehicle.setWheelSuspensionStiffness(i,   24);
+      vehicle.setWheelSuspensionCompression(i,  4.0);
+      vehicle.setWheelSuspensionRelaxation(i,   4.0);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.25);  // ograniczony skok — chassis nie dosięga podłoża
+      vehicle.setWheelMaxSuspensionForce(i,     25000); // ~2.5× ciężar auta (2000kg × 10 m/s²)
       vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
       vehicle.setWheelSideFrictionStiffness(i,  0.45);  // umiarkowane — stabilizuje solver Rapiera w skrętach (0.15 powodowało niestabilność)
     }

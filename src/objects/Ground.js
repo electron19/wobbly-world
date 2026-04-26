@@ -142,11 +142,13 @@ export class Ground extends WorldObject {
       m.position.set(cx, SW_H, cz);
       m.receiveShadow = true;
       this.root.add(m);
+      // Center at y=0 (half-height=SW_H) — collider spans y=-SW_H to y=+SW_H,
+      // eliminating the seam where sidewalk meets ground plane at y=0.
       this._bodies.push(
-        this.physics.addStaticBox(cx, SW_H / 2, cz, w / 2, SW_H / 2, d / 2)
+        this.physics.addStaticBox(cx, 0, cz, w / 2, SW_H, d / 2)
       );
       if (this.vehiclePhysics) {
-        this.vehiclePhysics.addStaticBox(cx, SW_H / 2, cz, w / 2, SW_H / 2, d / 2, 'ground');
+        this.vehiclePhysics.addStaticBox(cx, 0, cz, w / 2, SW_H, d / 2, 'ground');
       }
     };
 
