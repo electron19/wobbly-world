@@ -934,7 +934,9 @@ export class Car extends Entity {
     // ── Per-koło: zawieszenie + obrót + skręt ────────────────────────────
     // Obrót kół akumulowany z prędkości pojazdu (wheelRotation() Rapiera nie działa poprawnie
     // dla kół swobodnych i zwraca odwróconą orientację osi).
-    const speedMs = this._vehicle.currentVehicleSpeed();  // m/s, + = do przodu
+    // Wygładzona prędkość kół (m/s) — eliminuje spike'i currentVehicleSpeed() podczas skrętów
+    // które powodowały pulsacyjny obrót prawych kół do tyłu.
+    const speedMs = (this._smoothSpd ?? 0) / 3.6;
     this._wheelAngle += (speedMs / WHEEL_R) * dt;
 
     // Slip ratio — przybliżony z siły hamowania

@@ -1,5 +1,10 @@
 # Changelog — Wobbly World
 
+## [v0.9.13] — 2026-04-26
+### Fixed
+- Wheel visual rotation: `lateUpdate()` now uses smoothed speed (`_smoothSpd / 3.6`) instead of raw `currentVehicleSpeed()` — eliminates pulsating backward wheel spin during right turns caused by single-frame velocity projection spikes
+- `VehiclePhysics`: `sideFrictionStiffness` raised from `0.15` → `0.45` — stabilises Rapier friction solver during sharp turns, reducing false brake-force spikes that activated stop/reverse lights
+
 ## [v0.9.9] — 2026-04-26
 ### Fixed
 - `AudioManager`: race condition przy wyjeździe z auta w ciągu 640 ms — `setTimeout(() => startEngine(), 640)` śledzone przez `_engineStartId`; `stopEngine()` wywołuje `clearTimeout(_engineStartId)` przed guard'em `!_engineRunning`, eliminując "phantom engine" po wyjściu z auta przed rozruchem

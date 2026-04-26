@@ -83,7 +83,7 @@ export class VehiclePhysics {
       vehicle.setWheelMaxSuspensionTravel(i,    0.40);  // więcej skoku = lepszy kontakt z podłożem
       vehicle.setWheelMaxSuspensionForce(i,     100000);
       vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
-      vehicle.setWheelSideFrictionStiffness(i,  0.15);  // niskie = brak cornering drag
+      vehicle.setWheelSideFrictionStiffness(i,  0.45);  // umiarkowane — stabilizuje solver Rapiera w skrętach (0.15 powodowało niestabilność)
     }
 
     return { vehicle, chassis };
