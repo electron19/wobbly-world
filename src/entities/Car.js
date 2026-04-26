@@ -1003,7 +1003,7 @@ export class Car extends Entity {
   _updateLights() {
     if (!this._revMat) return;
     const braking   = this._isBraking || this._isHandbraking;
-    const reversing = (this._smoothSpd ?? 0) < -1;  // wygładzona prędkość — brak spike'ów
+    const reversing = this._dirState === 'reverse';
     // Aktualizuj każde tylne światło stop — pomijaj uszkodzone
     this._tailMeshes.forEach((m, i) => {
       if (!m || this._tailDmg[i] > 0) return;  // zgaszone/oderwane — nie zmieniaj
