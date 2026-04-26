@@ -347,7 +347,7 @@ export class Game {
     // ── Lamp knockdown — proximity check po detekcji uderzenia ───────────
     if (this._drivingCar && this._drivingCar.impactVel > 3) {
       const cp  = this._drivingCar.root.position;
-      const lv  = this._drivingCar._chassis?.linvel?.() ?? { x: 0, z: 1 };
+      const lv  = this._drivingCar._chassis?.linvel?.() ?? { x: 0, z: 0 };
       const len = Math.hypot(lv.x, lv.z) || 1;
       for (const lamp of this._knockableLamps) {
         if (!lamp._knocked) {

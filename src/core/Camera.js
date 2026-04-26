@@ -18,6 +18,7 @@ export class ThirdPersonCamera {
     this.sensitivity = 0.003;
     this._lookTarget = new THREE.Vector3();
     this._tiltZ  = 0;    // wygładzone przechylenie boczne [rad]
+    this._trauma = 0;    // 0–1, wstrząs kamery
   }
 
   /**
@@ -25,7 +26,7 @@ export class ThirdPersonCamera {
    * @param {number} amount 0–1 (1 = maksymalny wstrząs)
    */
   addTrauma(amount) {
-    void amount;
+    this._trauma = Math.min(1, this._trauma + amount);
   }
 
   /**
@@ -83,6 +84,16 @@ export class ThirdPersonCamera {
         new THREE.Vector3(0, 0, 1), this._tiltZ,
       );
       this.camera.quaternion.multiply(tiltQ);
+    }
+
+    // ── Wstrząs kamery (trauma) przy zderzeniu ───────────────────────────────
+    if (this._trauma > 0.001) {
+      const shake = this._trauma * this._trauma; // kwadratowe wygasanie (łagodniejszy start)
+      this.camera.position.x += (Math.random() * 2 - 1) * shake * 0.35;
+      this.camera.position.y += (Math.random() * 2 - 1) * shake * 0.20;
+      this._trauma *= Math.exp(-dt * 8);
+    } else {
+      this._trauma = 0;
     }
 
   }

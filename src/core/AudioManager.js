@@ -230,7 +230,7 @@ export class AudioManager {
     flareOsc.stop(now + 1.05);
 
     // Właściwy silnik startuje po 0.65s (po złapaniu)
-    setTimeout(() => this.startEngine(), 640);
+    this._engineStartId = setTimeout(() => this.startEngine(), 640);
 
     return 640; // ms
   }
@@ -348,6 +348,7 @@ export class AudioManager {
   }
 
   stopEngine() {
+    clearTimeout(this._engineStartId);
     if (!this._engineRunning) return;
     const ctx = this._ctx;
     const now = ctx.currentTime;
