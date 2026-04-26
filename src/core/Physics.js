@@ -39,19 +39,24 @@ export class PhysicsWorld {
 
   // ─── Fabryki ciał statycznych ─────────────────────────────────────────────
 
-  /** Statyczny prostopadłościan (ściany, podłoga, bloki) */
+  /**
+   * Statyczny prostopadłościan (ściany, podłoga, bloki).
+   * friction=0: napęd/hamowanie kół kontroluje frictionSlip w VehicleController,
+   * nie tarcie koliderów. Zero tarcia zapobiega "kleistości" chassis przy kontakcie
+   * z krawędziami chodników, co powodowało phantom braking.
+   */
   addStaticBox(x, y, z, hw, hh, hd) {
     const body = this.world.createRigidBody(
       R.RigidBodyDesc.fixed().setTranslation(x, y, z)
     );
-    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd).setFriction(0), body);
     return body;
   }
 
   /** Statyczny trimesh — dokładna kolizja z geometrią siatki (wzgórza itp.) */
   addStaticTrimesh(vertices, indices) {
     const body = this.world.createRigidBody(R.RigidBodyDesc.fixed());
-    this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices), body);
+    this.world.createCollider(R.ColliderDesc.trimesh(vertices, indices).setFriction(0), body);
     return body;
   }
 
@@ -63,7 +68,7 @@ export class PhysicsWorld {
         .setTranslation(x, y, z)
         .setRotation({ x: 0, y: sinH, z: 0, w: cosH })
     );
-    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd), body);
+    this.world.createCollider(R.ColliderDesc.cuboid(hw, hh, hd).setFriction(0), body);
     return body;
   }
 
@@ -72,7 +77,7 @@ export class PhysicsWorld {
     const body = this.world.createRigidBody(
       R.RigidBodyDesc.fixed().setTranslation(x, y, z)
     );
-    this.world.createCollider(R.ColliderDesc.cylinder(hh, r), body);
+    this.world.createCollider(R.ColliderDesc.cylinder(hh, r).setFriction(0), body);
     return body;
   }
 
