@@ -1,15 +1,85 @@
 # Changelog — Wobbly World
 
-## [Unreleased]
-### Changed
-- Kamera: usunięto speed shake i trauma shake, pozostawiając płynny follow oraz tilt w zakrętach
+## [v0.9.9] — 2026-04-26
 ### Fixed
-- Wycofano eksperymentalny boost napędu i zmianę animacji kół, które powodowały zbyt gwałtowne ruszanie i niespójny obrót kół względem ruchu auta
-### Docs
-- README zaktualizowany do obecnej architektury projektu, aktualnego gameplayu samochodowego, produkcyjnego deploymentu na Vercelu i trybu `?joltSpike=1`
-- Dodano `docs/JOLT_MIGRATION.md` z planem migracji warstwy pojazdu z `cannon-es` do `JoltPhysics.js`, opisem obecnego spike'a i kolejnymi etapami wdrożenia
+- `AudioManager`: race condition przy wyjeździe z auta w ciągu 640 ms — `setTimeout(() => startEngine(), 640)` śledzone przez `_engineStartId`; `stopEngine()` wywołuje `clearTimeout(_engineStartId)` przed guard'em `!_engineRunning`, eliminując "phantom engine" po wyjściu z auta przed rozruchem
+- `Game.js`: fallback `linvel() ?? { x:0, z:1 }` zmieniony na `{ x:0, z:0 }` — `z:1` dawał fałszywy kierunek uderzenia w latarnie gdy chassis był niedostępny
+- `Camera.js`: `addTrauma()` zaimplementowane — `_trauma` akumuluje energie zderzenia, kwadratowe wygasanie (`trauma²`) daje łagodny efekt, zanika przez `exp(-dt*8)` (~0.5 s); wcześniej metoda ignorowała parametr (`void amount`)
+
+## [v0.9.8] — 2026-04-26
+### Fixed
+- Phantom braking: grupy kolizji kół wykluczone z detekcji dynamicznych ciał — brak fałszywego hamowania w pobliżu zaparkowanych aut
+- Próg prędkości idle: `-1 → -5` km/h — brak aktywacji hamulca przy cofaniu z impetem
+- `frictionSlip`: `0.85 → 4.0` — poprawa przyczepności przy normalnej jeździe po Rapier migracji
+- Hamulec idle: naprawa kroku fizyki przy zerowej prędkości
+
+## [v0.9.7] — 2026-04-26
+### Fixed
+- Hamowanie w pobliżu zaparkowanych aut: wheel raycasty wykluczone z detekcji ciał dynamicznych
+- Boczne tarcie obniżone — brak "wciągania" przez kadłuby stojących pojazdów
+
+## [v0.9.6] — 2026-04-26
+### Fixed
+- Pulsujące hamowanie: obniżony `frictionSlip` + symetryczne tłumienie zawieszenia (compression = relaxation) — eliminuje oscylacje siły hamowania
+
+## [v0.9.5] — 2026-04-26
 ### Added
-- Dodano `src/core/VehiclePhysicsJolt.js` oraz izolowany tryb spike `?joltSpike=1`, który ładuje `JoltPhysics.js` i stawia jedno testowe auto na płaskiej scenie
+- System wchodzenia do wnętrz budynków — gracz może wejść do domu (`House.js`), scena przełącza widok; `WorldBuilder.js` i `Game.js` obsługują wejście/wyjście
+
+## [v0.9.4] — 2026-04-26
+### Fixed
+- Siła silnika, tarcie, obrót kół i tłumienie zawieszenia po migracji do Rapier — jazda znowu responsywna
+
+## [v0.9.3] — 2026-04-26
+### Fixed
+- Wheel raycasty: poprawna długość i origin po zmianie na `DynamicRayCastVehicleController`
+- Idle suspension: zawieszenie nie zapada się przy braku kontaktu z podłożem
+- Root Y: formuła obliczania pozycji nadwozia względem chassis
+
+## [v1.0.8] — 2026-04-13
+### Added
+- 4× większy świat: nowe drogi E-W `z=±200/±250`, N-S `x=±195`
+- Nowe Osiedle Północne i Południowe: 24 domy + 4 sklepy
+- `Ground` powiększony do 1280 jednostek; granice mapy ±660
+
+## [v1.0.7] — 2026-04-13
+### Added
+- HUD debug: FPS, pozycja XYZ, prędkość km/h
+- Reflektory i tylne światła łamią się/gasną przy uderzeniu (uszkodzenia wizualne)
+
+## [v1.0.6] — 2026-04-13
+### Fixed
+- `linearDamping`: `0.18 → 0.02` — brak sztucznego hamowania powietrzem po migracji Rapier
+- Lampy uliczne: kolizja box `r=0.30` zamiast zbyt dużego — brak tunelowania
+- Chodniki: `PlaneGeometry` zamiast box'ów — lepsza wydajność
+
+## [v1.0.5] — 2026-04-13
+### Fixed
+- Lampy uliczne padają kinematycznie przy zderzeniu (ease-in, pivot u podstawy, bez wirowania)
+
+## [v1.0.4] — 2026-04-13
+### Fixed
+- TDZ crash: `const dt` przeniesione przed pierwsze użycie w `lateUpdate`
+
+## [v1.0.3] — 2026-04-13
+### Fixed
+- Podłączono `updateTires` — dźwięk opon asfalt/trawa przywrócony po migracji Rapier
+- Usunięto optional chaining z `isPadButtonDown` (powodowało ciche błędy)
+
+## [v1.0.2] — 2026-04-13
+### Fixed
+- Crash `contact.ri undefined` przy zderzeniu — poprawna obsługa event'u kontaktu Rapier
+- Niespójność `dt` w `lateUpdate` — jeden spójny `dt` z pętli gry
+
+## [v1.0.1] — 2026-04-13
+### Changed
+- **Migracja fizyki pojazdu: `cannon-es` → Rapier `DynamicRayCastVehicleController`** — jeden wspólny świat Rapier dla gracza, auta i świata; kolizje naturalne, brak duplikacji static bodies
+### Added
+- Ślady opon przy bocznym drifcie w zakrętach (`lateralSkid`)
+- SVG favicon (eliminacja 404 przy ładowaniu)
+### Fixed
+- Kapsuła gracza nad dachem auta przy jeździe (brak eksplozji fizyki)
+- `SyntaxError` w `Physics.js` (zbłąkany `}` na linii 23)
 
 ## [v1.0.0] — 2026-04-04
 ### Added

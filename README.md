@@ -10,11 +10,8 @@ Produkcja: https://wobbly-world.vercel.app/
 
 - Gameplay jest dziś głównie samochodowy. Piesza postać nadal istnieje, ale służy głównie do poruszania się po świecie i wejścia do auta.
 - Rendering opiera się o Three.js i natywne ES modules, bez bundlera.
-- Projekt używa dziś dwóch silników fizyki:
-- `Rapier` dla gracza, statycznego świata i kolizji postaci.
-- `cannon-es` dla aktualnej dynamiki pojazdu (`RaycastVehicle`).
-- W repo istnieje też izolowany spike `JoltPhysics.js`, uruchamiany osobno przez `?joltSpike=1`. To nie jest jeszcze część głównego gameplayu.
-- Świat budowany jest proceduralnie przez `WorldBuilder`: drogi, chodniki, dzielnice, budynki, lampy, drzewa, wzgórza, auta i granice mapy.
+- Projekt używa jednego silnika fizyki — **Rapier3D** — zarówno dla gracza/świata jak i pojazdu (`DynamicRayCastVehicleController`).
+- Świat budowany jest proceduralnie przez `WorldBuilder`: drogi, chodniki, dzielnice, budynki, lampy, drzewa, wzgórza, auta i granice mapy (~4× świat, drogi do z=±250).
 - Audio jest proceduralne przez Web Audio API: silnik, opony, poślizg, klakson, kroki, skok/lądowanie, pierdnięcie i beknięcie.
 
 ## Stack
@@ -22,8 +19,7 @@ Produkcja: https://wobbly-world.vercel.app/
 | Warstwa | Technologia |
 | --- | --- |
 | Rendering | Three.js r165 |
-| Fizyka postaci i świata | Rapier3D |
-| Fizyka pojazdu | `cannon-es` (`main`) + eksperymentalnie `JoltPhysics.js` (`?joltSpike=1`) |
+| Fizyka (postać, świat i pojazd) | Rapier3D (`DynamicRayCastVehicleController`) |
 | Audio | Web Audio API |
 | Losowość / seed | `seedrandom` |
 | Build tool | brak, natywne ES modules w przeglądarce |
@@ -54,12 +50,12 @@ Produkcja: https://wobbly-world.vercel.app/
 
 ## Główne systemy
 
-- `ThirdPersonCamera`: auto-align za graczem lub autem, tilt w zakrętach i płynny follow bez shake.
-- `Car`: proceduralny model auta, światła, uszkodzenia, wheel slip, body roll/pitch, dym wydechu i synchronizacja `cannon-es` -> `Rapier`.
-- `AudioManager`: proceduralny dźwięk silnika z biegami, opon, poślizgu i efektów postaci.
+- `ThirdPersonCamera`: auto-align za graczem lub autem, tilt w zakrętach, camera shake przy zderzeniu i płynny follow.
+- `Car`: proceduralny model auta, światła (z uszkodzeniami), wheel slip, body roll/pitch, dym wydechu i synchronizacja Rapier → Three.js.
+- `AudioManager`: proceduralny dźwięk silnika z 5-biegową automatyczną skrzynią, opon, poślizgu i efektów postaci.
+- `VehiclePhysics`: wrapper nad Rapier `DynamicRayCastVehicleController` — jeden wspólny świat fizyki dla wszystkiego.
 - `WorldBuilder`: kompozycja mapy oraz rejestracja obiektów do cullingu i kolizji.
 - `zones.js`: definicje dróg, bezpiecznych punktów oraz typów nawierzchni.
-- `VehiclePhysicsJolt`: osobny spike backendu pojazdu pod przyszłą migrację z `cannon-es`.
 
 ## Architektura
 
@@ -74,8 +70,7 @@ src/
 │   ├── Materials.js
 │   ├── Physics.js
 │   ├── RNG.js
-│   ├── VehiclePhysics.js
-│   └── VehiclePhysicsJolt.js
+│   └── VehiclePhysics.js
 ├── entities/
 │   ├── Car.js
 │   ├── Entity.js
@@ -83,6 +78,7 @@ src/
 │   └── PlayerMichaelMyers.js
 ├── objects/
 │   ├── BrickBuilding.js
+│   ├── Building.js
 │   ├── Church.js
 │   ├── Ground.js
 │   ├── Hill.js
@@ -95,8 +91,7 @@ src/
 │   ├── Tree.js
 │   ├── TriOffice.js
 │   ├── Warehouse.js
-│   ├── WorldObject.js
-│   └── Building.js
+│   └── WorldObject.js
 └── world/
     ├── WorldBuilder.js
     └── zones.js
@@ -108,9 +103,8 @@ src/
 input.flush()
   -> updateInteraction()
   -> car.update(dt) lub player.update(dt)
-  -> vehiclePhysics.step(dt)        // cannon-es
-  -> car.lateUpdate()               // sync vehicle -> Three.js / Rapier
-  -> physics.step(dt)               // Rapier
+  -> physics.step(dt)              // Rapier (postać + pojazd)
+  -> car.lateUpdate()              // sync Rapier → Three.js
   -> player.lateUpdate()
   -> camera.update(...)
   -> dynamic FOV + HUD
@@ -120,36 +114,14 @@ input.flush()
 ## Funkcje aktualne na `main`
 
 - wejście i wyjście z auta
+- wchodzenie do wnętrz budynków (domy)
 - dynamiczne FOV zależne od prędkości
-- płynna kamera z tilt w zakrętach
+- płynna kamera z tilt w zakrętach i camera shake przy zderzeniu
 - body roll i pitch nadwozia
 - proceduralne audio silnika, opon, poślizgu i klaksonu
-- rozległy świat z kilkoma strefami zabudowy
-- debug HUD z FPS, pozycją i prędkością
-- uszkodzenia reflektorów i tylnych świateł
-
-## Jolt Spike
-
-Repo zawiera izolowany spike pod przyszłą migrację warstwy pojazdu z `cannon-es` do `JoltPhysics.js`.
-
-Uruchomienie:
-
-```text
-http://localhost:8080/?joltSpike=1
-```
-
-Aktualny zakres spike'a:
-
-- ładuje `JoltPhysics.js` bez bundlera przez importmapę
-- uruchamia osobny backend `src/core/VehiclePhysicsJolt.js`
-- stawia płaską scenę testową i jedno proste testowe auto/chassis
-- działa osobno od głównego świata i nie przepina jeszcze `Car.js`
-
-Obecne ograniczenia spike'a:
-
-- nie zastępuje jeszcze gameplayu na `main`
-- nie ma jeszcze sterowania autem Jolta
-- nie ma jeszcze integracji z `WorldBuilder`, nawierzchniami i wheel state z docelowego adaptera
+- uszkodzenia reflektorów i tylnych świateł przy zderzeniu
+- rozległy świat (~1280 jednostek) z kilkoma strefami zabudowy
+- debug HUD z FPS, pozycją XYZ i prędkością km/h
 
 ## Uruchomienie lokalne
 
@@ -169,11 +141,10 @@ Następnie otwórz `http://localhost:8080/`.
 bash deploy.sh "opis zmian" "vX.Y.Z"
 ```
 
-Skrypt robi commit i push na GitHub, a GitHub Pages publikuje aktualny stan.
+Skrypt robi commit i push na GitHub, a Vercel auto-deployuje po każdym push do `main`.
 
 ## Dokumentacja
 
 - [CHANGELOG.md](./CHANGELOG.md) jest źródłem historii zmian per wersja.
-- [docs/JOLT_MIGRATION.md](./docs/JOLT_MIGRATION.md) opisuje plan migracji warstwy pojazdu do `JoltPhysics.js`.
 - Ten README opisuje aktualny stan `main`.
 - Archiwalna wersja single-file nadal leży w `wobbly-world.html`.
