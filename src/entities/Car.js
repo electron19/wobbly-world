@@ -767,10 +767,12 @@ export class Car extends Entity {
 
     // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
     if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
-    // Z 'stopped': bieg angażuje się na podstawie wejścia gracza (nie prędkości Rapiera)
+    // Z 'stopped': bieg angażuje się na podstawie SUROWEGO wejścia (nie smoothed gasIn).
+    // gasIn używa wygładzonych backAmount/forwAmount — po zwolnieniu S backAmount jest jeszcze
+    // wysokie, co daje gasIn < 0 mimo że gracz chce jechać do przodu. Surowy input jest natychmiastowy.
     if (this._dirState === 'stopped') {
-      if (gasIn >  0.05) this._dirState = 'forward';
-      if (gasIn < -0.05) this._dirState = 'reverse';
+      if (rawFwd > 0.05) this._dirState = 'forward';
+      if (rawBack > 0.05) this._dirState = 'reverse';
     }
 
     let engineForce = 0;
