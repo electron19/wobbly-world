@@ -791,22 +791,23 @@ export class Car extends Entity {
       for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
     }
 
-    // frictionSlip = 4.0: duże "kółko tarcia" → siły podłużna i boczna działają niezależnie.
-    // Przy niskich wartościach (< 1.0) siły boczne (skręt) konsumowały budżet tarcia
-    // i redukowały siłę podłużną = hamowanie w zakrętach (cornering drag).
+    // frictionSlip: przy hamowaniu dynamicznie obniżamy wartość, by uniknąć lockup-oscillation.
+    // Wysoki frictionSlip podczas hamowania → agresywna siła → bounce zawieszenia → pulsacja.
+    // Przy jeździe/przyspieszeniu zachowujemy pełny grip (4.0), przy hamowaniu schodzimy do ~1.8.
     const BASE_F = onRoad ? 4.0 : (onSidewalk ? 3.5 : 2.5);
+    const effBase = BASE_F * (1.0 - backAmount * 0.55);  // pełny grip bez hamowania, ~45% przy pełnym
 
-    // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do BASE_F
+    // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do effBase
     const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
     this._cornerT = cornerT;
     const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 2.5;
     const cornerSlip = cornerT * 1.5;
-    const fR = Math.max(0.30, BASE_F - launchSlip - cornerSlip);
+    const fR = Math.max(0.30, effBase - launchSlip - cornerSlip);
 
-    this._vehicle.setWheelFrictionSlip(0, BASE_F);  // FL
-    this._vehicle.setWheelFrictionSlip(1, BASE_F);  // FR
-    this._vehicle.setWheelFrictionSlip(2, fR);      // RL
-    this._vehicle.setWheelFrictionSlip(3, fR);      // RR
+    this._vehicle.setWheelFrictionSlip(0, effBase);  // FL
+    this._vehicle.setWheelFrictionSlip(1, effBase);  // FR
+    this._vehicle.setWheelFrictionSlip(2, fR);       // RL
+    this._vehicle.setWheelFrictionSlip(3, fR);       // RR
 
     // Downforce aerodynamiczny — Rapier: addForce({x,y,z}, wake)
     if (absSpd > 20) {

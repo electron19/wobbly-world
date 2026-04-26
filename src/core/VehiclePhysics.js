@@ -78,8 +78,8 @@ export class VehiclePhysics {
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
       vehicle.setWheelSuspensionStiffness(i,   20);     // miękkie = płynna jazda
-      vehicle.setWheelSuspensionCompression(i,  4.0);   // symetria: brak oscylacji zawieszenia
-      vehicle.setWheelSuspensionRelaxation(i,   4.0);   // identyczne z compression
+      vehicle.setWheelSuspensionCompression(i,  6.0);   // wyższe tłumienie = brak wheel-bounce przy hamowaniu
+      vehicle.setWheelSuspensionRelaxation(i,   6.0);   // identyczne z compression (symetria)
       vehicle.setWheelMaxSuspensionTravel(i,    0.40);  // więcej skoku = lepszy kontakt z podłożem
       vehicle.setWheelMaxSuspensionForce(i,     100000);
       vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
