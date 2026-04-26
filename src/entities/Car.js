@@ -758,10 +758,18 @@ export class Car extends Entity {
     const sSpd = this._smoothSpd;  // używać zamiast speedKmh do decyzji o kierunku
 
     // Histereza hamowanie↔wsteczny: eliminuje pulsację przy ~1 km/h.
-    // _reverseReady=true gdy auto prawie stoi → wolno wejść na wsteczny.
-    // Reset gdy wyraźny ruch do przodu (>4 km/h) — wymusi ponowne wyhamowanie.
-    if (sSpd <  0.8) this._reverseReady = true;
-    if (sSpd >  4.0) this._reverseReady = false;
+    // Używa bezwzględnej prędkości poziomej chassis (linvel XZ), NIE currentVehicleSpeed().
+    // currentVehicleSpeed() to projekcja na lokalną oś Z — podczas skrętów chassis
+    // nieznacznie się przechyla i projekcja daje fałszywie niską/ujemną wartość,
+    // przez co sSpd spada poniżej progu i _reverseReady włączał się w trakcie jazdy.
+    const _lv = this._chassis.linvel();
+    const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
+    // Ustaw gdy prawie stoi (wg bezwzględnej prędkości poziomej — odporna na skręty)
+    if (_horizSpeedKmh <  0.8) this._reverseReady = true;
+    // Zeruj tylko gdy OBA pomiary zgadzają się na ruch do przodu:
+    //   _horizSpeedKmh — rzeczywista prędkość (nie skacze w skrętach)
+    //   sSpd           — wygładzona projekcja na oś przód (ujemna przy cofaniu → nie zeruje flagi)
+    if (_horizSpeedKmh > 3.0 && sSpd > 3.0) this._reverseReady = false;
 
     let engineForce = 0;
     let brakeForce  = 0;
