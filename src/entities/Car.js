@@ -41,8 +41,9 @@ export class Car extends Entity {
     this._skidState     = null;   // inicjalizowany w initPhysics()
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
-    this._prevHandbrake = false;
-    this._wheelAngle    = 0;      // akumulowany kąt obrotu kół (bazowany na prędkości)
+    this._prevHandbrake  = false;
+    this._reverseReady   = false; // histereza: true gdy auto prawie stoi — pozwala wejść na wsteczny
+    this._wheelAngle     = 0;     // akumulowany kąt obrotu kół (bazowany na prędkości)
     // Zniszczenia — progresywna deformacja zderzaków i maski
     this._damageFront = 0;   // 0–1: 0 = brak, 1 = max
     this._damageRear  = 0;
@@ -756,6 +757,12 @@ export class Car extends Entity {
     this._smoothSpd = (this._smoothSpd ?? speedKmh) + (speedKmh - (this._smoothSpd ?? speedKmh)) * k;
     const sSpd = this._smoothSpd;  // używać zamiast speedKmh do decyzji o kierunku
 
+    // Histereza hamowanie↔wsteczny: eliminuje pulsację przy ~1 km/h.
+    // _reverseReady=true gdy auto prawie stoi → wolno wejść na wsteczny.
+    // Reset gdy wyraźny ruch do przodu (>4 km/h) — wymusi ponowne wyhamowanie.
+    if (sSpd <  0.8) this._reverseReady = true;
+    if (sSpd >  4.0) this._reverseReady = false;
+
     let engineForce = 0;
     let brakeForce  = 0;
 
@@ -781,9 +788,11 @@ export class Car extends Entity {
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else if (gasIn < 0) {
-        if (sSpd > 1) {
+        if (!this._reverseReady) {
+          // Wciąż jedziemy do przodu — hamuj najpierw
           brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
         } else if (sSpd > -MAX_REV_KMH) {
+          // Auto prawie stoi lub cofa — wsteczny bieg
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else {
