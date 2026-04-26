@@ -42,7 +42,7 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake  = false;
-    this._reverseReady   = false; // histereza: true gdy auto prawie stoi — pozwala wejść na wsteczny
+    this._dirState       = 'stopped'; // 'stopped' | 'forward' | 'reverse' — maszyna stanów kierunku jazdy
     this._wheelAngle     = 0;     // akumulowany kąt obrotu kół (bazowany na prędkości)
     // Zniszczenia — progresywna deformacja zderzaków i maski
     this._damageFront = 0;   // 0–1: 0 = brak, 1 = max
@@ -757,25 +757,28 @@ export class Car extends Entity {
     this._smoothSpd = (this._smoothSpd ?? speedKmh) + (speedKmh - (this._smoothSpd ?? speedKmh)) * k;
     const sSpd = this._smoothSpd;  // używać zamiast speedKmh do decyzji o kierunku
 
-    // Histereza hamowanie↔wsteczny: eliminuje pulsację przy ~1 km/h.
-    // Używa bezwzględnej prędkości poziomej chassis (linvel XZ), NIE currentVehicleSpeed().
-    // currentVehicleSpeed() to projekcja na lokalną oś Z — podczas skrętów chassis
-    // nieznacznie się przechyla i projekcja daje fałszywie niską/ujemną wartość,
-    // przez co sSpd spada poniżej progu i _reverseReady włączał się w trakcie jazdy.
+    // ── Maszyna stanów kierunku jazdy ────────────────────────────────────────
+    // Używa bezwzględnej prędkości poziomej chassis (linvel XZ) — odporna na skręty.
+    // currentVehicleSpeed() to projekcja na lokalną oś Z chassis i zmienia znak podczas
+    // skrętów (chassis obraca się, oś Z skręca → projekcja spada/jest ujemna mimo ruchu
+    // do przodu). Maszyna stanów eliminuje tę zależność całkowicie.
     const _lv = this._chassis.linvel();
     const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
-    // Ustaw gdy prawie stoi (wg bezwzględnej prędkości poziomej — odporna na skręty)
-    if (_horizSpeedKmh <  0.8) this._reverseReady = true;
-    // Zeruj tylko gdy OBA pomiary zgadzają się na ruch do przodu:
-    //   _horizSpeedKmh — rzeczywista prędkość (nie skacze w skrętach)
-    //   sSpd           — wygładzona projekcja na oś przód (ujemna przy cofaniu → nie zeruje flagi)
-    if (_horizSpeedKmh > 3.0 && sSpd > 3.0) this._reverseReady = false;
+
+    // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
+    if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
+    // Z 'stopped': bieg angażuje się na podstawie wejścia gracza (nie prędkości Rapiera)
+    if (this._dirState === 'stopped') {
+      if (gasIn >  0.05) this._dirState = 'forward';
+      if (gasIn < -0.05) this._dirState = 'reverse';
+    }
 
     let engineForce = 0;
     let brakeForce  = 0;
 
     if (handBrake) {
       // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
+      // sSpd (wygładzona projekcja) używana tylko tutaj do detekcji "czy cofa szybko"
       if (gasIn > 0 && sSpd > -1) {
         engineForce = MAX_ENGINE_FORCE * forwAmount;  // Rapier: + = do przodu
       }
@@ -789,18 +792,18 @@ export class Car extends Entity {
       this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
-        // sSpd zamiast speedKmh: wygładzona wartość nie reaguje na 1-2 klatkowe spike'i
-        if (sSpd < -5) {
+        if (this._dirState === 'reverse') {
+          // Cofamy — W hamuje (nie przełącza od razu na do przodu)
           brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
         } else if (speedKmh < MAX_SPEED_KMH) {
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else if (gasIn < 0) {
-        if (!this._reverseReady) {
-          // Wciąż jedziemy do przodu — hamuj najpierw
+        if (this._dirState === 'forward') {
+          // Jedziemy do przodu — S hamuje (nie wsteczny)
           brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
-        } else if (sSpd > -MAX_REV_KMH) {
-          // Auto prawie stoi lub cofa — wsteczny bieg
+        } else if (_horizSpeedKmh < MAX_REV_KMH) {
+          // Zatrzymani lub cofamy — wsteczny bieg
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else {
