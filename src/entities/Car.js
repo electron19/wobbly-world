@@ -748,12 +748,20 @@ export class Car extends Entity {
     // Prędkość (Rapier: m/s → km/h)
     const speedKmh = this._vehicle.currentVehicleSpeed() * 3.6;
     const absSpd   = Math.abs(speedKmh);
+
+    // Wygładzona prędkość (τ=0.15s) — filtruje chwilowe spike'i z kontaktu kół z krawędziami.
+    // currentVehicleSpeed() zmienia znak gdy chassis przechyla się w skręcie (projekcja na
+    // lokalną oś Z), przez co 1-2 klatki fałszywej ujemnej prędkości włączały hamulce i światła.
+    const k = 1 - Math.exp(-dt / 0.15);
+    this._smoothSpd = (this._smoothSpd ?? speedKmh) + (speedKmh - (this._smoothSpd ?? speedKmh)) * k;
+    const sSpd = this._smoothSpd;  // używać zamiast speedKmh do decyzji o kierunku
+
     let engineForce = 0;
     let brakeForce  = 0;
 
     if (handBrake) {
       // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
-      if (gasIn > 0 && speedKmh > -1) {
+      if (gasIn > 0 && sSpd > -1) {
         engineForce = MAX_ENGINE_FORCE * forwAmount;  // Rapier: + = do przodu
       }
       this._vehicle.setWheelEngineForce(2, engineForce);   // RL
@@ -766,17 +774,16 @@ export class Car extends Entity {
       this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);  // RR — zablokowane
     } else {
       if (gasIn > 0) {
-        // Próg -5 (nie -1): chwilowe fluktuacje prędkości Rapiera (±1 km/h przy zderzeniu
-        // lub skręcie) nie wyzwalają już hamulca podczas jazdy do przodu.
-        if (speedKmh < -5) {
+        // sSpd zamiast speedKmh: wygładzona wartość nie reaguje na 1-2 klatkowe spike'i
+        if (sSpd < -5) {
           brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
         } else if (speedKmh < MAX_SPEED_KMH) {
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else if (gasIn < 0) {
-        if (speedKmh > 1) {
+        if (sSpd > 1) {
           brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
-        } else if (speedKmh > -MAX_REV_KMH) {
+        } else if (sSpd > -MAX_REV_KMH) {
           engineForce = MAX_ENGINE_FORCE * gasIn;
         }
       } else {
@@ -824,8 +831,10 @@ export class Car extends Entity {
     audio?.updateTires(speedKmh, onRoad);
 
     // Stan hamowania — dla świateł stop
+    // backAmount > 0.05: wymagany rzeczywisty input gracza (filtruje phantom z sSpd < -5)
     this._isHandbraking = handBrake && absSpd > 3;
-    this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1;
+    this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1
+                          && (backAmount > 0.05 || sSpd < -3);
 
     // RPM factor — używany przez wydech
     const speedNorm  = Math.min(1, absSpd / 120);
@@ -970,7 +979,7 @@ export class Car extends Entity {
   _updateLights() {
     if (!this._revMat) return;
     const braking   = this._isBraking || this._isHandbraking;
-    const reversing = this.speedKmh < -1;
+    const reversing = (this._smoothSpd ?? 0) < -1;  // wygładzona prędkość — brak spike'ów
     // Aktualizuj każde tylne światło stop — pomijaj uszkodzone
     this._tailMeshes.forEach((m, i) => {
       if (!m || this._tailDmg[i] > 0) return;  // zgaszone/oderwane — nie zmieniaj
