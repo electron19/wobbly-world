@@ -80,7 +80,7 @@ export class VehiclePhysics {
       vehicle.setWheelSuspensionStiffness(i,   24);
       vehicle.setWheelSuspensionCompression(i,  4.0);
       vehicle.setWheelSuspensionRelaxation(i,   4.0);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.25);  // ograniczony skok — chassis nie dosięga podłoża
+      vehicle.setWheelMaxSuspensionTravel(i,    0.40);  // wheel must be able to follow terrain; capped at 0.25 caused visual sinking
       vehicle.setWheelMaxSuspensionForce(i,     25000); // ~2.5× ciężar auta (2000kg × 10 m/s²)
       vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
       vehicle.setWheelSideFrictionStiffness(i,  0.45);  // umiarkowane — stabilizuje solver Rapiera w skrętach (0.15 powodowało niestabilność)
