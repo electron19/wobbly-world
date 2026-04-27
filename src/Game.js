@@ -415,18 +415,18 @@ export class Game {
         this.player.update(dt, this.input, this.camCtrl, this.physics,
                            this.audio, isOnRoad(pp.x, pp.z));
       }
-      // Pad: button 2 (X/Square) = pierdzenie, button 3 (Y/Triangle) = beknięcie
+      // Pad: button 2 (X/Square) = pierdzenie, button 3 (Y/Triangle) = beknięcie+usypianie
       // OSOBNE od button 0 (A/Cross) = wsiadaj/wysiadaj
       const burp = this.player.justBurped || this.input.isPadButtonPressed(3);
       const fart = this.player.justFarted || this.input.isPadButtonPressed(2);
       const yawn = this.player.justYawned;
-      if (burp) this.audio.playBurp();
       if (fart) {
         this.audio.playFart();
         this.player._emitFartCloud();
         this._scareNPCs();
       }
-      if (yawn) {
+      if (burp || yawn) {
+        this.audio.playBurp();
         this.audio.playYawn();
         this.player._emitSleepCloud();
         this._sleepNPCs();
