@@ -542,7 +542,5 @@ export class Game {
         (spd ? `<br>${spd}` : '');
     }
 
-    // Zapisz stan klawiszy na koniec klatki — isJustPressed() działa poprawnie następnej klatki
-    this.input.endFrame();
   }
 }

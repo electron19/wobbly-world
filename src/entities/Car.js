@@ -865,22 +865,30 @@ export class Car extends Entity {
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
 
-    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch (nie sprężyna → zero oscylacji).
-    // Poprzednia wersja (STAB_K=12000 sprężyna) miała współczynnik tłumienia ζ≈0.04 →
-    // oscylacje 2.5 Hz (pulsowanie) + drenaż energii kinetycznej (spowolnienie).
-    // Teraz: silny tłumik prędkości (4000 N·m·s/rad) + słaba sprężyna przywracająca (2000 N·m/rad)
-    // → układ krytycznie tłumiony (ζ≈1.0), zero oscylacji, natychmiastowe gaszenie kołysania.
+    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw.
+    // W powietrzu (koła nie dotykają ziemi) gwałtownie wzmacniamy tłumienie,
+    // żeby auto nie wirowało jak "boczek w powietrzu".
     {
-      const av       = this._chassis.angvel();             // prędkość kątowa chassis [rad/s]
-      const qS       = this._chassis.rotation();
-      const rollSin  = 2 * (qS.w * qS.x - qS.y * qS.z);  // sin(roll) — przechylenie boczne
-      const pitchSin = 2 * (qS.w * qS.z + qS.x * qS.y);  // sin(pitch) — pochylenie przód/tył
-      const DAMP_K   = 4000;   // tłumik prędkości [N·m·s/rad] — krytyczne tłumienie
-      const SPRING_K = 0;      // sprężyna WYŁĄCZONA — nie walczy z naturalnym kątem na wzgórzach (powodowała spowolnienie)
+      const av = this._chassis.angvel();
+      const qS = this._chassis.rotation();
+      const rollSin  = 2 * (qS.w * qS.x - qS.y * qS.z);
+      const pitchSin = 2 * (qS.w * qS.z + qS.x * qS.y);
+
+      // Wykryj lot: średnia długość zawieszenia bliższa maksymalnej → brak kontaktu z ziemią
+      const s0 = this._vehicle.wheelSuspensionLength(0);
+      const s1 = this._vehicle.wheelSuspensionLength(1);
+      const s2 = this._vehicle.wheelSuspensionLength(2);
+      const s3 = this._vehicle.wheelSuspensionLength(3);
+      const suspAvg  = (s0 + s1 + s2 + s3) / 4;
+      const airborne = suspAvg > 0.32 && !this._flyMode;  // > 0.32 = koła w powietrzu
+
+      const DAMP_XZ  = airborne ? 18000 : 4000;  // roll + pitch — silniejsze w powietrzu
+      const DAMP_Y   = airborne ?  8000 : 0;      // yaw — tylko w powietrzu (żeby nie kręciło)
+
       this._chassis.addTorque({
-        x: -av.x * DAMP_K - rollSin  * SPRING_K,
-        y: 0,
-        z: -av.z * DAMP_K - pitchSin * SPRING_K,
+        x: -av.x * DAMP_XZ - rollSin  * 0,
+        y: -av.y * DAMP_Y,
+        z: -av.z * DAMP_XZ - pitchSin * 0,
       }, true);
     }
 

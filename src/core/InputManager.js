@@ -2,21 +2,25 @@
  * Zarządza wejściem klawiatury, myszy (pointer lock) i pada (Gamepad API).
  * Użycie:
  *   input.isDown('KeyW')         → bool (klawiatura)
+ *   input.isJustPressed('KeyE')  → bool (tylko 1 klatka po wciśnięciu — event-queue)
  *   input.isPadButtonPressed(0)  → bool (przycisk pada, tylko przez 1 klatkę)
  *   input.isPadButtonDown(0)     → bool (przycisk pada, trzymany)
  *   input.pad.l2 / .r2           → 0–1 (triggery analogowe)
  *   input.pad.leftX/Y            → ±1 (lewy analog)
  *   input.pad.rightX/Y           → ±1 (prawy analog)
- *   input.flush()                → czyści mouse.dx/dy + odpytuje pad
+ *   input.flush()                → czyści mouse.dx/dy + odpytuje pad + przesuwa kolejkę
  */
 export class InputManager {
   constructor() {
     this.keys       = {};
-    this._prevKeys  = {};   // previous frame state — for isJustPressed()
     this.mouse = { dx: 0, dy: 0 };
     this._pdx  = 0;
     this._pdy  = 0;
     this._locked = false;
+
+    // Queue-based isJustPressed — niezależna od kolejności RAF vs keydown
+    this._jpQueue   = new Set();  // klawisze wciśnięte od ostatniego flush()
+    this._jpFrame   = new Set();  // klawisze "just pressed" w bieżącej klatce
 
     // Stan pada
     this.pad = {
@@ -29,6 +33,10 @@ export class InputManager {
     };
 
     window.addEventListener('keydown', e => {
+      if (!this.keys[e.code]) {
+        // Pierwsze wciśnięcie (nie autorepeat) → wrzuć do kolejki
+        this._jpQueue.add(e.code);
+      }
       this.keys[e.code] = true;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
@@ -53,10 +61,13 @@ export class InputManager {
     });
   }
 
-  isDown(code)        { return !!this.keys[code]; }
+  isDown(code) { return !!this.keys[code]; }
 
-  /** Klawisz wciśnięty dokładnie w tej klatce (krawędź narastająca). */
-  isJustPressed(code) { return !!(this.keys[code] && !this._prevKeys[code]); }
+  /**
+   * Zwraca true dokładnie przez 1 klatkę po wciśnięciu klawisza.
+   * Oparty na event-queue — działa niezależnie od kolejności keydown vs RAF.
+   */
+  isJustPressed(code) { return this._jpFrame.has(code); }
 
   /** Przycisk pada wciśnięty w tej klatce (krawędź narastająca) */
   isPadButtonPressed(idx) {
@@ -102,16 +113,15 @@ export class InputManager {
     }
   }
 
-  /** Zapisz stan klawiszy na koniec klatki — dla isJustPressed() następnej klatki */
-  endFrame() {
-    this._prevKeys = { ...this.keys };
-  }
-
-  /** Przepisz nagromadzone delty do mouse, wyczyść bufor, odpytaj pad */
+  /** Przepisz nagromadzone delty do mouse, wyczyść bufor, odpytaj pad, przesuń kolejkę JP */
   flush() {
+    // Przesuń kolejkę: to co było wciśnięte od ostatniego flush() → bieżąca klatka
+    this._jpFrame = new Set(this._jpQueue);
+    this._jpQueue.clear();
+
     this._pollGamepad();
-    this.mouse.dx       = this._pdx;
-    this.mouse.dy       = this._pdy;
+    this.mouse.dx        = this._pdx;
+    this.mouse.dy        = this._pdy;
     this.mouse.padRightX = this.pad.rightX;
     this.mouse.padRightY = this.pad.rightY;
     this._pdx = 0;

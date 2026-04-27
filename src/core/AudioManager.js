@@ -810,41 +810,32 @@ export class AudioManager {
     osc.start(now); osc.stop(now + dur + 0.05);
   }
 
-  /** Ziewnięcie — długi przeciągły dźwięk z gęby, usypiający. */
+  /** Usypiający gaz — ciche syczenie (jak ulatniający się gaz/aerozol). */
   playYawn() {
     const ctx = this._ensureCtx();
     const now = ctx.currentTime;
-    const dur = 1.1 + Math.random() * 0.6;
+    const dur = 0.9 + Math.random() * 0.4;
 
-    // Główna sinusoida — głęboki, ziewający ton
-    const osc = ctx.createOscillator();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(280 + Math.random() * 60, now);
-    osc.frequency.linearRampToValueAtTime(180, now + dur * 0.4);
-    osc.frequency.linearRampToValueAtTime(320, now + dur * 0.75);
-    osc.frequency.linearRampToValueAtTime(120, now + dur);
-
-    // Szum — oddechowy "haaa"
+    // Szum filtrowany — syczenie
     const noiseSrc = ctx.createBufferSource();
     noiseSrc.buffer = this._makeNoise(dur + 0.1);
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = 'bandpass';
-    noiseFilter.frequency.value = 800;
-    noiseFilter.Q.value = 1.2;
-    noiseSrc.connect(noiseFilter);
 
-    // Wspólny gain
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 3200 + Math.random() * 800;  // wysoka częstotliwość = "sss"
+    bp.Q.value = 0.8;
+
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.001, now);
-    gain.gain.linearRampToValueAtTime(0.9, now + 0.12);
-    gain.gain.setValueAtTime(0.9, now + dur * 0.6);
+    gain.gain.linearRampToValueAtTime(0.12, now + 0.08);   // ciche!
+    gain.gain.setValueAtTime(0.12, now + dur * 0.7);
     gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
-    osc.connect(gain);
-    noiseFilter.connect(gain);
+    noiseSrc.connect(bp);
+    bp.connect(gain);
     gain.connect(ctx.destination);
-    osc.start(now); osc.stop(now + dur + 0.05);
-    noiseSrc.start(now); noiseSrc.stop(now + dur + 0.05);
+    noiseSrc.start(now);
+    noiseSrc.stop(now + dur + 0.05);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────

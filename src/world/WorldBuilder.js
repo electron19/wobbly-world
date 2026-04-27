@@ -1410,10 +1410,10 @@ export class WorldBuilder {
       root.add(badge);
     });
 
-    // Lampa na DACHU — belka policji (y ≈ 2.05 = powyżej dachu auta y=2.00)
+    // Lampa na DACHU — belka policji POPRZECZNIE (w poprzek auta, wzdłuż osi X)
     const ROOF_Y = 2.05;   // top of car roof + small gap
     const barBase = new THREE.Mesh(
-      new THREE.BoxGeometry(0.60, 0.14, 1.10),
+      new THREE.BoxGeometry(1.20, 0.14, 0.55),   // szeroka w X (poprzecznie), krótka w Z
       new THREE.MeshBasicMaterial({ color: 0x111111 }),
     );
     barBase.position.set(0, ROOF_Y, 0.1);
@@ -1425,11 +1425,11 @@ export class WorldBuilder {
     car._policeRedLights  = [];
     car._policeBlueLights = [];
 
-    // 4 panele migające: [lewy-przód, lewy-tył, prawy-przód, prawy-tył]
-    [[-0.18, 0.32], [-0.18, -0.32], [0.18, 0.32], [0.18, -0.32]].forEach(([lx, lz], i) => {
+    // 4 panele migające ułożone wzdłuż X (lewo/prawo): czerwony-niebieski / niebieski-czerwony
+    [[-0.40, 0], [-0.13, 0], [0.13, 0], [0.40, 0]].forEach(([lx, lz], i) => {
       const mat   = i % 2 === 0 ? redMat : blueMat;
-      const light = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.38), mat.clone());
-      light.position.set(lx, ROOF_Y + 0.08, lz + 0.1);
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.34), mat.clone());
+      light.position.set(lx, ROOF_Y + 0.09, lz + 0.1);
       root.add(light);
       if (i % 2 === 0) car._policeRedLights.push(light);
       else              car._policeBlueLights.push(light);
