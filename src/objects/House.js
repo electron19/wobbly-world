@@ -73,8 +73,13 @@ export class House extends Building {
 
     this.root.rotation.y = facing;
 
-    // ── ŚCIANY ────────────────────────────────────────────────────────────────
-    this._box(0, H / 2, 0, w, H, d, wallMat);
+    // ── ŚCIANY z otworami okien (parter) ─────────────────────────────────────
+    if (floors === 1) {
+      this._buildExtWalls(w, H, h, d, wallMat);
+    } else {
+      // Dla 2+ pięter solidne ściany (uproszczenie)
+      this._box(0, H / 2, 0, w, H, d, wallMat, { cast: true, outline: 0.04 });
+    }
 
     // Dach tworzony jest w _buildRoofMesh() (po scalaniu) — tutaj pominięty.
 
@@ -223,6 +228,63 @@ export class House extends Building {
       petal.scale.y = 0.6;
       this.root.add(petal);
     });
+  }
+
+  // ─── Ściany z otworami okien ──────────────────────────────────────────────────
+
+  /**
+   * Ściana przednia jest rozbita na prostokątne panele omijające otwory okien i drzwi.
+   * Pozostałe 3 ściany są solidnymi płytami.
+   */
+  _buildExtWalls(w, H, h, d, wallMat) {
+    const T = 0.22;   // grubość ściany
+    const opts = { cast: true, outline: 0.03 };
+
+    // Ściana tylna (pełna)
+    this._box(0, H / 2, -(d / 2 - T / 2), w, H, T, wallMat, opts);
+    // Ściany boczne (pełne)
+    this._box(-(w / 2 - T / 2), H / 2, 0, T, H, d - T * 2, wallMat, opts);
+    this._box( (w / 2 - T / 2), H / 2, 0, T, H, d - T * 2, wallMat, opts);
+
+    // ── Ściana przednia z otworami ────────────────────────────────────────────
+    const z     = d / 2 - T / 2;
+    const winCX = 1.25;
+    const winCY = h * 0.62;
+    const winHW = 0.43;    // pół-szerokość otworu okiennego
+    const winHH = 0.39;    // pół-wysokość otworu okiennego
+    const doorHW = 0.52;   // pół-szerokość otworu drzwiowego
+    const doorH  = 1.97;   // wysokość otworu drzwiowego
+
+    const p = (cx, cy, bw, bh) =>
+      this._box(cx, cy, z, bw, bh, T, wallMat, opts);
+
+    // Lewy filar zewnętrzny
+    const lpW = w / 2 - (winCX + winHW);
+    p(-(w / 2 - lpW / 2),  H / 2,  lpW, H);
+
+    // Strefa lewego okna
+    const parH = winCY - winHH;
+    const linH = H - (winCY + winHH);
+    p(-winCX,  parH / 2,               winHW * 2, parH);  // parapet
+    p(-winCX,  winCY + winHH + linH / 2, winHW * 2, linH);  // nadproże
+
+    // Słupek między oknem a drzwiami (lewy)
+    const colW = winCX - winHW - doorHW;
+    if (colW > 0.04) p(-((winCX - winHW + doorHW) / 2), H / 2, colW, H);
+
+    // Nadproże drzwi
+    const dlH = H - doorH;
+    p(0, doorH + dlH / 2, doorHW * 2, dlH);
+
+    // Słupek między oknem a drzwiami (prawy — lustrzany)
+    if (colW > 0.04) p((winCX - winHW + doorHW) / 2, H / 2, colW, H);
+
+    // Strefa prawego okna (lustrzana)
+    p(winCX,  parH / 2,                winHW * 2, parH);
+    p(winCX,  winCY + winHH + linH / 2, winHW * 2, linH);
+
+    // Prawy filar zewnętrzny
+    p(w / 2 - lpW / 2, H / 2, lpW, H);
   }
 
   // ─── Dach (osobny mesh — ukrywany gdy gracz jest w środku) ──────────────────

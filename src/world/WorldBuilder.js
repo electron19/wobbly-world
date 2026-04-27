@@ -1369,6 +1369,69 @@ export class WorldBuilder {
       car.initPhysics(this.vehiclePhysics, this.physics, x, 0, z);
       this.cars.push(car);
     });
+
+    // ── Radiowozy policyjne ───────────────────────────────────────────────────
+    const policeDefs = [
+      { x:  6, z:  -6, facing: Math.PI / 2 },   // przy komisariacie
+      { x: -6, z:  -6, facing: Math.PI / 2 },
+      { x: 35, z:  35, facing: 0 },
+      { x:-35, z: -35, facing: Math.PI },
+    ];
+    for (const { x, z, facing } of policeDefs) {
+      const car = new Car(this.scene, 0xF5F5F5);  // biały lakier
+      car.facing = facing;
+      car.root.rotation.y = facing;
+      car.initPhysics(this.vehiclePhysics, this.physics, x, 0, z);
+      this._addPoliceDecals(car);
+      car._isPolice = true;
+      this.cars.push(car);
+    }
+  }
+
+  /** Dodaje oznaczenia policyjne i lampę na dach samochodu. */
+  _addPoliceDecals(car) {
+    const root = car._bodyPivot ?? car.root;
+
+    // Czarne pasy boczne
+    const stripeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    [-1.09, 1.09].forEach(sx => {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.55, 3.6), stripeMat,
+      );
+      stripe.position.set(sx, 0.85, 0);
+      root.add(stripe);
+    });
+
+    // Napis POLICE na boku (płaszczyzna)
+    const txtMat = new THREE.MeshBasicMaterial({ color: 0x1144AA });
+    [-1.10, 1.10].forEach(sx => {
+      const badge = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.22, 1.0), txtMat);
+      badge.position.set(sx, 0.85, 0);
+      root.add(badge);
+    });
+
+    // Lampa na dachu (belka czerwono-niebieska)
+    const barBase = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.13, 1.0),
+      new THREE.MeshBasicMaterial({ color: 0x222222 }),
+    );
+    barBase.position.set(0, 1.56, 0.1);
+    root.add(barBase);
+
+    const redMat  = new THREE.MeshBasicMaterial({ color: 0xFF1111 });
+    const blueMat = new THREE.MeshBasicMaterial({ color: 0x1144FF });
+
+    car._policeRedLights  = [];
+    car._policeBlueLights = [];
+
+    [[-0.16, 0.3], [-0.16, -0.3], [0.16, 0.3], [0.16, -0.3]].forEach(([lx, lz], i) => {
+      const mat  = i % 2 === 0 ? redMat : blueMat;
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.32), mat.clone());
+      light.position.set(lx, 1.63, lz + 0.1);
+      root.add(light);
+      if (i % 2 === 0) car._policeRedLights.push(light);
+      else              car._policeBlueLights.push(light);
+    });
   }
 
   // ─── NPC ─────────────────────────────────────────────────────────────────────

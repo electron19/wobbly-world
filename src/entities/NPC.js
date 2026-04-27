@@ -45,10 +45,27 @@ export class NPC {
     this._walkPhase = Math.random() * Math.PI * 2;
     this._bobY      = 0;
 
+    this._scareTimer = 0;
+    this._baseSpeed  = this._speed;
+
     this._build(pal);
+    this.root.scale.setScalar(1.55);   // wzrost zbliżony do gracza
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
+  scare(px, pz) {
+    this._scareTimer = 5.0 + Math.random() * 3;
+    this._speed = this._baseSpeed * 3.2;
+    const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
+    this._target.set(
+      this.root.position.x + Math.sin(awayAngle) * 28,
+      0,
+      this.root.position.z + Math.cos(awayAngle) * 28,
+    );
+    this._waiting = false;
   }
 
   _build(pal) {
@@ -122,6 +139,11 @@ export class NPC {
   }
 
   update(dt) {
+    if (this._scareTimer > 0) {
+      this._scareTimer -= dt;
+      if (this._scareTimer <= 0) this._speed = this._baseSpeed;
+    }
+
     if (this._waiting) {
       this._waitT -= dt;
       // Idle bob

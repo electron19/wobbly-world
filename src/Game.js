@@ -11,7 +11,7 @@ import { isOnRoad }                 from './world/zones.js';
 import { Minimap }                  from './ui/Minimap.js';
 
 const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
-const ENTER_DIST        = 3.8;   // max odległość do wejścia do auta
+const ENTER_DIST        = 2.2;   // max odległość od krawędzi auta do wejścia
 const BUILDING_DIST     = 2.8;   // max odległość do drzwi budynku
 const CAM_DIST_FOOT     = 8;     // dystans kamery pieszo
 const CAM_DIST_CAR      = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
@@ -65,6 +65,7 @@ export class Game {
     this._debugEl          = null;
     this._savedCamPitch    = 0.35;
     this._minimap          = null;
+    this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
   }
 
   async init() {
@@ -214,13 +215,23 @@ export class Game {
 
   // ─── Interakcja z autem ───────────────────────────────────────────────────
 
-  /** Znajdź najbliższe auto w zasięgu ENTER_DIST. */
+  /** Znajdź najbliższe auto w zasięgu ENTER_DIST (od krawędzi, nie centrum). */
   _nearestCar() {
     const pp = this.player.root.position;
     let best = null, bestD = ENTER_DIST;
     for (const car of this.cars) {
+      if (car.isOccupied) continue;
       const cp = car.root.position;
-      const d  = Math.hypot(pp.x - cp.x, pp.z - cp.z);
+      const cf = car.facing;
+      // Przekształć do lokalnego układu auta
+      const dx = pp.x - cp.x;
+      const dz = pp.z - cp.z;
+      const localX =  dx * Math.cos(cf) + dz * Math.sin(cf);
+      const localZ = -dx * Math.sin(cf) + dz * Math.cos(cf);
+      // Odległość od najbliższego punktu bounding boxa auta (2.2 × 1.2)
+      const nearX = localX - Math.max(-1.2, Math.min(1.2, localX));
+      const nearZ = localZ - Math.max(-2.2, Math.min(2.2, localZ));
+      const d = Math.hypot(nearX, nearZ);
       if (d < bestD) { bestD = d; best = car; }
     }
     return best;
@@ -239,6 +250,7 @@ export class Game {
     car._audio = this.audio;
     this.audio.playEngineStart();
     this.audio.startTires();
+    this._interactCooldown = 20;  // ~0.33s blokady na E po wsiadaniu
     // Kamera ustawia się za autem od razu
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
@@ -263,9 +275,22 @@ export class Game {
     car.isOccupied        = false;
     this._drivingCar      = null;
     this._exitCarThisFrame = true;
+    this._interactCooldown = 25;  // ~0.4s blokady po wysiadaniu (żeby nie wsiadać natychmiast)
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
+  }
+
+  /** Wywołuje strach u NPC i zwierząt w promieniu 18 j.ś. */
+  _scareNPCs() {
+    const pp = this.player.root.position;
+    for (const npc of this.npcs) {
+      const dx = npc.root.position.x - pp.x;
+      const dz = npc.root.position.z - pp.z;
+      if (dx * dx + dz * dz < 18 * 18) {
+        npc.scare?.(pp.x, pp.z);
+      }
+    }
   }
 
   /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
@@ -273,6 +298,11 @@ export class Game {
     const eDown    = this.input.isDown('KeyE');
     const ePressed = (eDown && !this._eWasDown) || this.input.isPadButtonPressed(2);
     this._eWasDown = eDown;
+
+    if (this._interactCooldown > 0) {
+      this._interactCooldown -= 1;
+      return;
+    }
 
     if (ePressed) {
       if (this._drivingCar) {
@@ -370,9 +400,14 @@ export class Game {
         this.player.update(dt, this.input, this.camCtrl, this.physics,
                            this.audio, isOnRoad(pp.x, pp.z));
       }
-      // B — beknięcie, F — pierdzenie (tylko na piechotę)
-      if (this.input.isJustPressed('KeyB')) this.audio.playBurp();
-      if (this.input.isJustPressed('KeyF')) this.audio.playFart();
+      // B — beknięcie (klawiatura LUB pad Y=3), F — pierdzenie (klawiatura LUB pad X=2)
+      const burp = this.input.isJustPressed('KeyB') || this.input.isPadButtonPressed(3);
+      const fart = this.input.isJustPressed('KeyF') || this.input.isPadButtonPressed(2);
+      if (burp) this.audio.playBurp();
+      if (fart) {
+        this.audio.playFart();
+        this._scareNPCs();
+      }
     }
     this.physics.step(dt);
 

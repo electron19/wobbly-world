@@ -40,6 +40,7 @@ export class Player extends Entity {
     this.spSquishY = new Spring(22, 0.80);
     this.spSquishX = new Spring(16, 0.70);
     this.spLean    = new Spring(12, 0.70);
+    this._fartClouds = [];   // aktywne chmury smrodu
 
     this._buildBody();
     this._buildEyes();
@@ -195,7 +196,10 @@ export class Player extends Entity {
 
     // ─── Pierdnięcie (F) i beknięcie (B) ──────────────────────────────────────
     const fartDown = input.isDown('KeyF');
-    if (fartDown && !this._fartWasDown) audio?.playFart();
+    if (fartDown && !this._fartWasDown) {
+      audio?.playFart();
+      this._emitFartCloud();
+    }
     this._fartWasDown = fartDown;
 
     const burpDown = input.isDown('KeyB');
@@ -221,6 +225,27 @@ export class Player extends Entity {
     }
   }
 
+  /** Emituje 5 zielonych kulek smrodu z tyłka postaci. */
+  _emitFartCloud() {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x44CC22, transparent: true, opacity: 0.75, depthWrite: false,
+    });
+    for (let i = 0; i < 5; i++) {
+      const r = 0.06 + Math.random() * 0.10;
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 5, 4), mat.clone());
+      mesh.position.copy(this.root.position);
+      mesh.position.y += 0.1 + Math.random() * 0.2;
+      this.scene.add(mesh);
+      this._fartClouds.push({
+        mesh,
+        life: 1.8 + Math.random() * 0.8,
+        vx: (Math.random() - 0.5) * 0.8,
+        vy: 0.5 + Math.random() * 0.6,
+        vz: (Math.random() - 0.5) * 0.8,
+      });
+    }
+  }
+
   /**
    * Synchronizuje pozycję wizualną z fizyczną.
    * Wywołaj PO physics.step().
@@ -230,5 +255,22 @@ export class Player extends Entity {
     // Idle bob (na wierzchu zsynchronizowanej pozycji)
     const t = performance.now() / 1000;
     this.root.position.y += Math.sin(t * 1.5) * 0.015;
+
+    // Animacja chmur smrodu
+    for (let i = this._fartClouds.length - 1; i >= 0; i--) {
+      const c = this._fartClouds[i];
+      c.life -= 1 / 60;
+      c.mesh.position.x += c.vx / 60;
+      c.mesh.position.y += c.vy / 60;
+      c.mesh.position.z += c.vz / 60;
+      c.vy *= 0.97;
+      c.mesh.scale.setScalar(1 + (1.8 - c.life) * 0.4);
+      c.mesh.material.opacity = Math.max(0, c.life / 2.6) * 0.75;
+      if (c.life <= 0) {
+        this.scene.remove(c.mesh);
+        c.mesh.geometry.dispose();
+        this._fartClouds.splice(i, 1);
+      }
+    }
   }
 }

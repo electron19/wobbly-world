@@ -60,10 +60,26 @@ export class Dog {
     const pal = DOG_PALETTES[Math.floor(Math.random() * DOG_PALETTES.length)];
     initWander(this, x, z, wanderR, 0.8 + Math.random() * 0.7);
 
+    this._scareTimer = 0;
+    this._baseSpeed  = this._speed;
+
     this._build(pal);
+    this.root.scale.setScalar(1.35);
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  scare(px, pz) {
+    this._scareTimer = 6 + Math.random() * 4;
+    this._speed = this._baseSpeed * 3.5;
+    const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
+    this._target.set(
+      this.root.position.x + Math.sin(awayAngle) * 22,
+      0,
+      this.root.position.z + Math.cos(awayAngle) * 22,
+    );
+    this._waiting = false;
   }
 
   _build(pal) {
@@ -133,6 +149,11 @@ export class Dog {
   }
 
   update(dt) {
+    if (this._scareTimer > 0) {
+      this._scareTimer -= dt;
+      if (this._scareTimer <= 0) this._speed = this._baseSpeed;
+    }
+
     if (this._waiting) {
       this._waitT -= dt;
       const t = performance.now() / 1000;
@@ -193,12 +214,27 @@ export class Cat {
 
     const pal = CAT_PALETTES[Math.floor(Math.random() * CAT_PALETTES.length)];
     initWander(this, x, z, wanderR, 0.6 + Math.random() * 0.8);
-    this._restT = 0;   // cats sit down occasionally
+    this._restT      = 0;
+    this._scareTimer = 0;
+    this._baseSpeed  = this._speed;
 
     this._build(pal);
+    this.root.scale.setScalar(1.25);
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  scare(px, pz) {
+    this._scareTimer = 7 + Math.random() * 5;
+    this._speed = this._baseSpeed * 4;
+    const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
+    this._target.set(
+      this.root.position.x + Math.sin(awayAngle) * 20,
+      0,
+      this.root.position.z + Math.cos(awayAngle) * 20,
+    );
+    this._waiting = false;
   }
 
   _build(pal) {
@@ -280,6 +316,11 @@ export class Cat {
   }
 
   update(dt) {
+    if (this._scareTimer > 0) {
+      this._scareTimer -= dt;
+      if (this._scareTimer <= 0) this._speed = this._baseSpeed;
+    }
+
     const t = performance.now() / 1000;
 
     // Tail sway — always

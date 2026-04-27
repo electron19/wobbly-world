@@ -1038,6 +1038,13 @@ export class Car extends Entity {
 
     // Światła (stop + cofania)
     this._updateLights();
+
+    // Miganie sygnałów policyjnych
+    if (this._isPolice) {
+      const flash = Math.floor(performance.now() / 200) % 2 === 0;
+      this._policeRedLights?.forEach(l  => { l.material.color.setHex(flash ? 0xFF1111 : 0x330000); });
+      this._policeBlueLights?.forEach(l => { l.material.color.setHex(flash ? 0x1144FF : 0x000822); });
+    }
   }
 
   /** Dynamicznie zmienia kolor świateł tylnych. */
