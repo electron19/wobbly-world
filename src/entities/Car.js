@@ -758,6 +758,7 @@ export class Car extends Entity {
     // do przodu). Maszyna stanów eliminuje tę zależność całkowicie.
     const _lv = this._chassis.linvel();
     const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
+    this._horizSpeedKmh = _horizSpeedKmh;
 
     // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
     if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
@@ -950,7 +951,7 @@ export class Car extends Entity {
     // currentVehicleSpeed() zmienia znak podczas skrętów (projekcja na lokalną oś Z)
     // — powodowało cofanie kół podczas jazdy w prawo.
     const wheelSign = this._dirState === 'reverse' ? -1 : 1;
-    const speedMs   = wheelSign * _horizSpeedKmh / 3.6;
+    const speedMs   = wheelSign * (this._horizSpeedKmh ?? 0) / 3.6;
     this._wheelAngle += (speedMs / WHEEL_R) * dt;
 
     // Slip ratio — przybliżony z siły hamowania
