@@ -219,7 +219,9 @@ export class Game {
     const pp = this.player.root.position;
     let best = null, bestD = ENTER_DIST;
     for (const car of this.cars) {
-      if (car.isOccupied) continue;
+      // Nie pozwalaj wsiąść do auta bez poprawnie zainicjalizowanej fizyki.
+      // W przeciwnym razie `car.update()` wywali błąd i cała pętla gry stanie.
+      if (car.isOccupied || !car.isDrivable) continue;
       const cp = car.root.position;
       const cf = car.facing;
       // Przekształć do lokalnego układu auta
@@ -237,6 +239,8 @@ export class Game {
   }
 
   _enterCar(car) {
+    // Guard na uszkodzony/niezainicjalizowany pojazd (np. po niepełnym buildzie świata).
+    if (!car?.isDrivable) return;
     this._drivingCar = car;
     car.isOccupied   = true;
     this.player.root.visible = false;
@@ -382,7 +386,13 @@ export class Game {
 
     // ── 1. Wejście → Rapier vehicle controller (siły pojazdu + updateVehicle) ──
     if (this._drivingCar) {
-      this._drivingCar.update(dt, this.input, this.audio);
+      if (this._drivingCar.isDrivable) {
+        this._drivingCar.update(dt, this.input, this.audio);
+      } else {
+        // Failsafe: nie zostawiaj gry w stanie "w aucie", gdy auto nie ma fizyki.
+        this._drivingCar.isOccupied = false;
+        this._drivingCar = null;
+      }
     }
     // Zaparkowane auta też muszą dostać updateVehicle — inaczej zawieszenie nie działa
     for (const car of this.cars) {
