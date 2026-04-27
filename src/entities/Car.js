@@ -874,9 +874,12 @@ export class Car extends Entity {
       const effBase = BASE_F * (1.0 - backAmount * 0.55);
       const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
       this._cornerT = cornerT;
-      const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 2.5;
+      // Przy ruszaniu trzymaj wysoki grip tylnej osi. Poprzednie 2.5 zbijało
+      // frictionSlip niemal do zera przy pełnym gazie od miejsca.
+      const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.55;
       const cornerSlip = cornerT * 1.5;
-      const fR = Math.max(0.30, effBase - launchSlip - cornerSlip);
+      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 1.20);
+      const fR = Math.max(rearGripFloor, effBase - launchGripLoss - cornerSlip);
 
       this._vehicle.setWheelFrictionSlip(0, effBase);
       this._vehicle.setWheelFrictionSlip(1, effBase);
@@ -914,12 +917,15 @@ export class Car extends Entity {
       const airborne = suspAvg > 0.32 && !this._flyMode;  // > 0.32 = koła w powietrzu
 
       const DAMP_XZ   = airborne ? 18000 : 4000;   // roll + pitch — silniejsze w powietrzu
-      const DAMP_Y    = airborne ?  8000 : 1200;    // yaw — na ziemi mały, żeby nie kręciło jak bąk
-      const RESTORE   = airborne ? 20000 : 4000;    // restoring torque do pozycji poziomej
+      const DAMP_Y    = airborne ? 22000 : 1200;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
+      // RESTORE tylko w powietrzu — na ziemi zawieszenie samo stabilizuje chassis.
+      // Restore na ziemi walczy z fizyką zawieszenia i blokuje normalne prowadzenie.
+      const RESTORE   = airborne ? 20000 : 0;
+      const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({
         x: -av.x * DAMP_XZ - rollSin  * RESTORE,
-        y: -av.y * DAMP_Y,
+        y: -av.y * DAMP_Y - yawQuadDamp,
         z: -av.z * DAMP_XZ - pitchSin * RESTORE,
       }, true);
     }
