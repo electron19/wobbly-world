@@ -325,6 +325,11 @@ export class Game {
     this._updateCulling();
     this._updateInteraction();
 
+    // Widoczność gracza — synchronizuj co klatkę ze stanem gry.
+    // Gracz niewidoczny gdy: w aucie LUB w budynku (FPP).
+    // To eliminuje wszelkie race-conditions z `visible` ustawianym w callbackach.
+    this.player.root.visible = !this._drivingCar && !this._insideBuilding;
+
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
 
