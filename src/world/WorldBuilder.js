@@ -22,6 +22,7 @@ import { TowerBlock }             from '../objects/TowerBlock.js';
 import { TriOffice }             from '../objects/TriOffice.js';
 import { Church }                 from '../objects/Church.js';
 import { Warehouse }              from '../objects/Warehouse.js';
+import { PoppyFactory }           from '../objects/PoppyFactory.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
@@ -65,6 +66,7 @@ export class WorldBuilder {
     this._addFarFarSouth();
     this._addNewNorthEstate();
     this._addNewSouthEstate();
+    this._addPoppyFactory();
     this._addHills();
     this._addTrees();
     this._addStreetLamps();
@@ -983,6 +985,21 @@ export class WorldBuilder {
     this._add(new Shop(this.scene, this.physics, {
       facing: FE, wallColor: 0xFFE8F0, roofColor: 0xAA2244,
     }, this.vehiclePhysics).placeAt(-184, 0, 210));
+  }
+
+  // ─── Fabryka Playtime Co. (Poppy Playtime) — NE outskirts ───────────────────
+  //
+  // Position: x=162, z=-125, facing FW (facade points west toward road x=130).
+  // World footprint with FW rotation: x ∈ [150,174], z ∈ [-144,-106].
+  // Road clearances: x=130 → 20j ✓, x=195 → 21j ✓, z=-100 → 6j ✓, z=-150 → 6j ✓
+  // No existing buildings within 40j of this centre.
+
+  _addPoppyFactory() {
+    const FW = -Math.PI / 2;
+    this._regCircle(162, -125, 19, 12, 3.0);
+    this._add(new PoppyFactory(this.scene, this.physics, {
+      facing: FW,
+    }, this.vehiclePhysics).placeAt(162, 0, -125));
   }
 
   // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────

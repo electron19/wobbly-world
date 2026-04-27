@@ -337,6 +337,9 @@ export class Game {
         this.player.update(dt, this.input, this.camCtrl, this.physics,
                            this.audio, isOnRoad(pp.x, pp.z));
       }
+      // B — beknięcie, F — pierdzenie (tylko na piechotę)
+      if (this.input.isJustPressed('KeyB')) this.audio.playBurp();
+      if (this.input.isJustPressed('KeyF')) this.audio.playFart();
     }
     this.physics.step(dt);
 

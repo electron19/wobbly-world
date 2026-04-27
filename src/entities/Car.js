@@ -16,7 +16,7 @@ const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
 const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
-const IDLE_BRAKE         = 8;     // tarcie spoczynkowe (parking na stoku)
+const IDLE_BRAKE         = 2;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 400;    // limit prędkości do przodu
@@ -817,7 +817,7 @@ export class Car extends Entity {
     // frictionSlip: przy hamowaniu dynamicznie obniżamy wartość, by uniknąć lockup-oscillation.
     // Wysoki frictionSlip podczas hamowania → agresywna siła → bounce zawieszenia → pulsacja.
     // Przy jeździe/przyspieszeniu zachowujemy pełny grip (4.0), przy hamowaniu schodzimy do ~1.8.
-    const BASE_F = onRoad ? 4.0 : (onSidewalk ? 3.5 : 2.5);
+    const BASE_F = onRoad ? 3.0 : (onSidewalk ? 2.8 : 2.2);
     const effBase = BASE_F * (1.0 - backAmount * 0.55);  // pełny grip bez hamowania, ~45% przy pełnym
 
     // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do effBase

@@ -11,7 +11,8 @@
  */
 export class InputManager {
   constructor() {
-    this.keys  = {};
+    this.keys       = {};
+    this._prevKeys  = {};   // previous frame state — for isJustPressed()
     this.mouse = { dx: 0, dy: 0 };
     this._pdx  = 0;
     this._pdy  = 0;
@@ -52,7 +53,10 @@ export class InputManager {
     });
   }
 
-  isDown(code) { return !!this.keys[code]; }
+  isDown(code)        { return !!this.keys[code]; }
+
+  /** Klawisz wciśnięty dokładnie w tej klatce (krawędź narastająca). */
+  isJustPressed(code) { return !!(this.keys[code] && !this._prevKeys[code]); }
 
   /** Przycisk pada wciśnięty w tej klatce (krawędź narastająca) */
   isPadButtonPressed(idx) {
@@ -100,6 +104,7 @@ export class InputManager {
 
   /** Przepisz nagromadzone delty do mouse, wyczyść bufor, odpytaj pad */
   flush() {
+    this._prevKeys = { ...this.keys };
     this._pollGamepad();
     this.mouse.dx       = this._pdx;
     this.mouse.dy       = this._pdy;
