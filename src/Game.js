@@ -113,7 +113,13 @@ export class Game {
       this.renderer.setSize(innerWidth, innerHeight);
     });
 
-    // ─── 8. UI ─────────────────────────────────────────────────────────────
+    // ─── 8a. Zoom kamery scrollem ──────────────────────────────────────────
+    window.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      this.camCtrl.dist = Math.max(3, Math.min(25, this.camCtrl.dist + e.deltaY * 0.02));
+    }, { passive: false });
+
+    // ─── 9. UI ─────────────────────────────────────────────────────────────
     const loading = document.getElementById('loading');
     loading.style.opacity = '0';
     setTimeout(() => (loading.style.display = 'none'), 600);

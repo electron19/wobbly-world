@@ -4,7 +4,7 @@ import { toonMat, toonGrad, C } from '../core/Materials.js';
 import { ROADS, ROAD_CLEAR } from '../world/zones.js';
 
 /** Wysokość krawężnika — używana też przez WorldBuilder do ustawiania obiektów. */
-export const SIDEWALK_H = 0.10;
+export const SIDEWALK_H = 0.06;
 
 /**
  * Zwraca wysokość podłoża (y) dla danej pozycji XZ.
@@ -215,8 +215,9 @@ export class Ground extends WorldObject {
     }
 
     // ─── Fizyczna podłoga (gruba warstwa poniżej y=0) ─────────────────────
+    // Rozmiar 670 przekracza granicę świata (±662) — auto nie wpada w pustkę
     this._bodies.push(
-      this.physics.addStaticBox(0, -0.5, 0, s / 2, 0.5, s / 2)
+      this.physics.addStaticBox(0, -0.5, 0, 670, 0.5, 670)
     );
   }
 }

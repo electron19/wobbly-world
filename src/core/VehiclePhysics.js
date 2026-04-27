@@ -77,13 +77,13 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   24);
-      vehicle.setWheelSuspensionCompression(i,  4.0);
-      vehicle.setWheelSuspensionRelaxation(i,   4.0);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.45);  // increased for smoother curb climbing
-      vehicle.setWheelMaxSuspensionForce(i,     25000); // ~2.5× ciężar auta (2000kg × 10 m/s²)
-      vehicle.setWheelFrictionSlip(i,           1.5);   // niższe = brak "walki" wzdłużnej
-      vehicle.setWheelSideFrictionStiffness(i,  0.65);  // increased for better lateral grip (0.45 caused sideways sliding)
+      vehicle.setWheelSuspensionStiffness(i,   12);    // soft: curbs compress easily (was 24)
+      vehicle.setWheelSuspensionCompression(i,  2.0);  // fast compression over steps (was 4.0)
+      vehicle.setWheelSuspensionRelaxation(i,   2.0);  // fast rebound (was 4.0)
+      vehicle.setWheelMaxSuspensionTravel(i,    0.55); // more travel for curb climbing (was 0.45)
+      vehicle.setWheelMaxSuspensionForce(i,     25000);
+      vehicle.setWheelFrictionSlip(i,           1.5);
+      vehicle.setWheelSideFrictionStiffness(i,  0.65);
     }
 
     return { vehicle, chassis };
