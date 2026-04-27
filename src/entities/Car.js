@@ -21,6 +21,7 @@ const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 400;    // limit prędkości do przodu
 const MAX_REV_KMH      = 35;     // limit cofania
+const PAD_TRIGGER_DEADZONE = 0.12;
 
 export class Car extends Entity {
   constructor(scene, color = 0xFF4444) {
@@ -413,6 +414,28 @@ export class Car extends Entity {
   /** Czy auto ma kompletną fizykę i może być prowadzone bez ryzyka crashu pętli gry. */
   get isDrivable() { return !!this._vehicle && !!this._chassis; }
 
+  /** Czyści stan sterowania przy wejściu/wyjściu z auta, żeby nie dziedziczyć hamowania z postoju. */
+  resetDriveState({ parked = false } = {}) {
+    this._steer = 0;
+    this._throttle = 0;
+    this._brake = 0;
+    this._prevHandbrake = false;
+    this._dirState = 'stopped';
+    this._isBraking = false;
+    this._isHandbraking = false;
+    this._cornerT = 0;
+    this._gasIn = 0;
+
+    if (!this._vehicle) return;
+
+    for (let i = 0; i < 4; i++) {
+      this._vehicle.setWheelEngineForce(i, 0);
+      this._vehicle.setWheelBrake(i, parked ? MAX_BRAKE_FORCE : 0);
+    }
+    this._vehicle.setWheelSteering(0, 0);
+    this._vehicle.setWheelSteering(1, 0);
+  }
+
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
     this._skidState = [0, 1, 2, 3].map(() => ({
@@ -711,8 +734,10 @@ export class Car extends Entity {
     // Gaz do przodu: W / ArrowUp / R2
     const fwdK   = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
     const revK   = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
-    const rawFwd = Math.max(fwdK, input.pad.r2 ?? 0);
-    const rawBack= Math.max(revK, input.pad.l2 ?? 0);
+    const padFwd = (input.pad.r2 ?? 0) > PAD_TRIGGER_DEADZONE ? (input.pad.r2 ?? 0) : 0;
+    const padBack = (input.pad.l2 ?? 0) > PAD_TRIGGER_DEADZONE ? (input.pad.l2 ?? 0) : 0;
+    const rawFwd = Math.max(fwdK, padFwd);
+    const rawBack= Math.max(revK, padBack);
 
     // Frame-rate-independent wygładzanie pedałów (1-exp(-dt/tau))
     const tauOn  = 0.08;
@@ -812,13 +837,10 @@ export class Car extends Entity {
       let brakeForce  = 0;
 
       if (handBrake) {
-        if (gasIn > 0 && this._dirState !== 'reverse') {
-          engineForce = MAX_ENGINE_FORCE * forwAmount;
-        }
-        this._vehicle.setWheelEngineForce(2, engineForce);
-        this._vehicle.setWheelEngineForce(3, engineForce);
         this._vehicle.setWheelEngineForce(0, 0);
         this._vehicle.setWheelEngineForce(1, 0);
+        this._vehicle.setWheelEngineForce(2, 0);
+        this._vehicle.setWheelEngineForce(3, 0);
         this._vehicle.setWheelBrake(0, 0);
         this._vehicle.setWheelBrake(1, 0);
         this._vehicle.setWheelBrake(2, HAND_BRAKE_FORCE * brakeSurf);

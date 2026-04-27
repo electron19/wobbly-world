@@ -240,6 +240,7 @@ export class Game {
     if (!car?.isDrivable) return;
     this._drivingCar = car;
     car.isOccupied   = true;
+    car.resetDriveState?.();
     this.player.root.visible = false;
     // Hard-teleport player to the same position the game-loop will use (cp.y + 4).
     // Using +30 then next-frame +4 created ~1557 m/s downward kinematic velocity →
@@ -270,6 +271,7 @@ export class Game {
     this.player.root.visible = true;
     car._audio    = null;
     car._flyMode  = false;   // wyłącz lot przy wysiadaniu
+    car.resetDriveState?.({ parked: true });
     this.audio.stopEngine();
     this.audio.stopTires();
     car.isOccupied        = false;
