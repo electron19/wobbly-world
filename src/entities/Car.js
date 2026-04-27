@@ -410,6 +410,9 @@ export class Car extends Entity {
   /** Prędkość uderzenia z bieżącej klatki [m/s] — reset co klatkę w update(). Dla camera shake. */
   get impactVel() { return this._impactVelThisFrame ?? 0; }
 
+  /** Czy auto ma kompletną fizykę i może być prowadzone bez ryzyka crashu pętli gry. */
+  get isDrivable() { return !!this._vehicle && !!this._chassis; }
+
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
   _initSkidMarks() {
     this._skidState = [0, 1, 2, 3].map(() => ({
