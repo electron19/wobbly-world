@@ -46,6 +46,7 @@ export class Game {
     this.player         = null;
     this.cars           = [];
     this.buildings      = [];
+    this.npcs           = [];
     this.audio          = new AudioManager();
     this._drivingCar    = null;
     this._insideBuilding = null;
@@ -98,6 +99,7 @@ export class Game {
     wb.build();
     this.cars          = wb.cars;
     this.buildings     = wb.buildings;
+    this.npcs          = wb.npcs;
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -377,6 +379,14 @@ export class Game {
     // ── 4. Sync Rapier → Three.js (auto + gracz) ─────────────────────────
     for (const car of this.cars) car.lateUpdate();
     this.player.lateUpdate();
+
+    // ── NPC + Animals — update tylko gdy blisko gracza (≤ 120 j.ś.) ──────
+    const npcRef = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+    for (const npc of this.npcs) {
+      const dx = npc.root.position.x - npcRef.x;
+      const dz = npc.root.position.z - npcRef.z;
+      if (dx * dx + dz * dz < 14400) npc.update(dt);
+    }
 
     // ── Lamp knockdown — proximity check po detekcji uderzenia ───────────
     if (this._drivingCar && this._drivingCar.impactVel > 3) {

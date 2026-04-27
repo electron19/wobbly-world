@@ -109,7 +109,13 @@ export class House extends Building {
       // Szkło
       const glass = new THREE.Mesh(
         new THREE.PlaneGeometry(0.72, 0.68),
-        new THREE.MeshToonMaterial({ color: 0x87CEEB, transparent: true, opacity: 0.65 }),
+        new THREE.MeshToonMaterial({
+          color: 0x87CEEB,
+          transparent: true,
+          opacity: 0.55,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
       );
       glass.position.set(lx, ly, lz + (rot === 0 ? 0.07 : 0));
       glass.rotation.y = rot;

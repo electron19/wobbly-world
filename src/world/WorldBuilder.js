@@ -27,6 +27,8 @@ import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
 import { Car }                    from '../entities/Car.js';
+import { NPC }                    from '../entities/NPC.js';
+import { Dog, Cat }               from '../entities/Animal.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
 
@@ -44,6 +46,7 @@ export class WorldBuilder {
     this.objects        = [];
     this.cars           = [];
     this.buildings      = [];  // domy z hasInterior=true — do interakcji E
+    this.npcs           = [];  // NPC + animals — aktualizowane co klatkę przez Game.js
     this._circles       = []; // exclusion circles — budynki, drzewa omijają je
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
@@ -71,6 +74,8 @@ export class WorldBuilder {
     this._addTrees();
     this._addStreetLamps();
     this._addCars();
+    this._addNPCs();
+    this._addAnimals();
     this._addBoundaries();
     return this;
   }
@@ -1364,6 +1369,53 @@ export class WorldBuilder {
       car.initPhysics(this.vehiclePhysics, this.physics, x, 0, z);
       this.cars.push(car);
     });
+  }
+
+  // ─── NPC ─────────────────────────────────────────────────────────────────────
+
+  _addNPCs() {
+    // Centrum i okolice — chodniki, place, park
+    const spots = [
+      // centrum — główny plac
+       [ 18,  8], [-18,  8], [ 28, -10], [-28, -10],
+       [  8, 22], [ -8, 22], [  5, -20], [-10, -24],
+      // przedmieścia północne
+       [ 30, 68], [-30, 68], [ 20, 82], [-20, 82],
+       [ 44, 55], [-44, 55],
+      // przedmieścia południowe
+       [ 28, -68], [-28, -68], [ 18, -82], [-18, -82],
+      // CBD wschód
+       [ 78,  12], [ 92, -10], [ 78, -30],
+      // CBD zachód
+       [-78,  12], [-92, -10], [-78, -30],
+    ];
+    for (const [x, z] of spots) {
+      this.npcs.push(new NPC(this.scene, x, z, 14));
+    }
+  }
+
+  // ─── Zwierzęta ────────────────────────────────────────────────────────────────
+
+  _addAnimals() {
+    // Pieski — przy domach w przedmieściach
+    const dogSpots = [
+      [ 22, 60], [-22, 60], [ 38, 78], [-40, 75],
+      [ 25, -58], [-25, -58], [ 42, -78],
+      [ 14,  30], [-18,  28],
+    ];
+    for (const [x, z] of dogSpots) {
+      this.npcs.push(new Dog(this.scene, x, z, 10));
+    }
+
+    // Kotki — bardziej ukryte, blisko budynków
+    const catSpots = [
+      [  8,  14], [ -8,  18], [ 32,  -4], [-32,  -4],
+      [ 20,  44], [-20,  44], [ 30, -44], [-28, -44],
+      [ 72,   0], [-72,   0],
+    ];
+    for (const [x, z] of catSpots) {
+      this.npcs.push(new Cat(this.scene, x, z, 8));
+    }
   }
 
   // ─── Granice ─────────────────────────────────────────────────────────────────
