@@ -72,7 +72,7 @@ export class Dog {
 
   scare(px, pz) {
     this._scareTimer = 6 + Math.random() * 4;
-    this._speed = this._baseSpeed * 3.5;
+    this._speed = this._baseSpeed * 6.0;
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
     this._target.set(
       this.root.position.x + Math.sin(awayAngle) * 22,
@@ -227,7 +227,7 @@ export class Cat {
 
   scare(px, pz) {
     this._scareTimer = 7 + Math.random() * 5;
-    this._speed = this._baseSpeed * 4;
+    this._speed = this._baseSpeed * 7.0;
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
     this._target.set(
       this.root.position.x + Math.sin(awayAngle) * 20,

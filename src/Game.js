@@ -51,7 +51,6 @@ export class Game {
     this._drivingCar    = null;
     this._insideBuilding = null;
     this._knockableLamps = [];
-    this._eWasDown      = false;
     this._lastTs        = 0;
     this._frameMs       = 1000 / 60;   // limit 60 FPS — jednakowa prędkość na baterii i zasilaczu
     this._interactEl       = null;
@@ -295,14 +294,12 @@ export class Game {
 
   /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
   _updateInteraction() {
-    const eDown    = this.input.isDown('KeyE');
-    const ePressed = (eDown && !this._eWasDown) || this.input.isPadButtonPressed(2);
-    this._eWasDown = eDown;
-
     if (this._interactCooldown > 0) {
       this._interactCooldown -= 1;
       return;
     }
+
+    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(2);
 
     if (ePressed) {
       if (this._drivingCar) {
@@ -401,11 +398,12 @@ export class Game {
                            this.audio, isOnRoad(pp.x, pp.z));
       }
       // B — beknięcie (klawiatura LUB pad Y=3), F — pierdzenie (klawiatura LUB pad X=2)
-      const burp = this.input.isJustPressed('KeyB') || this.input.isPadButtonPressed(3);
-      const fart = this.input.isJustPressed('KeyF') || this.input.isPadButtonPressed(2);
+      const burp = this.player.justBurped || this.input.isPadButtonPressed(3);
+      const fart = this.player.justFarted || this.input.isPadButtonPressed(2);
       if (burp) this.audio.playBurp();
       if (fart) {
         this.audio.playFart();
+        this.player._emitFartCloud();
         this._scareNPCs();
       }
     }

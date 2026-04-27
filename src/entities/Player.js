@@ -195,15 +195,13 @@ export class Player extends Entity {
     this.bodyMesh.scale.set(sx, sy, sx);
 
     // ─── Pierdnięcie (F) i beknięcie (B) ──────────────────────────────────────
+    // Dźwięk i scatter NPC obsługiwane w Game.js — tu tylko śledzenie krawędzi
     const fartDown = input.isDown('KeyF');
-    if (fartDown && !this._fartWasDown) {
-      audio?.playFart();
-      this._emitFartCloud();
-    }
+    this.justFarted = fartDown && !this._fartWasDown;
     this._fartWasDown = fartDown;
 
     const burpDown = input.isDown('KeyB');
-    if (burpDown && !this._burpWasDown) audio?.playBurp();
+    this.justBurped = burpDown && !this._burpWasDown;
     this._burpWasDown = burpDown;
 
     // ─── Kroki (dźwięk) ────────────────────────────────────────────────────────
@@ -225,23 +223,40 @@ export class Player extends Entity {
     }
   }
 
-  /** Emituje 5 zielonych kulek smrodu z tyłka postaci. */
+  /**
+   * Emituje zielone kulki smrodu z tyłka postaci.
+   * Tyłek = tył gracza (przeciwny do kierunku patrzenia), nisko przy pupie.
+   */
   _emitFartCloud() {
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x44CC22, transparent: true, opacity: 0.75, depthWrite: false,
-    });
-    for (let i = 0; i < 5; i++) {
-      const r = 0.06 + Math.random() * 0.10;
-      const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 5, 4), mat.clone());
-      mesh.position.copy(this.root.position);
-      mesh.position.y += 0.1 + Math.random() * 0.2;
+    // Kierunek "do tyłu" (tyłek)
+    const backX = -Math.sin(this.facing);
+    const backZ = -Math.cos(this.facing);
+
+    for (let i = 0; i < 9; i++) {
+      const r = 0.10 + Math.random() * 0.18;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 6, 5),
+        new THREE.MeshBasicMaterial({
+          color: i % 3 === 0 ? 0x33BB00 : (i % 3 === 1 ? 0x66DD11 : 0x22AA44),
+          transparent: true, opacity: 0.82, depthWrite: false,
+        }),
+      );
+
+      // Pozycja: tyłek postaci (za plecami, na poziomie pośladków)
+      mesh.position.set(
+        this.root.position.x + backX * 0.38 + (Math.random() - 0.5) * 0.25,
+        this.root.position.y + 0.18 + Math.random() * 0.15,
+        this.root.position.z + backZ * 0.38 + (Math.random() - 0.5) * 0.25,
+      );
       this.scene.add(mesh);
+
+      // Prędkość: głównie do tyłu + w górę + lekko na boki
       this._fartClouds.push({
         mesh,
-        life: 1.8 + Math.random() * 0.8,
-        vx: (Math.random() - 0.5) * 0.8,
-        vy: 0.5 + Math.random() * 0.6,
-        vz: (Math.random() - 0.5) * 0.8,
+        life: 2.0 + Math.random() * 1.2,
+        vx: backX * (1.4 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.6,
+        vy: 0.6 + Math.random() * 0.9,
+        vz: backZ * (1.4 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.6,
       });
     }
   }

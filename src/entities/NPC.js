@@ -58,7 +58,7 @@ export class NPC {
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
   scare(px, pz) {
     this._scareTimer = 5.0 + Math.random() * 3;
-    this._speed = this._baseSpeed * 3.2;
+    this._speed = this._baseSpeed * 5.5;
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
     this._target.set(
       this.root.position.x + Math.sin(awayAngle) * 28,
