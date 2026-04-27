@@ -62,6 +62,7 @@ export class Dog {
 
     this._scareTimer = 0;
     this._sleepTimer = 0;
+    this._sleepFall  = 0;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -73,8 +74,9 @@ export class Dog {
 
   sleep() {
     this._sleepTimer = 5.0 + Math.random() * 3;
-    this._waiting = true;
-    this._speed   = 0;
+    this._sleepFall  = 0;
+    this._waiting    = true;
+    this._speed      = 0;
   }
 
   scare(px, pz) {
@@ -156,17 +158,26 @@ export class Dog {
   }
 
   update(dt) {
-    if (this._sleepTimer > 0) {
-      this._sleepTimer -= dt;
-      if (this._sleepTimer <= 0) {
-        this._speed   = this._baseSpeed;
-        this._waiting = false;
-        this._waitT   = 0.1;
+    // ── Sen + wstawanie (przewraca się łapkami do góry) ──────────────────────
+    if (this._sleepTimer > 0 || this._sleepFall > 0.001) {
+      if (this._sleepTimer > 0) {
+        this._sleepTimer -= dt;
+        this._sleepFall = Math.min(1, this._sleepFall + dt / 0.30);
+        if (this._sleepTimer <= 0) {
+          this._speed   = this._baseSpeed;
+          this._waiting = true;
+          this._waitT   = 0.8;
+        }
+      } else {
+        this._sleepFall = Math.max(0, this._sleepFall - dt / 0.35);
       }
-      const t = performance.now() / 1000;
-      this.root.position.y = Math.sin(t * 0.5) * 0.004;
+      const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
+      this.root.rotation.z = p * Math.PI;   // przewraca się do góry nogami
+      this.root.position.y = p * 0.30;      // unosi żeby łapki były nad ziemią
       return;
     }
+    this.root.rotation.z = 0;
+    this.root.position.y = 0;
 
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;
@@ -236,6 +247,7 @@ export class Cat {
     this._restT      = 0;
     this._scareTimer = 0;
     this._sleepTimer = 0;
+    this._sleepFall  = 0;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -247,8 +259,9 @@ export class Cat {
 
   sleep() {
     this._sleepTimer = 5.0 + Math.random() * 3;
-    this._waiting = true;
-    this._speed   = 0;
+    this._sleepFall  = 0;
+    this._waiting    = true;
+    this._speed      = 0;
   }
 
   scare(px, pz) {
@@ -342,17 +355,26 @@ export class Cat {
   }
 
   update(dt) {
-    if (this._sleepTimer > 0) {
-      this._sleepTimer -= dt;
-      if (this._sleepTimer <= 0) {
-        this._speed   = this._baseSpeed;
-        this._waiting = false;
-        this._waitT   = 0.1;
+    // ── Sen + wstawanie (przewraca się łapkami do góry) ──────────────────────
+    if (this._sleepTimer > 0 || this._sleepFall > 0.001) {
+      if (this._sleepTimer > 0) {
+        this._sleepTimer -= dt;
+        this._sleepFall = Math.min(1, this._sleepFall + dt / 0.30);
+        if (this._sleepTimer <= 0) {
+          this._speed   = this._baseSpeed;
+          this._waiting = true;
+          this._waitT   = 0.8;
+        }
+      } else {
+        this._sleepFall = Math.max(0, this._sleepFall - dt / 0.35);
       }
-      const t = performance.now() / 1000;
-      this.root.position.y = Math.sin(t * 0.5) * 0.003;
+      const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
+      this.root.rotation.z = p * Math.PI;   // przewraca się do góry nogami
+      this.root.position.y = p * 0.28;      // kot nieco mniejszy od psa
       return;
     }
+    this.root.rotation.z = 0;
+    this.root.position.y = 0;
 
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;

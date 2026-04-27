@@ -48,6 +48,7 @@ export class NPC {
     this._scareTimer = 0;
     this._baseSpeed  = this._speed;
     this._sleepTimer = 0;
+    this._sleepFall  = 0;   // 0=stoi, 1=leży na boku
 
     this._build(pal);
     this.root.scale.setScalar(1.55);   // wzrost zbliżony do gracza
@@ -56,11 +57,12 @@ export class NPC {
     scene.add(this.root);
   }
 
-  /** Czerwony dym z gęby gracza — NPC zasypia (stoi w miejscu przez kilka sekund). */
+  /** Czerwony dym z gęby gracza — NPC pada na bok i śpi. */
   sleep() {
     this._sleepTimer = 6.0 + Math.random() * 4;
-    this._waiting = true;
-    this._speed   = 0;
+    this._sleepFall  = 0;
+    this._waiting    = true;
+    this._speed      = 0;
   }
 
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
@@ -147,20 +149,28 @@ export class NPC {
   }
 
   update(dt) {
-    if (this._sleepTimer > 0) {
-      this._sleepTimer -= dt;
-      if (this._sleepTimer <= 0) {
-        this._speed   = this._baseSpeed;
-        this._waiting = false;
-        this._waitT   = 0.1;
+    // ── Sen + wstawanie ────────────────────────────────────────────────────────
+    if (this._sleepTimer > 0 || this._sleepFall > 0.001) {
+      if (this._sleepTimer > 0) {
+        this._sleepTimer -= dt;
+        this._sleepFall = Math.min(1, this._sleepFall + dt / 0.35);
+        if (this._sleepTimer <= 0) {
+          this._speed   = this._baseSpeed;
+          this._waiting = true;
+          this._waitT   = 0.8;   // chwila dezorientacji po przebudzeniu
+        }
+      } else {
+        // Wstaje — _sleepFall wraca do 0
+        this._sleepFall = Math.max(0, this._sleepFall - dt / 0.40);
       }
-      // Śpi — nieznaczne kiwanie
-      const t = performance.now() / 1000;
-      this.root.position.y = Math.sin(t * 0.6) * 0.006;
-      this.root.rotation.z = Math.sin(t * 0.5) * 0.07;
+      // Smoothstep — płynna krzywa
+      const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
+      this.root.rotation.z = p * (Math.PI / 2);   // pada na bok
+      this.root.position.y = p * 0.22;            // uniesiony nieznacznie żeby nie był pod ziemią
       return;
     }
     this.root.rotation.z = 0;
+    this.root.position.y = 0;
 
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;

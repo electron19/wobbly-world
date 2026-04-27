@@ -41,14 +41,24 @@ export class Church extends Building {
     this._box(0, H / 2, 0, W, H, D, wallMat);
     addOutline(this.root.children[this.root.children.length - 1], 0.05);
 
-    // ── Dach dwuspadowy nawy — pryzmat trójkątny ─────────────────────────────
+    // ── Dach dwuspadowy nawy — prawdziwy pryzmat trójkątny (ExtrudeGeometry) ──
     const navRoofH = 3.5;
-    const nrGeo = new THREE.CylinderGeometry(0, W * 0.62, navRoofH, 4, 1);
-    // Obróć pryzmat o 45° żeby linia kalenicy była wzdłuż Z
+    // Profil trójkątny w płaszczyźnie XY (przekrój prostopadły do kalenicy)
+    const roofProfile = new THREE.Shape([
+      new THREE.Vector2(-W / 2 - 0.15, 0),   // lewy dolny narożnik (z małym zwisem)
+      new THREE.Vector2(0,              navRoofH),  // kalenica (szczyt)
+      new THREE.Vector2( W / 2 + 0.15, 0),   // prawy dolny narożnik
+    ]);
+    const nrGeo = new THREE.ExtrudeGeometry(roofProfile, {
+      depth:         D + 0.30,   // nieco dłuższy niż nawa (zwis)
+      bevelEnabled:  false,
+    });
     const nrMesh = new THREE.Mesh(nrGeo, roofMat);
-    nrMesh.rotation.y = Math.PI / 4;
-    nrMesh.position.set(0, H + navRoofH / 2, 0);
-    nrMesh.scale.set(1, 1, D / W * 1.1);
+    // ExtrudeGeometry tworzy kształt w płaszczyźnie XY, wytłaczając wzdłuż +Z
+    // → ustaw tak by środek nawy (z=0) był w połowie długości dachu
+    nrMesh.position.set(0, H, -D / 2 - 0.15);
+    nrMesh.castShadow = true;
+    addOutline(nrMesh, 0.05);
     this.root.add(nrMesh);
 
     // ── Wieża frontowa — przy z = +D/2 ──────────────────────────────────────
