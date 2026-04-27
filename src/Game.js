@@ -215,6 +215,10 @@ export class Game {
     this._drivingCar = car;
     car.isOccupied   = true;
     this.player.root.visible = false;
+    // Immediately teleport player far above the car (no kinematic sweep = no push on chassis).
+    // setTranslation() is instant — avoids the "flip" caused by the capsule sweeping through the chassis.
+    const cp = car.root.position;
+    this.player._body.setTranslation({ x: cp.x, y: cp.y + 30, z: cp.z }, false);
     car._audio = this.audio;
     this.audio.playEngineStart();
     this.audio.startTires();

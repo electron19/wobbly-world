@@ -12,7 +12,7 @@
  *   Daleko (narożniki)   — 2 wzgórza
  */
 import * as THREE from 'three';
-import { Ground, makeSidewalkCanvas, makeSidewalkMat } from '../objects/Ground.js';
+import { Ground, makeSidewalkCanvas, makeSidewalkMat, SIDEWALK_H } from '../objects/Ground.js';
 import { House, HOUSE_PALETTES }  from '../objects/House.js';
 import { Shop }                   from '../objects/Shop.js';
 import { School }                 from '../objects/School.js';
@@ -215,7 +215,7 @@ export class WorldBuilder {
   _road({ axis, center, halfLen = 130 }) {
     const RW  = 3.0;
     const SWW = 1.5;
-    const SWH = 0.10;
+    const SWH = SIDEWALK_H;
     const n   = Math.floor(halfLen / 10);
 
     const roadMat = new THREE.MeshToonMaterial({ color: 0x888888 });
@@ -328,7 +328,7 @@ export class WorldBuilder {
   _addCorners() {
     const RW  = 3.0;
     const SWW = 1.5;
-    const SWH = 0.10;
+    const SWH = SIDEWALK_H;
 
     const nsRoads = ROADS.filter(r => r.axis === 'x');  // x=0,±65
     const ewRoads = ROADS.filter(r => r.axis === 'z');  // z=0,±50

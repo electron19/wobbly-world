@@ -77,9 +77,9 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   12);    // soft: curbs compress easily (was 24)
-      vehicle.setWheelSuspensionCompression(i,  2.0);  // fast compression over steps (was 4.0)
-      vehicle.setWheelSuspensionRelaxation(i,   2.0);  // fast rebound (was 4.0)
+      vehicle.setWheelSuspensionStiffness(i,   24);    // maintains chassis height ~0.75 above road
+      vehicle.setWheelSuspensionCompression(i,  3.0);  // slightly faster than original (was 4.0)
+      vehicle.setWheelSuspensionRelaxation(i,   3.0);
       vehicle.setWheelMaxSuspensionTravel(i,    0.55); // more travel for curb climbing (was 0.45)
       vehicle.setWheelMaxSuspensionForce(i,     25000);
       vehicle.setWheelFrictionSlip(i,           1.5);

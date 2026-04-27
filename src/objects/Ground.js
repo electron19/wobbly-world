@@ -125,7 +125,7 @@ export class Ground extends WorldObject {
     this.root.add(grass);
 
     // ─── Chodniki — paski boczne z przerwami na każdym skrzyżowaniu ──────────
-    const SW_H = 0.10;
+    const SW_H = SIDEWALK_H;
     const SW   = 1.5;
     const BW   = 3.75;   // środek paska (3 + SW/2)
     const EX   = 4.5;    // krawędź głównego skrzyżowania
