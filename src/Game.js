@@ -209,7 +209,7 @@ export class Game {
     this.camCtrl.pitch       = this._savedCamPitch;
     this.camCtrl.dist        = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
 
   // ─── Interakcja z autem ───────────────────────────────────────────────────
@@ -277,7 +277,24 @@ export class Game {
     this._interactCooldown = 25;  // ~0.4s blokady po wysiadaniu (żeby nie wsiadać natychmiast)
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+  }
+
+  /** Czerwony dym z gęby — NPC i zwierzęta w promieniu 14 j.ś. zasypiają. */
+  _sleepNPCs() {
+    const pp = this.player.root.position;
+    // Usypia tylko te przed graczem (stożek ±70°) w promieniu 14 j.ś.
+    const fwdX = Math.sin(this.player.facing);
+    const fwdZ = Math.cos(this.player.facing);
+    for (const npc of this.npcs) {
+      const dx = npc.root.position.x - pp.x;
+      const dz = npc.root.position.z - pp.z;
+      const dist2 = dx * dx + dz * dz;
+      if (dist2 > 14 * 14) continue;
+      const len = Math.sqrt(dist2) || 1;
+      const dot = (dx / len) * fwdX + (dz / len) * fwdZ;
+      if (dot > 0.34) npc.sleep?.();   // stożek ±70°
+    }
   }
 
   /** Wywołuje strach u NPC i zwierząt w promieniu 18 j.ś. */
@@ -299,7 +316,8 @@ export class Game {
       return;
     }
 
-    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(2);
+    // Pad: button 0 (A/Cross) = wsiadaj/wysiadaj (OSOBNY od pierdzenia/beknięcia)
+    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(0);
 
     if (ePressed) {
       if (this._drivingCar) {
@@ -397,14 +415,21 @@ export class Game {
         this.player.update(dt, this.input, this.camCtrl, this.physics,
                            this.audio, isOnRoad(pp.x, pp.z));
       }
-      // B — beknięcie (klawiatura LUB pad Y=3), F — pierdzenie (klawiatura LUB pad X=2)
+      // Pad: button 2 (X/Square) = pierdzenie, button 3 (Y/Triangle) = beknięcie
+      // OSOBNE od button 0 (A/Cross) = wsiadaj/wysiadaj
       const burp = this.player.justBurped || this.input.isPadButtonPressed(3);
       const fart = this.player.justFarted || this.input.isPadButtonPressed(2);
+      const yawn = this.player.justYawned;
       if (burp) this.audio.playBurp();
       if (fart) {
         this.audio.playFart();
         this.player._emitFartCloud();
         this._scareNPCs();
+      }
+      if (yawn) {
+        this.audio.playYawn();
+        this.player._emitSleepCloud();
+        this._sleepNPCs();
       }
     }
     this.physics.step(dt);
@@ -516,5 +541,8 @@ export class Game {
         `X: ${pos.x.toFixed(1)}&nbsp; Y: ${pos.y.toFixed(1)}&nbsp; Z: ${pos.z.toFixed(1)}` +
         (spd ? `<br>${spd}` : '');
     }
+
+    // Zapisz stan klawiszy na koniec klatki — isJustPressed() działa poprawnie następnej klatki
+    this.input.endFrame();
   }
 }

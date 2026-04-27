@@ -37,10 +37,12 @@ export class Player extends Entity {
     this._walkPhase  = 0;
     this._fartWasDown = false;
     this._burpWasDown = false;
+    this._yawnWasDown = false;
     this.spSquishY = new Spring(22, 0.80);
     this.spSquishX = new Spring(16, 0.70);
     this.spLean    = new Spring(12, 0.70);
-    this._fartClouds = [];   // aktywne chmury smrodu
+    this._fartClouds  = [];   // aktywne chmury smrodu
+    this._sleepClouds = [];   // aktywne chmury usypiające
 
     this._buildBody();
     this._buildEyes();
@@ -204,6 +206,10 @@ export class Player extends Entity {
     this.justBurped = burpDown && !this._burpWasDown;
     this._burpWasDown = burpDown;
 
+    const yawnDown = input.isDown('KeyK');
+    this.justYawned = yawnDown && !this._yawnWasDown;
+    this._yawnWasDown = yawnDown;
+
     // ─── Kroki (dźwięk) ────────────────────────────────────────────────────────
     audio?.checkFootstep(this._walkPhase, isMoving, this.grounded, onRoad);
 
@@ -220,6 +226,39 @@ export class Player extends Entity {
       this.rLeg.rotation.x *= 0.85;
       this.lArm.rotation.x *= 0.85;
       this.rArm.rotation.x *= 0.85;
+    }
+  }
+
+  /**
+   * Emituje czerwony usypiający dym z ust postaci (do przodu i w górę).
+   */
+  _emitSleepCloud() {
+    const fwdX = Math.sin(this.facing);
+    const fwdZ = Math.cos(this.facing);
+
+    for (let i = 0; i < 12; i++) {
+      const r = 0.12 + Math.random() * 0.22;
+      const mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 6, 5),
+        new THREE.MeshBasicMaterial({
+          color: i % 3 === 0 ? 0xCC0022 : (i % 3 === 1 ? 0xFF2244 : 0x991133),
+          transparent: true, opacity: 0.80, depthWrite: false,
+        }),
+      );
+      // Usta — przód głowy, wysoko
+      mesh.position.set(
+        this.root.position.x + fwdX * 0.45 + (Math.random() - 0.5) * 0.20,
+        this.root.position.y + 0.72 + Math.random() * 0.10,
+        this.root.position.z + fwdZ * 0.45 + (Math.random() - 0.5) * 0.20,
+      );
+      this.scene.add(mesh);
+      this._sleepClouds.push({
+        mesh,
+        life: 2.5 + Math.random() * 1.5,
+        vx: fwdX * (1.2 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.5,
+        vy: 0.5 + Math.random() * 0.8,
+        vz: fwdZ * (1.2 + Math.random() * 0.8) + (Math.random() - 0.5) * 0.5,
+      });
     }
   }
 
@@ -270,6 +309,25 @@ export class Player extends Entity {
     // Idle bob (na wierzchu zsynchronizowanej pozycji)
     const t = performance.now() / 1000;
     this.root.position.y += Math.sin(t * 1.5) * 0.015;
+
+    // Animacja chmur usypiających
+    for (let i = this._sleepClouds.length - 1; i >= 0; i--) {
+      const c = this._sleepClouds[i];
+      c.life -= 1 / 60;
+      c.mesh.position.x += c.vx / 60;
+      c.mesh.position.y += c.vy / 60;
+      c.mesh.position.z += c.vz / 60;
+      c.vy *= 0.96;
+      c.vx *= 0.97;
+      c.vz *= 0.97;
+      c.mesh.scale.setScalar(1 + (2.8 - c.life) * 0.5);
+      c.mesh.material.opacity = Math.max(0, c.life / 3.5) * 0.72;
+      if (c.life <= 0) {
+        this.scene.remove(c.mesh);
+        c.mesh.geometry.dispose();
+        this._sleepClouds.splice(i, 1);
+      }
+    }
 
     // Animacja chmur smrodu
     for (let i = this._fartClouds.length - 1; i >= 0; i--) {

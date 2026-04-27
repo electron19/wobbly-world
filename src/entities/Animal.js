@@ -61,6 +61,7 @@ export class Dog {
     initWander(this, x, z, wanderR, 0.8 + Math.random() * 0.7);
 
     this._scareTimer = 0;
+    this._sleepTimer = 0;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -68,6 +69,12 @@ export class Dog {
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  sleep() {
+    this._sleepTimer = 5.0 + Math.random() * 3;
+    this._waiting = true;
+    this._speed   = 0;
   }
 
   scare(px, pz) {
@@ -149,6 +156,18 @@ export class Dog {
   }
 
   update(dt) {
+    if (this._sleepTimer > 0) {
+      this._sleepTimer -= dt;
+      if (this._sleepTimer <= 0) {
+        this._speed   = this._baseSpeed;
+        this._waiting = false;
+        this._waitT   = 0.1;
+      }
+      const t = performance.now() / 1000;
+      this.root.position.y = Math.sin(t * 0.5) * 0.004;
+      return;
+    }
+
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;
       if (this._scareTimer <= 0) this._speed = this._baseSpeed;
@@ -216,6 +235,7 @@ export class Cat {
     initWander(this, x, z, wanderR, 0.6 + Math.random() * 0.8);
     this._restT      = 0;
     this._scareTimer = 0;
+    this._sleepTimer = 0;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -223,6 +243,12 @@ export class Cat {
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  sleep() {
+    this._sleepTimer = 5.0 + Math.random() * 3;
+    this._waiting = true;
+    this._speed   = 0;
   }
 
   scare(px, pz) {
@@ -316,6 +342,18 @@ export class Cat {
   }
 
   update(dt) {
+    if (this._sleepTimer > 0) {
+      this._sleepTimer -= dt;
+      if (this._sleepTimer <= 0) {
+        this._speed   = this._baseSpeed;
+        this._waiting = false;
+        this._waitT   = 0.1;
+      }
+      const t = performance.now() / 1000;
+      this.root.position.y = Math.sin(t * 0.5) * 0.003;
+      return;
+    }
+
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;
       if (this._scareTimer <= 0) this._speed = this._baseSpeed;

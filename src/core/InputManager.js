@@ -102,9 +102,13 @@ export class InputManager {
     }
   }
 
+  /** Zapisz stan klawiszy na koniec klatki — dla isJustPressed() następnej klatki */
+  endFrame() {
+    this._prevKeys = { ...this.keys };
+  }
+
   /** Przepisz nagromadzone delty do mouse, wyczyść bufor, odpytaj pad */
   flush() {
-    this._prevKeys = { ...this.keys };
     this._pollGamepad();
     this.mouse.dx       = this._pdx;
     this.mouse.dy       = this._pdy;

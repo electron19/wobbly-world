@@ -47,12 +47,20 @@ export class NPC {
 
     this._scareTimer = 0;
     this._baseSpeed  = this._speed;
+    this._sleepTimer = 0;
 
     this._build(pal);
     this.root.scale.setScalar(1.55);   // wzrost zbliżony do gracza
     this.root.position.set(x, 0, z);
     this.root.rotation.y = this._facing;
     scene.add(this.root);
+  }
+
+  /** Czerwony dym z gęby gracza — NPC zasypia (stoi w miejscu przez kilka sekund). */
+  sleep() {
+    this._sleepTimer = 6.0 + Math.random() * 4;
+    this._waiting = true;
+    this._speed   = 0;
   }
 
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
@@ -139,6 +147,21 @@ export class NPC {
   }
 
   update(dt) {
+    if (this._sleepTimer > 0) {
+      this._sleepTimer -= dt;
+      if (this._sleepTimer <= 0) {
+        this._speed   = this._baseSpeed;
+        this._waiting = false;
+        this._waitT   = 0.1;
+      }
+      // Śpi — nieznaczne kiwanie
+      const t = performance.now() / 1000;
+      this.root.position.y = Math.sin(t * 0.6) * 0.006;
+      this.root.rotation.z = Math.sin(t * 0.5) * 0.07;
+      return;
+    }
+    this.root.rotation.z = 0;
+
     if (this._scareTimer > 0) {
       this._scareTimer -= dt;
       if (this._scareTimer <= 0) this._speed = this._baseSpeed;

@@ -1410,12 +1410,13 @@ export class WorldBuilder {
       root.add(badge);
     });
 
-    // Lampa na dachu (belka czerwono-niebieska)
+    // Lampa na DACHU — belka policji (y ≈ 2.05 = powyżej dachu auta y=2.00)
+    const ROOF_Y = 2.05;   // top of car roof + small gap
     const barBase = new THREE.Mesh(
-      new THREE.BoxGeometry(0.55, 0.13, 1.0),
-      new THREE.MeshBasicMaterial({ color: 0x222222 }),
+      new THREE.BoxGeometry(0.60, 0.14, 1.10),
+      new THREE.MeshBasicMaterial({ color: 0x111111 }),
     );
-    barBase.position.set(0, 1.56, 0.1);
+    barBase.position.set(0, ROOF_Y, 0.1);
     root.add(barBase);
 
     const redMat  = new THREE.MeshBasicMaterial({ color: 0xFF1111 });
@@ -1424,10 +1425,11 @@ export class WorldBuilder {
     car._policeRedLights  = [];
     car._policeBlueLights = [];
 
-    [[-0.16, 0.3], [-0.16, -0.3], [0.16, 0.3], [0.16, -0.3]].forEach(([lx, lz], i) => {
-      const mat  = i % 2 === 0 ? redMat : blueMat;
-      const light = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.32), mat.clone());
-      light.position.set(lx, 1.63, lz + 0.1);
+    // 4 panele migające: [lewy-przód, lewy-tył, prawy-przód, prawy-tył]
+    [[-0.18, 0.32], [-0.18, -0.32], [0.18, 0.32], [0.18, -0.32]].forEach(([lx, lz], i) => {
+      const mat   = i % 2 === 0 ? redMat : blueMat;
+      const light = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.38), mat.clone());
+      light.position.set(lx, ROOF_Y + 0.08, lz + 0.1);
       root.add(light);
       if (i % 2 === 0) car._policeRedLights.push(light);
       else              car._policeBlueLights.push(light);
