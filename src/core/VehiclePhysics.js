@@ -27,7 +27,7 @@ export class VehiclePhysics {
     const chassisDesc = R.RigidBodyDesc.dynamic()
       .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
       .setLinearDamping(0.04)
-      .setAngularDamping(0.45);
+      .setAngularDamping(0.20);  // było 0.45 — za wysokie blokowało skręt i wytwarzało "galaretę"
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
@@ -77,13 +77,13 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   24);    // maintains chassis height ~0.75 above road
-      vehicle.setWheelSuspensionCompression(i,  3.0);  // slightly faster than original (was 4.0)
-      vehicle.setWheelSuspensionRelaxation(i,   3.0);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.55); // more travel for curb climbing (was 0.45)
-      vehicle.setWheelMaxSuspensionForce(i,     25000);
-      vehicle.setWheelFrictionSlip(i,           1.5);
-      vehicle.setWheelSideFrictionStiffness(i,  0.65);
+      vehicle.setWheelSuspensionStiffness(i,   26);    // było 24 — wyższa sztywność redukuje odbijanie
+      vehicle.setWheelSuspensionCompression(i,  4.5);  // było 3.0 — mocniejsze tłumienie skoku
+      vehicle.setWheelSuspensionRelaxation(i,   4.0);  // było 3.0 — wolniejszy powrót = mniej "galaret"
+      vehicle.setWheelMaxSuspensionTravel(i,    0.45); // było 0.55 — mniejszy skok = stabilniej
+      vehicle.setWheelMaxSuspensionForce(i,     18000); // było 25000 — ogranicza impuls przy krawężnikach
+      vehicle.setWheelFrictionSlip(i,           1.8);  // było 1.5 — lekko wyższy grip
+      vehicle.setWheelSideFrictionStiffness(i,  1.0);  // było 0.65 — lepszy boczny grip (mniej ślizganie)
     }
 
     return { vehicle, chassis };

@@ -720,15 +720,24 @@ export class Car extends Entity {
     const backAmount = this._brake;
     const gasIn = forwAmount - backAmount;
 
+    // Nawierzchnia + prędkość — obliczamy PRZED skrętem (steerMult zależy od bieżącej prędkości)
+    const cp         = this._chassis.translation();
+    const onRoad     = isOnRoad(cp.x, cp.z);
+    const onSidewalk = !onRoad && isOnHardSurface(cp.x, cp.z);
+    const brakeSurf  = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
+
+    // Prędkość bieżącej klatki (Rapier: m/s → km/h)
+    const speedKmh = this._vehicle.currentVehicleSpeed() * 3.6;
+    const absSpd   = Math.abs(speedKmh);
+
     // Skręt: A/D / analog
     const steerKL  = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
     const steerKR  = (input.isDown('KeyD') || input.isDown('ArrowRight')) ? 1 : 0;
     const padSteer = Math.abs(input.pad.leftX) > 0.12 ? -input.pad.leftX : 0;
     const steerIn  = padSteer !== 0 ? padSteer : (steerKL - steerKR);
 
-    // Wygładzony skręt, kąt maleje przy dużej prędkości
-    const absSpd0   = Math.abs(this._speedKmh ?? 0);
-    const steerMult = Math.max(0.30, 1 - absSpd0 / 160);
+    // Wygładzony skręt, kąt maleje przy dużej prędkości (bieżąca klatka, nie poprzednia)
+    const steerMult = Math.max(0.30, 1 - absSpd / 160);
     this._steer += (steerIn * MAX_STEER_ANGLE * steerMult - this._steer) * (1 - Math.exp(-STEER_SPEED * dt));
     this._vehicle.setWheelSteering(0, this._steer);  // FL
     this._vehicle.setWheelSteering(1, this._steer);  // FR
@@ -739,17 +748,6 @@ export class Car extends Entity {
       audio?.playHandbrake(this._vehicle.currentVehicleSpeed() * 3.6);
     }
     this._prevHandbrake = handBrake;
-
-    // Nawierzchnia — raz dla całego bloku
-    const cp       = this._chassis.translation();
-    const onRoad   = isOnRoad(cp.x, cp.z);
-    const onSidewalk = !onRoad && isOnHardSurface(cp.x, cp.z);
-    const brakeSurf  = onRoad ? 1.0 : (onSidewalk ? 0.88 : BRAKE_GRASS_MULT);
-
-    // Prędkość (Rapier: m/s → km/h)
-    // currentVehicleSpeed() projection na lokalną oś Z — używana tylko do absSpd (magnitude OK).
-    const speedKmh = this._vehicle.currentVehicleSpeed() * 3.6;
-    const absSpd   = Math.abs(speedKmh);
 
     // ── Maszyna stanów kierunku jazdy ────────────────────────────────────────
     // Używa bezwzględnej prędkości poziomej chassis (linvel XZ) — odporna na skręty.
@@ -767,7 +765,7 @@ export class Car extends Entity {
     // wysokie, co daje gasIn < 0 mimo że gracz chce jechać do przodu. Surowy input jest natychmiastowy.
     if (this._dirState === 'stopped') {
       if (rawFwd > 0.05) this._dirState = 'forward';
-      if (rawBack > 0.05) this._dirState = 'reverse';
+      else if (rawBack > 0.05) this._dirState = 'reverse';  // FIX: else if — bez tego oba wejścia → reverse
     }
 
     let engineForce = 0;
@@ -817,7 +815,7 @@ export class Car extends Entity {
     // frictionSlip: przy hamowaniu dynamicznie obniżamy wartość, by uniknąć lockup-oscillation.
     // Wysoki frictionSlip podczas hamowania → agresywna siła → bounce zawieszenia → pulsacja.
     // Przy jeździe/przyspieszeniu zachowujemy pełny grip (4.0), przy hamowaniu schodzimy do ~1.8.
-    const BASE_F = onRoad ? 3.0 : (onSidewalk ? 2.8 : 2.2);
+    const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 1.8);  // było 3.0/2.8/2.2 — niższe redukuje oscylacje
     const effBase = BASE_F * (1.0 - backAmount * 0.55);  // pełny grip bez hamowania, ~45% przy pełnym
 
     // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do effBase
@@ -832,10 +830,24 @@ export class Car extends Entity {
     this._vehicle.setWheelFrictionSlip(2, fR);       // RL
     this._vehicle.setWheelFrictionSlip(3, fR);       // RR
 
-    // Downforce aerodynamiczny — Rapier: addForce({x,y,z}, wake)
-    if (absSpd > 20) {
-      const vMs = absSpd / 3.6;
+    // Downforce aerodynamiczny — używa poziomej prędkości (dokładniejsza w zakrętach)
+    if (this._horizSpeedKmh > 20) {
+      const vMs = this._horizSpeedKmh / 3.6;
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
+    }
+
+    // Anti-roll stabilizer — moment przywracający przy przechyleniu (zapobiega fikołkom na krawężnikach)
+    // Wyliczamy przechylenie (roll) i pochylenie (pitch) z kwaterniona chassis i kontrujemy torsją
+    {
+      const qS      = this._chassis.rotation();
+      const rollSin  = 2 * (qS.w * qS.x - qS.y * qS.z);  // sin(roll) — przechylenie boczne
+      const pitchSin = 2 * (qS.w * qS.z + qS.x * qS.y);  // sin(pitch) — pochylenie przód/tył
+      const STAB_K  = 12000;  // N·m/rad
+      this._chassis.addTorque({
+        x: -rollSin  * STAB_K,
+        y: 0,
+        z: -pitchSin * STAB_K,
+      }, true);
     }
 
     // Klakson (H / Y-pad)
@@ -953,6 +965,8 @@ export class Car extends Entity {
     const wheelSign = this._dirState === 'reverse' ? -1 : 1;
     const speedMs   = wheelSign * (this._horizSpeedKmh ?? 0) / 3.6;
     this._wheelAngle += (speedMs / WHEEL_R) * dt;
+    // Wrap modulo 2π — zapobiega utracie precyzji float po długiej jeździe
+    if (this._wheelAngle > 1e5 || this._wheelAngle < -1e5) this._wheelAngle %= (Math.PI * 2);
 
     // Slip ratio — przybliżony z siły hamowania
     const absSpeedMs = Math.abs(speedMs);

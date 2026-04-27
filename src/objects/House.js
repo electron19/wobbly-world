@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Building } from './Building.js';
-import { toonMat, addOutline, C } from '../core/Materials.js';
+import { toonMat, toonGrad, addOutline, C } from '../core/Materials.js';
 
 /** 10 kolorowych palet domów — używane przez WorldBuilder */
 export const HOUSE_PALETTES = [
@@ -90,22 +90,12 @@ export class House extends Building {
       this.root.add(cap);
     }
 
-    // ── RAMA DRZWI + DRZWI + KLAMKA ──────────────────────────────────────────
+    // ── RAMA DRZWI (scalana z budynkiem) ─────────────────────────────────────
+    // Sama rama jest statycznym elementem budynku — scalia się z resztą geometrii.
+    // Panel drzwi i klamka są tworzone w _buildRoofMesh() (po scalaniu) jako animowany mesh.
     const doorFrame = new THREE.Mesh(new THREE.BoxGeometry(1.05, 1.95, 0.12), trimMat);
     doorFrame.position.set(0, 0.975, d / 2 + 0.06);
     this.root.add(doorFrame);
-
-    const door = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.75, 0.14), doorMat);
-    door.position.set(0, 0.875, d / 2 + 0.08);
-    addOutline(door, 0.035);
-    this.root.add(door);
-
-    const knob = new THREE.Mesh(
-      new THREE.SphereGeometry(0.065, 6, 6),
-      new THREE.MeshBasicMaterial({ color: 0xFFD700 }),
-    );
-    knob.position.set(0.3, 0.85, d / 2 + 0.17);
-    this.root.add(knob);
 
     // ── OKNA ─────────────────────────────────────────────────────────────────
     const makeWindow = (lx, ly, lz, rot = 0) => {
@@ -232,7 +222,7 @@ export class House extends Building {
   // ─── Dach (osobny mesh — ukrywany gdy gracz jest w środku) ──────────────────
 
   _buildRoofMesh() {
-    const { w, h, d, roofColor, trimColor, roofStyle, roofH, floors, hasChimney } = this.cfg;
+    const { w, h, d, roofColor, trimColor, doorColor, roofStyle, roofH, floors, hasChimney } = this.cfg;
     const roofMat = toonMat(roofColor);
     const trimMat = toonMat(trimColor);
     const H = h * floors;
@@ -280,15 +270,57 @@ export class House extends Building {
 
     this.root.add(roofGroup);
     this._roofMesh = roofGroup;
+
+    // ── Animowane drzwi (post-merge — osobny mesh z pivotem przy zawiasie) ─────────
+    // Drzwi tworzone PO scalaniu geometrii żeby móc je animować niezależnie.
+    // Pivot = lewy zawias drzwi (obrót w Y otwiera/zamyka).
+    this._doorPivot = new THREE.Group();
+    this._doorPivot.position.set(-0.425, 0, d / 2 + 0.06);
+    this.root.add(this._doorPivot);
+
+    const doorAnimMat = new THREE.MeshToonMaterial({ color: doorColor, gradientMap: toonGrad });
+    const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.75, 0.14), doorAnimMat);
+    doorMesh.position.set(0.425, 0.875, 0);  // środek drzwi względem pivota
+    doorMesh.castShadow = true;
+    addOutline(doorMesh, 0.035);
+    this._doorPivot.add(doorMesh);
+
+    // Klamka
+    const knob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.065, 6, 6),
+      new THREE.MeshBasicMaterial({ color: 0xFFD700 }),
+    );
+    knob.position.set(0.73, 0.875, 0.10);
+    this._doorPivot.add(knob);
   }
 
   // ─── Wnętrze (podłoga + meble) ────────────────────────────────────────────
 
   _buildInterior() {
-    const { w, h, d, floors } = this.cfg;
+    const { w, h, d, floors, wallColor } = this.cfg;
     const H = h * floors;
 
     const g = new THREE.Group();
+
+    // ── Ściany wewnętrzne (widoczne tylko po wejściu do środka) ──────────────
+    // Zewnętrzny box budynku ma FrontSide — wnętrze niewidoczne.
+    // BackSide box tej samej geometrii renderuje twarze wewnętrzne (sufit + 4 ściany).
+    const wallMatInside = new THREE.MeshToonMaterial({
+      color: wallColor,
+      side: THREE.BackSide,
+      gradientMap: toonGrad,
+    });
+    // Lekko mniejszy box żeby uniknąć z-fightingu z exterior
+    const wallBox = new THREE.Mesh(new THREE.BoxGeometry(w - 0.02, H, d - 0.02), wallMatInside);
+    wallBox.position.set(0, H / 2, 0);
+    g.add(wallBox);
+
+    // Sufit — jaśniejszy kolor (odróżnia od ścian)
+    const ceilMat = new THREE.MeshToonMaterial({ color: 0xFAF0E6, gradientMap: toonGrad });
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w - 0.1, d - 0.1), ceilMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set(0, H - 0.01, 0);
+    g.add(ceil);
 
     // Podłoga — jaśniejszy drewniany kolor
     const floorMat = toonMat(0xC8954A);
@@ -449,6 +481,17 @@ export class House extends Building {
         const wz2 = wz - lx * sinF + lz * cosF;
         this._addPhysicsBox(wx2, wy + postHH, wz2, 0.12, postHH, 0.12);
       });
+    }
+  }
+
+  // ─── Animacja drzwi + wejście/wyjście ─────────────────────────────────────
+
+  /** Nadpisuje bazową metodę — dodaje animację drzwi. */
+  setInsideView(inside) {
+    super.setInsideView(inside);
+    if (this._doorPivot) {
+      // Otwórz (obrót -90°) przy wejściu, zamknij przy wyjściu
+      this._doorPivot.rotation.y = inside ? -Math.PI * 0.5 : 0;
     }
   }
 }
