@@ -11,14 +11,15 @@ import * as THREE from 'three';
  */
 export class ThirdPersonCamera {
   constructor(camera) {
-    this.camera  = camera;
-    this.yaw     = 0;
-    this.pitch   = 0.35;
-    this.dist    = 8;
+    this.camera      = camera;
+    this.yaw         = 0;
+    this.pitch       = 0.35;
+    this.dist        = 8;
     this.sensitivity = 0.003;
+    this.firstPerson = false;   // true = FPP (widok z oczu)
     this._lookTarget = new THREE.Vector3();
-    this._tiltZ  = 0;    // wygładzone przechylenie boczne [rad]
-    this._trauma = 0;    // 0–1, wstrząs kamery
+    this._tiltZ      = 0;       // wygładzone przechylenie boczne [rad]
+    this._trauma     = 0;       // 0–1, wstrząs kamery
   }
 
   /**
@@ -40,7 +41,28 @@ export class ThirdPersonCamera {
   update(followPos, mouse, dt = 0.016, autoAlignFacing, steerAngle = 0, speedFrac = 0) {
     // ── Obrót z myszy / prawego analoga ────────────────────────────────────
     const stickSens = 2.5;
-    this.yaw   -= mouse.dx * this.sensitivity + (mouse.padRightX || 0) * stickSens * dt;
+    this.yaw -= mouse.dx * this.sensitivity + (mouse.padRightX || 0) * stickSens * dt;
+
+    // ── Tryb FPP — widok z oczu (budynki) ───────────────────────────────────
+    if (this.firstPerson) {
+      // pitch: 0 = poziomo, >0 = patrzymy w górę, <0 = w dół
+      // mysz w dół (dy > 0) → patrzymy w dół → pitch maleje
+      this.pitch = Math.max(-0.8, Math.min(0.8,
+        this.pitch - mouse.dy * this.sensitivity - (mouse.padRightY || 0) * stickSens * dt
+      ));
+      // Pozycja kamery = wysokość oczu gracza
+      const eye = new THREE.Vector3(followPos.x, followPos.y + 1.55, followPos.z);
+      this.camera.position.lerp(eye, Math.min(1, dt * 30));   // bardzo szybki lerp (≈0.5 przy 60fps)
+      // Kierunek patrzenia: yaw + pitch
+      const fwd = new THREE.Vector3(
+        -Math.sin(this.yaw) * Math.cos(this.pitch),
+         Math.sin(this.pitch),
+        -Math.cos(this.yaw) * Math.cos(this.pitch),
+      );
+      this.camera.lookAt(this.camera.position.clone().add(fwd));
+      return;
+    }
+
     this.pitch  = Math.max(0.06, Math.min(1.3,
       this.pitch + mouse.dy * this.sensitivity + (mouse.padRightY || 0) * stickSens * dt
     ));

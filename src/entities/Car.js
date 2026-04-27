@@ -69,6 +69,7 @@ export class Car extends Entity {
     this._bodyPitch     = 0;      // wygładzone pochylenie przód/tył [rad]
     // Prędkość uderzenia z bieżącej klatki — dla camera shake
     this._impactVelThisFrame = 0;
+    this._flyMode            = false;   // tryb lotu (F key)
     this._build();
   }
 
@@ -749,104 +750,137 @@ export class Car extends Entity {
     }
     this._prevHandbrake = handBrake;
 
-    // ── Maszyna stanów kierunku jazdy ────────────────────────────────────────
-    // Używa bezwzględnej prędkości poziomej chassis (linvel XZ) — odporna na skręty.
-    // currentVehicleSpeed() to projekcja na lokalną oś Z chassis i zmienia znak podczas
-    // skrętów (chassis obraca się, oś Z skręca → projekcja spada/jest ujemna mimo ruchu
-    // do przodu). Maszyna stanów eliminuje tę zależność całkowicie.
+    // Prędkość pozioma chassis — potrzebna w obu trybach
     const _lv = this._chassis.linvel();
     const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
     this._horizSpeedKmh = _horizSpeedKmh;
 
-    // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
-    if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
-    // Z 'stopped': bieg angażuje się na podstawie SUROWEGO wejścia (nie smoothed gasIn).
-    // gasIn używa wygładzonych backAmount/forwAmount — po zwolnieniu S backAmount jest jeszcze
-    // wysokie, co daje gasIn < 0 mimo że gracz chce jechać do przodu. Surowy input jest natychmiastowy.
-    if (this._dirState === 'stopped') {
-      if (rawFwd > 0.05) this._dirState = 'forward';
-      else if (rawBack > 0.05) this._dirState = 'reverse';  // FIX: else if — bez tego oba wejścia → reverse
+    // ── Tryb lotu: F toggleuje ────────────────────────────────────────────────
+    if (input.isJustPressed('KeyF')) {
+      this._flyMode = !this._flyMode;
+      if (this._flyMode) {
+        // Impuls startowy — wystrzel auto w górę
+        this._chassis.applyImpulse({ x: 0, y: 5000, z: 0 }, true);
+      }
     }
 
-    let engineForce = 0;
-    let brakeForce  = 0;
+    if (this._flyMode) {
+      // ── Fizyka lotu ──────────────────────────────────────────────────────────
+      // 80% anty-grawitacja → auto powoli opada bez wejścia (realistyczny efekt)
+      this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 0.80, z: 0 }, true);
 
-    if (handBrake) {
-      // Hamulec ręczny: tylne koła zablokowane; gaz + handbrake = donut
-      if (gasIn > 0 && this._dirState !== 'reverse') {
-        engineForce = MAX_ENGINE_FORCE * forwAmount;  // Rapier: + = do przodu
+      // Kierunek do przodu z kwaterniona chassis
+      const qF   = this._chassis.rotation();
+      const fwdX = 2 * (qF.x * qF.z + qF.w * qF.y);
+      const fwdZ = 1 - 2 * (qF.x * qF.x + qF.y * qF.y);
+
+      // W → silny ciąg do przodu
+      if (forwAmount > 0.01) {
+        this._chassis.addForce({
+          x: fwdX * 45000 * forwAmount,
+          y: 0,
+          z: fwdZ * 45000 * forwAmount,
+        }, true);
       }
-      this._vehicle.setWheelEngineForce(2, engineForce);   // RL
-      this._vehicle.setWheelEngineForce(3, engineForce);   // RR
-      this._vehicle.setWheelEngineForce(0, 0);             // FL
-      this._vehicle.setWheelEngineForce(1, 0);             // FR
-      this._vehicle.setWheelBrake(0, 0);
-      this._vehicle.setWheelBrake(1, 0);
-      this._vehicle.setWheelBrake(2, HAND_BRAKE_FORCE * brakeSurf);  // RL — zablokowane
-      this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);  // RR — zablokowane
+      // Spacja → wznoszenie
+      if (handBrake) {
+        this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 2.4, z: 0 }, true);
+      }
+      // S → opadanie
+      if (backAmount > 0.1) {
+        this._chassis.addForce({ x: 0, y: -2000 * 9.81 * 1.8 * backAmount, z: 0 }, true);
+      }
+      // Koła bez sił (leci powietrzem)
+      for (let i = 0; i < 4; i++) {
+        this._vehicle.setWheelEngineForce(i, 0);
+        this._vehicle.setWheelBrake(i, 0);
+        this._vehicle.setWheelFrictionSlip(i, 0.5);
+      }
     } else {
-      if (gasIn > 0) {
-        if (this._dirState === 'reverse') {
-          // Cofamy — W hamuje (nie przełącza od razu na do przodu)
-          brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
-        } else if (speedKmh < MAX_SPEED_KMH) {
-          engineForce = MAX_ENGINE_FORCE * gasIn;
-        }
-      } else if (gasIn < 0) {
-        if (this._dirState === 'forward') {
-          // Jedziemy do przodu — S hamuje (nie wsteczny)
-          brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
-        } else if (_horizSpeedKmh < MAX_REV_KMH) {
-          // Zatrzymani lub cofamy — wsteczny bieg
-          engineForce = MAX_ENGINE_FORCE * gasIn;
-        }
-      } else {
-        if (absSpd < 1.5) brakeForce = IDLE_BRAKE;
+      // ── Maszyna stanów kierunku jazdy ──────────────────────────────────────────
+      // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
+      if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
+      if (this._dirState === 'stopped') {
+        if (rawFwd > 0.05) this._dirState = 'forward';
+        else if (rawBack > 0.05) this._dirState = 'reverse';
       }
 
-      // RWD — napęd tylny
-      this._vehicle.setWheelEngineForce(0, 0);             // FL
-      this._vehicle.setWheelEngineForce(1, 0);             // FR
-      this._vehicle.setWheelEngineForce(2, engineForce);   // RL
-      this._vehicle.setWheelEngineForce(3, engineForce);   // RR
-      for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
+      let engineForce = 0;
+      let brakeForce  = 0;
+
+      if (handBrake) {
+        if (gasIn > 0 && this._dirState !== 'reverse') {
+          engineForce = MAX_ENGINE_FORCE * forwAmount;
+        }
+        this._vehicle.setWheelEngineForce(2, engineForce);
+        this._vehicle.setWheelEngineForce(3, engineForce);
+        this._vehicle.setWheelEngineForce(0, 0);
+        this._vehicle.setWheelEngineForce(1, 0);
+        this._vehicle.setWheelBrake(0, 0);
+        this._vehicle.setWheelBrake(1, 0);
+        this._vehicle.setWheelBrake(2, HAND_BRAKE_FORCE * brakeSurf);
+        this._vehicle.setWheelBrake(3, HAND_BRAKE_FORCE * brakeSurf);
+      } else {
+        if (gasIn > 0) {
+          if (this._dirState === 'reverse') {
+            brakeForce = MAX_BRAKE_FORCE * forwAmount * brakeSurf;
+          } else if (speedKmh < MAX_SPEED_KMH) {
+            engineForce = MAX_ENGINE_FORCE * gasIn;
+          }
+        } else if (gasIn < 0) {
+          if (this._dirState === 'forward') {
+            brakeForce = MAX_BRAKE_FORCE * backAmount * brakeSurf;
+          } else if (_horizSpeedKmh < MAX_REV_KMH) {
+            engineForce = MAX_ENGINE_FORCE * gasIn;
+          }
+        } else {
+          if (absSpd < 1.5) brakeForce = IDLE_BRAKE;
+        }
+        // RWD
+        this._vehicle.setWheelEngineForce(0, 0);
+        this._vehicle.setWheelEngineForce(1, 0);
+        this._vehicle.setWheelEngineForce(2, engineForce);
+        this._vehicle.setWheelEngineForce(3, engineForce);
+        for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
+      }
+
+      // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
+      const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 2.0);
+      const effBase = BASE_F * (1.0 - backAmount * 0.55);
+      const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
+      this._cornerT = cornerT;
+      const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 2.5;
+      const cornerSlip = cornerT * 1.5;
+      const fR = Math.max(0.30, effBase - launchSlip - cornerSlip);
+
+      this._vehicle.setWheelFrictionSlip(0, effBase);
+      this._vehicle.setWheelFrictionSlip(1, effBase);
+      this._vehicle.setWheelFrictionSlip(2, fR);
+      this._vehicle.setWheelFrictionSlip(3, fR);
     }
 
-    // frictionSlip: przy hamowaniu dynamicznie obniżamy wartość, by uniknąć lockup-oscillation.
-    // Wysoki frictionSlip podczas hamowania → agresywna siła → bounce zawieszenia → pulsacja.
-    // Przy jeździe/przyspieszeniu zachowujemy pełny grip (4.0), przy hamowaniu schodzimy do ~1.8.
-    const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 1.8);  // było 3.0/2.8/2.2 — niższe redukuje oscylacje
-    const effBase = BASE_F * (1.0 - backAmount * 0.55);  // pełny grip bez hamowania, ~45% przy pełnym
-
-    // Tylne koła: redukcja przy starcie (wheelspin) i zakrętach (oversteer) — skalowana do effBase
-    const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
-    this._cornerT = cornerT;
-    const launchSlip = forwAmount * Math.max(0, 1 - absSpd / 50) * 2.5;
-    const cornerSlip = cornerT * 1.5;
-    const fR = Math.max(0.30, effBase - launchSlip - cornerSlip);
-
-    this._vehicle.setWheelFrictionSlip(0, effBase);  // FL
-    this._vehicle.setWheelFrictionSlip(1, effBase);  // FR
-    this._vehicle.setWheelFrictionSlip(2, fR);       // RL
-    this._vehicle.setWheelFrictionSlip(3, fR);       // RR
-
-    // Downforce aerodynamiczny — używa poziomej prędkości (dokładniejsza w zakrętach)
-    if (this._horizSpeedKmh > 20) {
+    // Downforce aerodynamiczny — tylko na ziemi (w locie niepotrzebny)
+    if (!this._flyMode && this._horizSpeedKmh > 20) {
       const vMs = this._horizSpeedKmh / 3.6;
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
 
-    // Anti-roll stabilizer — moment przywracający przy przechyleniu (zapobiega fikołkom na krawężnikach)
-    // Wyliczamy przechylenie (roll) i pochylenie (pitch) z kwaterniona chassis i kontrujemy torsją
+    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch (nie sprężyna → zero oscylacji).
+    // Poprzednia wersja (STAB_K=12000 sprężyna) miała współczynnik tłumienia ζ≈0.04 →
+    // oscylacje 2.5 Hz (pulsowanie) + drenaż energii kinetycznej (spowolnienie).
+    // Teraz: silny tłumik prędkości (4000 N·m·s/rad) + słaba sprężyna przywracająca (2000 N·m/rad)
+    // → układ krytycznie tłumiony (ζ≈1.0), zero oscylacji, natychmiastowe gaszenie kołysania.
     {
-      const qS      = this._chassis.rotation();
+      const av       = this._chassis.angvel();             // prędkość kątowa chassis [rad/s]
+      const qS       = this._chassis.rotation();
       const rollSin  = 2 * (qS.w * qS.x - qS.y * qS.z);  // sin(roll) — przechylenie boczne
       const pitchSin = 2 * (qS.w * qS.z + qS.x * qS.y);  // sin(pitch) — pochylenie przód/tył
-      const STAB_K  = 12000;  // N·m/rad
+      const DAMP_K   = 4000;   // tłumik prędkości [N·m·s/rad] — krytyczne tłumienie
+      const SPRING_K = 0;      // sprężyna WYŁĄCZONA — nie walczy z naturalnym kątem na wzgórzach (powodowała spowolnienie)
       this._chassis.addTorque({
-        x: -rollSin  * STAB_K,
+        x: -av.x * DAMP_K - rollSin  * SPRING_K,
         y: 0,
-        z: -pitchSin * STAB_K,
+        z: -av.z * DAMP_K - pitchSin * SPRING_K,
       }, true);
     }
 

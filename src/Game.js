@@ -8,13 +8,13 @@ import { WorldBuilder }             from './world/WorldBuilder.js';
 import { SEED }                     from './core/RNG.js';
 import { AudioManager }             from './core/AudioManager.js';
 import { isOnRoad }                 from './world/zones.js';
+import { Minimap }                  from './ui/Minimap.js';
 
 const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST        = 3.8;   // max odległość do wejścia do auta
 const BUILDING_DIST     = 2.8;   // max odległość do drzwi budynku
 const CAM_DIST_FOOT     = 8;     // dystans kamery pieszo
 const CAM_DIST_CAR      = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
-const CAM_DIST_INTERIOR = 4.5;   // kamera wewnątrz budynku (małe pomieszczenie)
 
 /**
  * Główna klasa gry — orkiestrator.
@@ -62,6 +62,8 @@ export class Game {
     this._fpsSec           = 0;
     this._fpsDisplay       = 0;
     this._debugEl          = null;
+    this._savedCamPitch    = 0.35;
+    this._minimap          = null;
   }
 
   async init() {
@@ -131,6 +133,9 @@ export class Game {
     document.getElementById('hint').style.display = 'block';
     const seedEl = document.getElementById('seed-display');
     if (seedEl) seedEl.textContent = `🌱 seed: ${SEED}`;
+
+    // ─── 10. Minimap ───────────────────────────────────────────────────────────
+    this._minimap = new Minimap(document.body);
   }
 
   _setupLighting() {
@@ -182,7 +187,11 @@ export class Game {
     b.setInsideView(true);
     const sp = b.getInteriorSpawnPos();
     this.player._body.setNextKinematicTranslation({ x: sp.x, y: sp.y, z: sp.z });
-    this.camCtrl.dist = CAM_DIST_INTERIOR;
+    // FPP: schowaj mesh gracza, przełącz kamerę na widok z oczu
+    this.player.root.visible = false;
+    this._savedCamPitch      = this.camCtrl.pitch;
+    this.camCtrl.pitch       = 0;       // horyzont przy wejściu
+    this.camCtrl.firstPerson = true;
     this._uiEl.innerHTML = 'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; E – wyjdź';
   }
 
@@ -192,7 +201,11 @@ export class Game {
     this._insideBuilding = null;
     const ep = b.getExitPos();
     this.player._body.setNextKinematicTranslation({ x: ep.x, y: ep.y, z: ep.z });
-    this.camCtrl.dist = CAM_DIST_FOOT;
+    // Przywróć widok TPP
+    this.player.root.visible = true;
+    this.camCtrl.firstPerson = false;
+    this.camCtrl.pitch       = this._savedCamPitch;
+    this.camCtrl.dist        = CAM_DIST_FOOT;
     this._uiEl.innerHTML =
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; E – wsiądź';
   }
@@ -215,10 +228,12 @@ export class Game {
     this._drivingCar = car;
     car.isOccupied   = true;
     this.player.root.visible = false;
-    // Immediately teleport player far above the car (no kinematic sweep = no push on chassis).
-    // setTranslation() is instant — avoids the "flip" caused by the capsule sweeping through the chassis.
+    // Hard-teleport player to the same position the game-loop will use (cp.y + 4).
+    // Using +30 then next-frame +4 created ~1557 m/s downward kinematic velocity →
+    // Rapier speculative contacts → huge upward impulse → car launched into the air.
+    // setTranslation() with the final target = zero velocity, zero contact force.
     const cp = car.root.position;
-    this.player._body.setTranslation({ x: cp.x, y: cp.y + 30, z: cp.z }, false);
+    this.player._body.setTranslation({ x: cp.x, y: cp.y + 4, z: cp.z }, false);
     car._audio = this.audio;
     this.audio.playEngineStart();
     this.audio.startTires();
@@ -226,7 +241,7 @@ export class Game {
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; F – LOT &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
@@ -240,6 +255,7 @@ export class Game {
     });
     this.player.root.visible = true;
     car._audio    = null;
+    car._flyMode  = false;   // wyłącz lot przy wysiadaniu
     this.audio.stopEngine();
     this.audio.stopTires();
     car.isOccupied        = false;
@@ -414,6 +430,23 @@ export class Game {
     }
 
     this.renderer.render(this.scene, this.camera3);
+
+    // ── Minimap ───────────────────────────────────────────────────────────────
+    if (this._minimap && !this._insideBuilding) {
+      const mapPos    = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+      const mapFacing = this._drivingCar ? this._drivingCar.facing       : this.player.facing;
+      this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
+    }
+
+    // ── Fly mode badge ────────────────────────────────────────────────────────
+    if (this._drivingCar && this._interactEl) {
+      if (this._drivingCar._flyMode) {
+        this._interactEl.textContent = '✈ TRYB LOTU — SPACJA wznosi, S opada';
+        this._interactEl.style.display = 'block';
+      } else if (this._interactEl.textContent.startsWith('✈')) {
+        this._interactEl.style.display = 'none';
+      }
+    }
 
     // ── HUD: FPS + pozycja XYZ ────────────────────────────────────────────
     if (this._debugEl) {
