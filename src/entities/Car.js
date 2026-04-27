@@ -868,14 +868,20 @@ export class Car extends Entity {
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
 
-    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw.
-    // W powietrzu (koła nie dotykają ziemi) gwałtownie wzmacniamy tłumienie,
-    // żeby auto nie wirowało jak "boczek w powietrzu".
+    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw
+    // oraz przywraca chassis do pozycji poziomej (restoring torque).
+    // W powietrzu (koła nie dotykają ziemi) gwałtownie wzmacniamy tłumienie.
     {
       const av = this._chassis.angvel();
       const qS = this._chassis.rotation();
-      const rollSin  = 2 * (qS.w * qS.x - qS.y * qS.z);
-      const pitchSin = 2 * (qS.w * qS.z + qS.x * qS.y);
+
+      // Restoring torque: przywraca chassis do pozycji poziomej.
+      // Wzory z macierzy rotacji kwaterniona (Y-up, Z-forward Rapier):
+      //   rollSin  = carUp.z = 2*(w*x + y*z) → aplikowany na torque.x (korekcja pitch)
+      //   pitchSin = 2*(w*z − x*y)           → aplikowany na torque.z (korekcja roll)
+      // Obydwa poprzednio miały błędne znaki i były zerowane (* 0).
+      const rollSin  = 2 * (qS.w * qS.x + qS.y * qS.z);   // był błąd: − zamiast +
+      const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
 
       // Wykryj lot: średnia długość zawieszenia bliższa maksymalnej → brak kontaktu z ziemią
       const s0 = this._vehicle.wheelSuspensionLength(0);
@@ -885,13 +891,14 @@ export class Car extends Entity {
       const suspAvg  = (s0 + s1 + s2 + s3) / 4;
       const airborne = suspAvg > 0.32 && !this._flyMode;  // > 0.32 = koła w powietrzu
 
-      const DAMP_XZ  = airborne ? 18000 : 4000;  // roll + pitch — silniejsze w powietrzu
-      const DAMP_Y   = airborne ?  8000 : 0;      // yaw — tylko w powietrzu (żeby nie kręciło)
+      const DAMP_XZ   = airborne ? 18000 : 4000;   // roll + pitch — silniejsze w powietrzu
+      const DAMP_Y    = airborne ?  8000 : 1200;    // yaw — na ziemi mały, żeby nie kręciło jak bąk
+      const RESTORE   = airborne ? 20000 : 4000;    // restoring torque do pozycji poziomej
 
       this._chassis.addTorque({
-        x: -av.x * DAMP_XZ - rollSin  * 0,
+        x: -av.x * DAMP_XZ - rollSin  * RESTORE,
         y: -av.y * DAMP_Y,
-        z: -av.z * DAMP_XZ - pitchSin * 0,
+        z: -av.z * DAMP_XZ - pitchSin * RESTORE,
       }, true);
     }
 

@@ -9,6 +9,9 @@ import { SEED }                     from './core/RNG.js';
 import { AudioManager }             from './core/AudioManager.js';
 import { isOnRoad }                 from './world/zones.js';
 import { Minimap }                  from './ui/Minimap.js';
+import { SkySystem }                from './world/SkySystem.js';
+import { WeatherSystem }            from './world/WeatherSystem.js';
+import { SeasonSystem }             from './world/SeasonSystem.js';
 
 const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST        = 2.2;   // max odległość od krawędzi auta do wejścia
@@ -65,6 +68,10 @@ export class Game {
     this._savedCamPitch    = 0.35;
     this._minimap          = null;
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
+    this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
+    this._sky              = null;
+    this._weather          = null;
+    this._seasons          = null;
   }
 
   async init() {
@@ -87,8 +94,10 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;  // gładkie krawędzie cieni
     document.body.appendChild(this.renderer.domElement);
 
-    // ─── 3. Oświetlenie ────────────────────────────────────────────────────
-    this._setupLighting();
+    // ─── 3. Oświetlenie — zarządzane przez SkySystem ──────────────────────
+    this._sky     = new SkySystem(this.scene);
+    this._weather = new WeatherSystem(this.scene);
+    this._seasons = new SeasonSystem();
 
     // ─── 4. Wejście + kamera ───────────────────────────────────────────────
     this.input   = new InputManager();
@@ -140,19 +149,7 @@ export class Game {
     this._minimap = new Minimap(document.body);
   }
 
-  _setupLighting() {
-    this.scene.add(new THREE.AmbientLight(0xffeedd, 0.65));
-    const sun = new THREE.DirectionalLight(0xfff5e0, 1.1);
-    sun.position.set(20, 40, 15);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);  // 2048: wystarczająca rozdzielczość dla gładkich cieni
-    sun.shadow.camera.near   = 1;
-    sun.shadow.camera.far    = 120;
-    sun.shadow.camera.top    = sun.shadow.camera.right  =  40;  // mały zasięg = większa precyzja
-    sun.shadow.camera.bottom = sun.shadow.camera.left   = -40;
-    this.scene.add(sun);
-    this.scene.add(new THREE.HemisphereLight(0x87CEEB, 0x5a9e35, 0.3));
-  }
+  // _setupLighting replaced by SkySystem
 
   // ─── Distance culling ────────────────────────────────────────────────────
 
@@ -315,13 +312,12 @@ export class Game {
 
   /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
   _updateInteraction() {
-    if (this._interactCooldown > 0) {
-      this._interactCooldown -= 1;
-      return;
-    }
+    if (this._interactCooldown > 0) { this._interactCooldown -= 1; return; }
+    // Blokada po akcji (fart/burp) — zapobiega przypadkowemu wsiadaniu do auta
+    if (this._actionCooldown   > 0) { this._actionCooldown   -= 1; return; }
 
-    // Pad: button 0 (A/Cross) = wsiadaj/wysiadaj (OSOBNY od pierdzenia/beknięcia)
-    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(0);
+    // Klawiatura: E — wsiadaj/wysiadaj   Pad: button 1 (B/Circle) — OSOBNY od F/B/K
+    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(1);
 
     if (ePressed) {
       if (this._drivingCar) {
@@ -434,12 +430,14 @@ export class Game {
         this.audio.playFart();
         this.player._emitFartCloud();
         this._scareNPCs();
+        this._actionCooldown = 20;   // ~0.33 s blokady wsiadania po akcji
       }
       if (burp || yawn) {
         this.audio.playBurp();
         this.audio.playYawn();
         this.player._emitSleepCloud();
         this._sleepNPCs();
+        this._actionCooldown = 20;
       }
     }
     this.physics.step(dt);
@@ -470,6 +468,12 @@ export class Game {
         }
       }
     }
+
+    // ── Sky / Weather / Season ───────────────────────────────────────────
+    const worldRef = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+    this._seasons.update(dt);
+    this._sky.update(dt, worldRef, this._seasons);
+    this._weather.update(dt, worldRef, this._sky, this._seasons.isWinter);
 
     // ── 5. Kamera + render ────────────────────────────────────────────────
     const followPos = this._drivingCar

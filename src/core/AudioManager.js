@@ -725,64 +725,46 @@ export class AudioManager {
     const ctx = this._ensureCtx();
     const now = ctx.currentTime;
 
-    // Losowy styl: 0=długi mokry, 1=krótki piskliwy, 2=wieloczęściowy bulgoczący
-    const style = Math.floor(Math.random() * 3);
-    const dur   = style === 1
-      ? 0.18 + Math.random() * 0.22   // piskliwy: krótki
-      : 0.45 + Math.random() * 0.75;  // mokry/bulgoczący: dłuższy
+    // "Prrrrrryk" — krótki, ostry, wibrujący dźwięk wargowy
+    const dur = 0.10 + Math.random() * 0.18;   // 0.10–0.28 s
 
-    // ── Bazowy szum ───────────────────────────────────────────────────────────
-    const buf = this._makeNoise(dur + 0.1);
+    // ── Bazowy szum przefiltrowany w niskim paśmie ─────────────────────────────
+    const buf = this._makeNoise(dur + 0.05);
     const src = ctx.createBufferSource(); src.buffer = buf;
 
-    // Filtr bandpass — niska baza z glissando w górę (piskliwy) lub w dół (mokry)
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.Q.value = style === 1 ? 8 : 4.5;
-    if (style === 1) {
-      // Piskliwy: zaczyna nisko, strzela wysoko
-      bp.frequency.setValueAtTime(80, now);
-      bp.frequency.exponentialRampToValueAtTime(900, now + dur * 0.4);
-      bp.frequency.exponentialRampToValueAtTime(200, now + dur);
-    } else {
-      // Mokry/bulgoczący: spada od środka do niskiego basu
-      bp.frequency.setValueAtTime(320, now);
-      bp.frequency.exponentialRampToValueAtTime(55, now + dur);
-    }
+    bp.frequency.value = 160 + Math.random() * 120;  // 160–280 Hz — niski "prr"
+    bp.Q.value = 7;
 
-    // ── Modulacja "szarpania" (LFO) ───────────────────────────────────────────
+    // ── LFO ~45–80 Hz — wibrowanie warg (charakter "prr") ────────────────────
     const lfo = ctx.createOscillator();
-    lfo.type = style === 2 ? 'sawtooth' : 'square';
-    lfo.frequency.value = style === 1
-      ? 55 + Math.random() * 40   // piskliwy: szybkie trzepotanie
-      : 18 + Math.random() * 22;  // mokry: wolniejsze bulgotanie
+    lfo.type = 'square';
+    lfo.frequency.value = 45 + Math.random() * 35;
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = style === 1 ? 0.6 : 0.45;
+    lfoGain.gain.value = 0.8;
     lfo.connect(lfoGain);
 
-    // ── Dodatkowy "plusk" na początku (dla mokrego) ───────────────────────────
-    if (style !== 1) {
-      const splatOsc = ctx.createOscillator();
-      splatOsc.type = 'sawtooth';
-      splatOsc.frequency.setValueAtTime(140, now);
-      splatOsc.frequency.exponentialRampToValueAtTime(40, now + 0.12);
-      const splatGain = ctx.createGain();
-      splatGain.gain.setValueAtTime(1.8, now);
-      splatGain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-      splatOsc.connect(splatGain);
-      splatGain.connect(ctx.destination);
-      splatOsc.start(now); splatOsc.stop(now + 0.16);
-    }
-
-    // ── Głośność — GŁOŚNO ─────────────────────────────────────────────────────
+    // ── Amplituda: mocny atak, gwałtowny zanik ─────────────────────────────────
     const gain = ctx.createGain();
-    gain.gain.setValueAtTime(2.8, now);
+    gain.gain.setValueAtTime(3.5, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
     lfoGain.connect(gain.gain);
 
+    // ── Krótki "prrk" — trzask na końcu ──────────────────────────────────────
+    const click = ctx.createOscillator();
+    click.type = 'sawtooth';
+    click.frequency.setValueAtTime(120, now + dur * 0.8);
+    click.frequency.exponentialRampToValueAtTime(40, now + dur + 0.04);
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(1.2, now + dur * 0.8);
+    cg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.05);
+    click.connect(cg); cg.connect(ctx.destination);
+    click.start(now + dur * 0.8); click.stop(now + dur + 0.06);
+
     src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
     lfo.start(now); lfo.stop(now + dur);
-    src.start(now); src.stop(now + dur + 0.1);
+    src.start(now); src.stop(now + dur + 0.05);
   }
 
   playBurp() {

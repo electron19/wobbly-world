@@ -59,10 +59,13 @@ export class NPC {
 
   /** Czerwony dym z gęby gracza — NPC pada na bok i śpi. */
   sleep() {
+    const alreadySleeping = this._sleepTimer > 0;
     this._sleepTimer = 6.0 + Math.random() * 4;
-    this._sleepFall  = 0;
-    this._waiting    = true;
-    this._speed      = 0;
+    if (!alreadySleeping) {
+      this._sleepFall = 0;
+      this._waiting   = true;
+      this._speed     = 0;
+    }
   }
 
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
@@ -150,24 +153,23 @@ export class NPC {
 
   update(dt) {
     // ── Sen + wstawanie ────────────────────────────────────────────────────────
-    if (this._sleepTimer > 0 || this._sleepFall > 0.001) {
+    if (this._sleepTimer > 0 || this._sleepFall > 0) {
       if (this._sleepTimer > 0) {
         this._sleepTimer -= dt;
         this._sleepFall = Math.min(1, this._sleepFall + dt / 0.35);
         if (this._sleepTimer <= 0) {
-          this._speed   = this._baseSpeed;
-          this._waiting = true;
-          this._waitT   = 0.8;   // chwila dezorientacji po przebudzeniu
+          this._sleepFall = 0;   // natychmiastowe wstanie
+          this._speed     = this._baseSpeed;
+          this._waiting   = true;
+          this._waitT     = 0.5;
         }
-      } else {
-        // Wstaje — _sleepFall wraca do 0
-        this._sleepFall = Math.max(0, this._sleepFall - dt / 0.40);
       }
-      // Smoothstep — płynna krzywa
-      const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
-      this.root.rotation.z = p * (Math.PI / 2);   // pada na bok
-      this.root.position.y = p * 0.22;            // uniesiony nieznacznie żeby nie był pod ziemią
-      return;
+      if (this._sleepFall > 0) {
+        const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
+        this.root.rotation.z = p * (Math.PI / 2);   // pada na bok
+        this.root.position.y = p * 0.45;            // wystarczy żeby nie wpadał pod ziemię
+        return;
+      }
     }
     this.root.rotation.z = 0;
     this.root.position.y = 0;
