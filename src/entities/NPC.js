@@ -53,6 +53,8 @@ export class NPC {
 
     this._scareTimer = 0;
     this._screamCooldown = 0;
+    this._abduction = null;
+    this._abductedGone = false;
     this._baseSpeed  = this._speed;
     this._sleepTimer = 0;
     this._sleepFall  = 0;   // 0=stoi, 1=leży na boku
@@ -77,6 +79,7 @@ export class NPC {
 
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
   scare(px, pz, audio = null) {
+    if (this._abduction || this._abductedGone) return;
     this._scareTimer = 5.0 + Math.random() * 3;
     this._speed = this._baseSpeed * 5.5;
     if (this._screamCooldown <= 0) {
@@ -90,6 +93,27 @@ export class NPC {
       this.root.position.z + Math.cos(awayAngle) * 28,
     );
     this._waiting = false;
+  }
+
+  canBeAbducted() {
+    return !this._abduction && !this._abductedGone && this.root.visible;
+  }
+
+  startAbduction(ufo) {
+    if (!this.canBeAbducted()) return false;
+    this._abduction = { ufo };
+    this._speed = 0;
+    this._waiting = true;
+    this._sleepTimer = 0;
+    this._sleepFall = 0;
+    this._scareTimer = 0;
+    return true;
+  }
+
+  finishAbduction() {
+    this._abduction = null;
+    this._abductedGone = true;
+    this.root.visible = false;
   }
 
   _build(pal) {
@@ -210,7 +234,21 @@ export class NPC {
   }
 
   update(dt) {
+    if (this._abductedGone) return;
     this._screamCooldown = Math.max(0, this._screamCooldown - dt);
+
+    if (this._abduction?.ufo) {
+      const carry = this._abduction.ufo.getCarryPose?.();
+      if (carry) {
+        this.root.visible = true;
+        this.root.position.x += (carry.x - this.root.position.x) * Math.min(1, dt * 4.5);
+        this.root.position.y += (carry.y - this.root.position.y) * Math.min(1, dt * 3.8);
+        this.root.position.z += (carry.z - this.root.position.z) * Math.min(1, dt * 4.5);
+        this._facing += (carry.facing - this._facing) * Math.min(1, dt * 5);
+        this.root.rotation.y = this._facing;
+      }
+      return;
+    }
 
     // ── Sen + wstawanie ────────────────────────────────────────────────────────
     if (this._sleepTimer > 0 || this._sleepFall > 0) {

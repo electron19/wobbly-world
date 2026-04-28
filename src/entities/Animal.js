@@ -49,6 +49,41 @@ function pickTarget(entity) {
   );
 }
 
+function canBeAbducted(entity) {
+  return !entity._abduction && !entity._abductedGone && entity.root.visible;
+}
+
+function startAbduction(entity, ufo) {
+  if (!canBeAbducted(entity)) return false;
+  entity._abduction = { ufo };
+  entity._speed = 0;
+  entity._waiting = true;
+  entity._sleepTimer = 0;
+  entity._sleepFall = 0;
+  entity._scareTimer = 0;
+  return true;
+}
+
+function finishAbduction(entity) {
+  entity._abduction = null;
+  entity._abductedGone = true;
+  entity.root.visible = false;
+}
+
+function updateAbduction(entity, dt) {
+  if (entity._abductedGone) return true;
+  if (!entity._abduction?.ufo) return false;
+  const carry = entity._abduction.ufo.getCarryPose?.();
+  if (!carry) return false;
+  entity.root.visible = true;
+  entity.root.position.x += (carry.x - entity.root.position.x) * Math.min(1, dt * 4.5);
+  entity.root.position.y += (carry.y - entity.root.position.y) * Math.min(1, dt * 3.8);
+  entity.root.position.z += (carry.z - entity.root.position.z) * Math.min(1, dt * 4.5);
+  entity._facing += (carry.facing - entity._facing) * Math.min(1, dt * 5);
+  entity.root.rotation.y = entity._facing;
+  return true;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Dog
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +98,8 @@ export class Dog {
     this._scareTimer = 0;
     this._sleepTimer = 0;
     this._sleepFall  = 0;
+    this._abduction  = null;
+    this._abductedGone = false;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -83,6 +120,7 @@ export class Dog {
   }
 
   scare(px, pz) {
+    if (this._abduction || this._abductedGone) return;
     this._scareTimer = 6 + Math.random() * 4;
     this._speed = this._baseSpeed * 6.0;
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
@@ -93,6 +131,10 @@ export class Dog {
     );
     this._waiting = false;
   }
+
+  canBeAbducted() { return canBeAbducted(this); }
+  startAbduction(ufo) { return startAbduction(this, ufo); }
+  finishAbduction() { finishAbduction(this); }
 
   _build(pal) {
     const bMat  = toonMat(pal.body);
@@ -161,6 +203,8 @@ export class Dog {
   }
 
   update(dt) {
+    if (updateAbduction(this, dt)) return;
+
     // ── Sen + wstawanie (przewraca się łapkami do góry) ──────────────────────
     if (this._sleepTimer > 0 || this._sleepFall > 0) {
       if (this._sleepTimer > 0) {
@@ -252,6 +296,8 @@ export class Cat {
     this._scareTimer = 0;
     this._sleepTimer = 0;
     this._sleepFall  = 0;
+    this._abduction  = null;
+    this._abductedGone = false;
     this._baseSpeed  = this._speed;
 
     this._build(pal);
@@ -272,6 +318,7 @@ export class Cat {
   }
 
   scare(px, pz) {
+    if (this._abduction || this._abductedGone) return;
     this._scareTimer = 7 + Math.random() * 5;
     this._speed = this._baseSpeed * 7.0;
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
@@ -282,6 +329,10 @@ export class Cat {
     );
     this._waiting = false;
   }
+
+  canBeAbducted() { return canBeAbducted(this); }
+  startAbduction(ufo) { return startAbduction(this, ufo); }
+  finishAbduction() { finishAbduction(this); }
 
   _build(pal) {
     const bMat  = toonMat(pal.body);
@@ -362,6 +413,8 @@ export class Cat {
   }
 
   update(dt) {
+    if (updateAbduction(this, dt)) return;
+
     // ── Sen + wstawanie (przewraca się łapkami do góry) ──────────────────────
     if (this._sleepTimer > 0 || this._sleepFall > 0) {
       if (this._sleepTimer > 0) {
