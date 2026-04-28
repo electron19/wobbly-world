@@ -38,6 +38,8 @@ export class Player extends Entity {
     this._fartWasDown = false;
     this._burpWasDown = false;
     this._yawnWasDown = false;
+    this._flyMode     = false;
+    this._flyBob      = 0;   // faza animacji lotu (góra-dół)
     this.spSquishY = new Spring(22, 0.80);
     this.spSquishX = new Spring(16, 0.70);
     this.spLean    = new Spring(12, 0.70);
@@ -140,44 +142,75 @@ export class Player extends Entity {
     if (move.lengthSq() > 0) move.normalize();
     const isMoving = move.lengthSq() > 0.01;
 
-    // Skok
-    if ((input.isDown('Space') || input.isDown('KeyZ') || input.isPadButtonPressed(0)) && this.grounded) {
-      this.velocityY = JUMP_VEL;
+    if (this._flyMode) {
+      // ── Tryb lotu ──────────────────────────────────────────────────────────
+      const FLY_SPEED = 14;
+      let flyY = 0;
+      if (input.isDown('Space') || input.isPadButtonDown?.(0)) flyY =  1;
+      if (input.isDown('ShiftLeft') || input.isDown('ShiftRight') ||
+          input.isDown('ControlLeft') || input.isDown('ControlRight')) flyY = -1;
+
+      const desired = {
+        x: move.x * FLY_SPEED * dt,
+        y: flyY  * FLY_SPEED * dt,
+        z: move.z * FLY_SPEED * dt,
+      };
+      physics.movePlayer(this._body, this._collider, desired);
       this.grounded  = false;
-      this.spSquishY.kick(-0.4);
-      this.spSquishX.kick(0.2);
-      audio?.playJump();
-    }
-
-    // Grawitacja (ręczna dla kinematic body)
-    if (!this.grounded) {
-      this.velocityY -= GRAVITY * dt;
-    } else if (this.velocityY < 0) {
-      this.velocityY = -2; // mały downward force dla snapToGround
-    }
-
-    const desired = {
-      x: move.x * SPEED * dt,
-      y: this.velocityY * dt,
-      z: move.z * SPEED * dt,
-    };
-
-    // Przesuń przez Rapier (collision detection)
-    const wasGrounded = this.grounded;
-    const result      = physics.movePlayer(this._body, this._collider, desired);
-    this.grounded     = result.grounded;
-
-    // Efekt lądowania
-    if (!wasGrounded && this.grounded) {
-      if (this.velocityY < -4) {
-        this.spSquishY.kick(-0.5);
-        this.spSquishX.kick(0.3);
-        audio?.playLand();
-      }
       this.velocityY = 0;
+
+      // Animacja lotu — ramiona na boki, delikatne pokołysanie
+      this._flyBob += dt * 2.0;
+      const bob = Math.sin(this._flyBob) * 0.04;
+      this.lArm.rotation.z =  1.10 + bob;
+      this.rArm.rotation.z = -1.10 - bob;
+      this.lArm.rotation.x = -0.20;
+      this.rArm.rotation.x = -0.20;
+      // Lekkie pochylenie ciała w kierunku ruchu
+      this.root.rotation.x = isMoving ? -0.18 : 0;
+    } else {
+      // ── Normalne chodzenie ─────────────────────────────────────────────────
+      this.root.rotation.x = 0;
+
+      // Skok
+      if ((input.isDown('Space') || input.isDown('KeyZ') || input.isPadButtonPressed(0)) && this.grounded) {
+        this.velocityY = JUMP_VEL;
+        this.grounded  = false;
+        this.spSquishY.kick(-0.4);
+        this.spSquishX.kick(0.2);
+        audio?.playJump();
+      }
+
+      // Grawitacja (ręczna dla kinematic body)
+      if (!this.grounded) {
+        this.velocityY -= GRAVITY * dt;
+      } else if (this.velocityY < 0) {
+        this.velocityY = -2; // mały downward force dla snapToGround
+      }
+
+      const desired = {
+        x: move.x * SPEED * dt,
+        y: this.velocityY * dt,
+        z: move.z * SPEED * dt,
+      };
+
+      // Przesuń przez Rapier (collision detection)
+      const wasGrounded = this.grounded;
+      const result      = physics.movePlayer(this._body, this._collider, desired);
+      this.grounded     = result.grounded;
+
+      // Efekt lądowania
+      if (!wasGrounded && this.grounded) {
+        if (this.velocityY < -4) {
+          this.spSquishY.kick(-0.5);
+          this.spSquishX.kick(0.3);
+          audio?.playLand();
+        }
+        this.velocityY = 0;
+      }
     }
 
-    // Obrót postaci w kierunku ruchu (smooth)
+    // Obrót postaci w kierunku ruchu (smooth) — tylko poza lotem
     if (isMoving) {
       const target = Math.atan2(move.x, move.z);
       let diff = target - this.facing;
@@ -213,19 +246,39 @@ export class Player extends Entity {
     // ─── Kroki (dźwięk) ────────────────────────────────────────────────────────
     audio?.checkFootstep(this._walkPhase, isMoving, this.grounded, onRoad);
 
-    // ─── Animacja kończyn — faza proporcjonalna do przebytej drogi ────────────
-    if (isMoving) this._walkPhase += SPEED * dt * 2.8; // wolniejsze tempo — krok co ~2.2 m
-    if (isMoving) {
-      const swing = Math.sin(this._walkPhase) * 0.80;  // większa amplituda
-      this.lLeg.rotation.x =  swing;
-      this.rLeg.rotation.x = -swing;
-      this.lArm.rotation.x = -swing * 0.55;
-      this.rArm.rotation.x =  swing * 0.55;
+    // ─── Animacja kończyn — w locie: ramiona rozłożone (ustawiane wyżej), w chodzie: swing ──
+    if (!this._flyMode) {
+      if (isMoving) this._walkPhase += SPEED * dt * 2.8;
+      if (isMoving) {
+        const swing = Math.sin(this._walkPhase) * 0.80;
+        this.lLeg.rotation.x =  swing;
+        this.rLeg.rotation.x = -swing;
+        this.lArm.rotation.x = -swing * 0.55;
+        this.rArm.rotation.x =  swing * 0.55;
+      } else {
+        // Wróć do pozycji wyjściowej po wyjściu z lotu
+        this.lLeg.rotation.x *= 0.85;
+        this.rLeg.rotation.x *= 0.85;
+        this.lArm.rotation.x *= 0.85;
+        this.rArm.rotation.x *= 0.85;
+        this.lArm.rotation.z += (0 - this.lArm.rotation.z) * 0.15;
+        this.rArm.rotation.z += (0 - this.rArm.rotation.z) * 0.15;
+      }
     } else {
-      this.lLeg.rotation.x *= 0.85;
-      this.rLeg.rotation.x *= 0.85;
-      this.lArm.rotation.x *= 0.85;
-      this.rArm.rotation.x *= 0.85;
+      // W locie: nogi luźno opuszczone
+      this.lLeg.rotation.x += (-0.20 - this.lLeg.rotation.x) * 0.10;
+      this.rLeg.rotation.x += (-0.20 - this.rLeg.rotation.x) * 0.10;
+    }
+  }
+
+  /** Włącz / wyłącz tryb latania. */
+  setFlyMode(enabled) {
+    this._flyMode = enabled;
+    if (!enabled) {
+      // Reset pochylenia ciała gdy lądowanie
+      this.root.rotation.x = 0;
+      this.lArm.rotation.z = -0.25;
+      this.rArm.rotation.z =  0.25;
     }
   }
 

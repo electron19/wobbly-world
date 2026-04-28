@@ -18,15 +18,21 @@ const PALETTES = [
   { body: 0x00C9B1, dark: 0x007A6A },  // turkusowy
 ];
 
+const NPC_RADIUS = 0.55;
+const AVOID_MARGIN = 0.55;
+const LOOKAHEAD_BASE = 1.2;
+const LOOKAHEAD_SPEED = 0.9;
+
 export class NPC {
   /**
    * @param {THREE.Scene} scene
    * @param {number} x, z   punkt startowy
    * @param {number} wanderR  promień wędrówki [j.ś.]
    */
-  constructor(scene, x, z, wanderR = 14) {
+  constructor(scene, x, z, wanderR = 14, obstacles = []) {
     this.root   = new THREE.Group();
     this._scene = scene;
+    this._obstacles = obstacles;
 
     const pal = PALETTES[Math.floor(Math.random() * PALETTES.length)];
     this._pal = pal;
@@ -142,13 +148,60 @@ export class NPC {
   }
 
   _pickTarget() {
-    const angle = Math.random() * Math.PI * 2;
-    const dist  = 2 + Math.random() * this._wanderR;
-    this._target.set(
-      this._spawnX + Math.sin(angle) * dist,
-      0,
-      this._spawnZ + Math.cos(angle) * dist,
-    );
+    for (let i = 0; i < 10; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = 2 + Math.random() * this._wanderR;
+      const tx = this._spawnX + Math.sin(angle) * dist;
+      const tz = this._spawnZ + Math.cos(angle) * dist;
+      if (!this._isInsideObstacle(tx, tz, NPC_RADIUS + 0.2)) {
+        this._target.set(tx, 0, tz);
+        return;
+      }
+    }
+    this._target.set(this._spawnX, 0, this._spawnZ);
+  }
+
+  _isInsideObstacle(x, z, pad = 0) {
+    for (const o of this._obstacles) {
+      const dx = x - o.cx;
+      const dz = z - o.cz;
+      const rr = o.r + pad;
+      if (dx * dx + dz * dz < rr * rr) return true;
+    }
+    return false;
+  }
+
+  _computeAvoidance(x, z, dirX, dirZ, stepDist) {
+    const lookahead = LOOKAHEAD_BASE + stepDist * LOOKAHEAD_SPEED;
+    let avoidX = 0;
+    let avoidZ = 0;
+    let blocked = false;
+
+    for (const o of this._obstacles) {
+      const ox = x - o.cx;
+      const oz = z - o.cz;
+      const rr = o.r + NPC_RADIUS + AVOID_MARGIN;
+      const dist = Math.hypot(ox, oz);
+      if (dist > rr + lookahead) continue;
+
+      const centerAhead = ox * dirX + oz * dirZ;
+      if (centerAhead > rr + lookahead) continue;
+
+      const lateralX = ox - dirX * centerAhead;
+      const lateralZ = oz - dirZ * centerAhead;
+      const lateralDist = Math.hypot(lateralX, lateralZ);
+      if (lateralDist > rr) continue;
+
+      const weight = Math.max(0, 1 - Math.max(0, centerAhead) / (rr + lookahead));
+      const pushX = lateralDist > 0.001 ? lateralX / lateralDist : -dirZ;
+      const pushZ = lateralDist > 0.001 ? lateralZ / lateralDist : dirX;
+      avoidX += pushX * weight;
+      avoidZ += pushZ * weight;
+
+      if (centerAhead > -0.15 && centerAhead < stepDist + rr * 0.85) blocked = true;
+    }
+
+    return { avoidX, avoidZ, blocked };
   }
 
   update(dt) {
@@ -198,8 +251,35 @@ export class NPC {
       return;
     }
 
-    // Obrót ku celowi
-    const tAngle = Math.atan2(dx, dz);
+    const spd = Math.min(dist / 0.5, 1) * this._speed;
+    const stepDist = spd * dt;
+    let dirX = dx / dist;
+    let dirZ = dz / dist;
+
+    const { avoidX, avoidZ, blocked } = this._computeAvoidance(
+      this.root.position.x, this.root.position.z, dirX, dirZ, stepDist,
+    );
+    if (avoidX !== 0 || avoidZ !== 0) {
+      dirX += avoidX * 1.35;
+      dirZ += avoidZ * 1.35;
+      const len = Math.hypot(dirX, dirZ) || 1;
+      dirX /= len;
+      dirZ /= len;
+    }
+
+    const nextX = this.root.position.x + dirX * stepDist;
+    const nextZ = this.root.position.z + dirZ * stepDist;
+    if (this._isInsideObstacle(nextX, nextZ, NPC_RADIUS)) {
+      if (blocked) {
+        this._waiting = true;
+        this._waitT = 0.18 + Math.random() * 0.28;
+        this._pickTarget();
+        return;
+      }
+    }
+
+    // Obrót ku kierunkowi ruchu
+    const tAngle = Math.atan2(dirX, dirZ);
     let diff = tAngle - this._facing;
     while (diff >  Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
@@ -207,9 +287,8 @@ export class NPC {
     this.root.rotation.y = this._facing;
 
     // Ruch
-    const spd = Math.min(dist / 0.5, 1) * this._speed;
-    this.root.position.x += Math.sin(this._facing) * spd * dt;
-    this.root.position.z += Math.cos(this._facing) * spd * dt;
+    this.root.position.x = nextX;
+    this.root.position.z = nextZ;
 
     // Bob pionowy podczas chodu
     this._walkPhase += spd * dt * 5;

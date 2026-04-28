@@ -1,5 +1,17 @@
 # Changelog — Wobbly World
 
+## [v0.9.14] — 2026-04-28
+### Added
+- `Ladder` i `UFO`: drabinki dachowe oraz latający obiekt z promieniem wpływu podpięte do `WorldBuilder` i pętli `Game`
+- `PoppyFactory`: rozbudowana fabryka z wnętrzem i interakcją wejścia
+- Obrona NPC przed kolizją z przeszkodami: unikanie okręgów przeszkód i bezpieczniejszy wybór celu
+
+### Fixed
+- `Car.update()`: naprawiony zakres `brakeForce`, który mógł zatrzymać pętlę gry po wejściu do auta
+- Wejście do auta z pada: krótka blokada hamulca ręcznego po zajęciu pojazdu, żeby `B` nie blokowało ruszania
+- `Game.js`: defensywna obsługa `ufo.getBeamInfluence()` — rozjazd między modułami nie zatrzymuje już klatki gry
+- README zsynchronizowany z aktualnym mapowaniem pada (`A` = interakcja, `B` = ręczny w aucie)
+
 ## [v0.9.13] — 2026-04-26
 ### Fixed
 - Wheel visual rotation: `lateUpdate()` now uses smoothed speed (`_smoothSpd / 3.6`) instead of raw `currentVehicleSpeed()` — eliminates pulsating backward wheel spin during right turns caused by single-frame velocity projection spikes

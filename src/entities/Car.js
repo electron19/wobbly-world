@@ -43,6 +43,7 @@ export class Car extends Entity {
     // Dźwięki
     this._audio         = null;   // ustawiany przez Game przy wsiadaniu/wysiadaniu
     this._prevHandbrake  = false;
+    this._suppressHandbrakeFrames = 0;
     this._dirState       = 'stopped'; // 'stopped' | 'forward' | 'reverse' — maszyna stanów kierunku jazdy
     this._wheelAngle     = 0;     // akumulowany kąt obrotu kół (bazowany na prędkości)
     // Zniszczenia — progresywna deformacja zderzaków i maski
@@ -64,6 +65,9 @@ export class Car extends Entity {
     this._tailDmg = [0, 0];   // tylne światła stop
     this._headMeshes = [null, null];  // soczewki przednie [L, R]
     this._tailMeshes = [null, null];  // soczewki tylne [L, R]
+    this._frontIndicators = [null, null];
+    this._rearIndicators  = [null, null];
+    this._turnSignal      = 'off'; // 'off' | 'left' | 'right'
     // Wizualny body roll/pitch — oddzielna grupa (koła zostają w root)
     this._bodyPivot     = null;   // inicjalizowany w _build()
     this._bodyRoll      = 0;      // wygładzone przechylenie boczne [rad]
@@ -98,7 +102,6 @@ export class Car extends Entity {
     this._tailMat  = new THREE.MeshBasicMaterial({ color: 0x330000 }); // stop — przyciemnione (off)
     this._revMat   = new THREE.MeshBasicMaterial({ color: 0x0A0800 }); // cofania — wyłączone
     const tailMat  = this._tailMat;
-    const indMat   = toonMat(0xFF8800);   // kierunkowskazy
     const revMat   = this._revMat;
     const fogMat   = toonMat(0xFFFACC);   // lampy przeciwmgielne
 
@@ -255,7 +258,9 @@ export class Car extends Entity {
       // Pasek DRL (nad reflektorem)
       B(x, BODY_BOT + BODY_H * 0.92, BODY_ZF + 0.09, 0.54, 0.07, 0.07, drlMat, 0, false);
       // Kierunkowskaz przedni (pod reflektorem)
-      B(x, BODY_BOT + BODY_H * 0.42, BODY_ZF + 0.09, 0.34, 0.12, 0.07, indMat, 0, false);
+      const fiMat = toonMat(0x442200);
+      const fInd = B(x, BODY_BOT + BODY_H * 0.42, BODY_ZF + 0.09, 0.34, 0.12, 0.07, fiMat, 0, false);
+      this._frontIndicators[i] = fInd;
     });
 
     // ── 10. TYLNE ŚWIATŁA ────────────────────────────────────────────────────
@@ -267,7 +272,9 @@ export class Car extends Entity {
       const tLens = B(x, BODY_BOT + BODY_H * 0.82, BODY_ZR - 0.10, 0.42, 0.16, 0.06, tMat, 0, false);
       this._tailMeshes[i] = tLens;
       // Kierunkowskaz tylny
-      B(x, BODY_BOT + BODY_H * 0.60, BODY_ZR - 0.10, 0.42, 0.12, 0.06, indMat, 0, false);
+      const riMat = toonMat(0x442200);
+      const rInd = B(x, BODY_BOT + BODY_H * 0.60, BODY_ZR - 0.10, 0.42, 0.12, 0.06, riMat, 0, false);
+      this._rearIndicators[i] = rInd;
       // Cofania
       B(x, BODY_BOT + BODY_H * 0.40, BODY_ZR - 0.10, 0.22, 0.12, 0.06, revMat, 0, false);
     });
@@ -420,6 +427,7 @@ export class Car extends Entity {
     this._throttle = 0;
     this._brake = 0;
     this._prevHandbrake = false;
+    this._suppressHandbrakeFrames = 0;
     this._dirState = 'stopped';
     this._isBraking = false;
     this._isHandbraking = false;
@@ -434,6 +442,11 @@ export class Car extends Entity {
     }
     this._vehicle.setWheelSteering(0, 0);
     this._vehicle.setWheelSteering(1, 0);
+  }
+
+  /** Krótko wyłącza hamulec ręczny po wejściu z pada, żeby B nie blokowało ruszania. */
+  suppressHandbrake(frames = 8) {
+    this._suppressHandbrakeFrames = Math.max(this._suppressHandbrakeFrames, frames);
   }
 
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
@@ -772,11 +785,20 @@ export class Car extends Entity {
     this._vehicle.setWheelSteering(1, this._steer);  // FR
 
     // Hamulec ręczny (SPACJA / pad B)
-    const handBrake = input.isDown('Space') || input.isPadButtonDown(1);
+    const padHandBrake = this._suppressHandbrakeFrames > 0 ? false : input.isPadButtonDown(1);
+    const handBrake = input.isDown('Space') || padHandBrake;
     if (handBrake && !this._prevHandbrake) {
       audio?.playHandbrake(this._vehicle.currentVehicleSpeed() * 3.6);
     }
     this._prevHandbrake = handBrake;
+    if (this._suppressHandbrakeFrames > 0) this._suppressHandbrakeFrames -= 1;
+
+    if (input.isPadButtonPressed(4)) {
+      this._turnSignal = this._turnSignal === 'left' ? 'off' : 'left';
+    }
+    if (input.isPadButtonPressed(5)) {
+      this._turnSignal = this._turnSignal === 'right' ? 'off' : 'right';
+    }
 
     // Prędkość pozioma chassis — potrzebna w obu trybach
     const _lv = this._chassis.linvel();
@@ -791,6 +813,8 @@ export class Car extends Entity {
         this._chassis.applyImpulse({ x: 0, y: 5000, z: 0 }, true);
       }
     }
+
+    let brakeForce = 0;
 
     if (this._flyMode) {
       // ── Fizyka lotu ──────────────────────────────────────────────────────────
@@ -834,7 +858,6 @@ export class Car extends Entity {
       }
 
       let engineForce = 0;
-      let brakeForce  = 0;
 
       if (handBrake) {
         this._vehicle.setWheelEngineForce(0, 0);
@@ -1098,12 +1121,28 @@ export class Car extends Entity {
     if (!this._revMat) return;
     const braking   = this._isBraking || this._isHandbraking;
     const reversing = this._dirState === 'reverse';
+    const blinkOn   = this._turnSignal !== 'off' && (Math.floor(performance.now() / 330) % 2 === 0);
     // Aktualizuj każde tylne światło stop — pomijaj uszkodzone
     this._tailMeshes.forEach((m, i) => {
       if (!m || this._tailDmg[i] > 0) return;  // zgaszone/oderwane — nie zmieniaj
       m.material.color.setHex(braking ? 0xFF1100 : 0x330000);
     });
     this._revMat.color.setHex(reversing ? 0xFFFFFF : 0x0A0800);
+
+    const signalHex = 0xFF9900;
+    const signalOffHex = 0x442200;
+    const leftOn = blinkOn && this._turnSignal === 'left';
+    const rightOn = blinkOn && this._turnSignal === 'right';
+    this._frontIndicators.forEach((m, i) => {
+      if (!m) return;
+      const on = i === 0 ? leftOn : rightOn;
+      m.material.color.setHex(on ? signalHex : signalOffHex);
+    });
+    this._rearIndicators.forEach((m, i) => {
+      if (!m) return;
+      const on = i === 0 ? leftOn : rightOn;
+      m.material.color.setHex(on ? signalHex : signalOffHex);
+    });
   }
 
   /**

@@ -16,6 +16,7 @@ import { SeasonSystem }             from './world/SeasonSystem.js';
 const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST        = 2.2;   // max odległość od krawędzi auta do wejścia
 const BUILDING_DIST     = 2.8;   // max odległość do drzwi budynku
+const LADDER_DIST       = 2.8;   // max odległość 3D do punktu podejścia drabinki
 const CAM_DIST_FOOT     = 8;     // dystans kamery pieszo
 const CAM_DIST_CAR      = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
 
@@ -50,9 +51,12 @@ export class Game {
     this.cars           = [];
     this.buildings      = [];
     this.npcs           = [];
+    this.ufos           = [];
     this.audio          = new AudioManager();
     this._drivingCar    = null;
     this._insideBuilding = null;
+    this._playerFlyMode  = false;   // tryb latania gracza (G toggle)
+    this._userFirstPerson = false;  // ręczny toggle kamery C / Select
     this._knockableLamps = [];
     this._lastTs        = 0;
     this._frameMs       = 1000 / 60;   // limit 60 FPS — jednakowa prędkość na baterii i zasilaczu
@@ -69,9 +73,28 @@ export class Game {
     this._minimap          = null;
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
+    this._interactKeyWasDown = false;
+    this._interactQueuedFrames = 0;
     this._sky              = null;
     this._weather          = null;
     this._seasons          = null;
+  }
+
+  _applyCameraMode() {
+    this.camCtrl.firstPerson = !!(this._insideBuilding || this._userFirstPerson);
+  }
+
+  _toggleCameraMode() {
+    if (this._insideBuilding) return;
+    this._userFirstPerson = !this._userFirstPerson;
+    if (this._userFirstPerson) {
+      this._savedCamPitch = this.camCtrl.pitch;
+      this.camCtrl.pitch = 0;
+    } else {
+      this.camCtrl.pitch = this._savedCamPitch;
+      this.camCtrl.dist = this._drivingCar ? CAM_DIST_CAR : CAM_DIST_FOOT;
+    }
+    this._applyCameraMode();
   }
 
   async init() {
@@ -108,7 +131,9 @@ export class Game {
     wb.build();
     this.cars          = wb.cars;
     this.buildings     = wb.buildings;
+    this.ladders       = wb.ladders;
     this.npcs          = wb.npcs;
+    this.ufos          = wb.ufos;
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -181,6 +206,26 @@ export class Game {
     return best;
   }
 
+  /**
+   * Znajdź najbliższą drabinkę w zasięgu LADDER_DIST.
+   * Sprawdza zarówno punkt u podstawy (wspinanie) jak i na szczycie (zejście).
+   * Zwraca { ladder, atTop } lub null.
+   */
+  _nearestLadder() {
+    if (this._drivingCar || this._insideBuilding) return null;
+    const pp = this.player.root.position;
+    let bestResult = null, bestD = LADDER_DIST;
+    for (const lad of this.ladders) {
+      const bp = lad.getBaseApproachPos();
+      const tp = lad.getTopApproachPos();
+      const db = Math.hypot(pp.x - bp.x, pp.y - bp.y, pp.z - bp.z);
+      const dt = Math.hypot(pp.x - tp.x, pp.y - tp.y, pp.z - tp.z);
+      const d  = Math.min(db, dt);
+      if (d < bestD) { bestD = d; bestResult = { ladder: lad, atTop: dt < db }; }
+    }
+    return bestResult;
+  }
+
   _enterBuilding(b) {
     this._insideBuilding = b;
     b.setInsideView(true);
@@ -190,7 +235,7 @@ export class Game {
     this.player.root.visible = false;
     this._savedCamPitch      = this.camCtrl.pitch;
     this.camCtrl.pitch       = 0;       // horyzont przy wejściu
-    this.camCtrl.firstPerson = true;
+    this._applyCameraMode();
     this._uiEl.innerHTML = 'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; E – wyjdź';
   }
 
@@ -202,11 +247,11 @@ export class Game {
     this.player._body.setNextKinematicTranslation({ x: ep.x, y: ep.y, z: ep.z });
     // Przywróć widok TPP
     this.player.root.visible = true;
-    this.camCtrl.firstPerson = false;
     this.camCtrl.pitch       = this._savedCamPitch;
     this.camCtrl.dist        = CAM_DIST_FOOT;
+    this._applyCameraMode();
     this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
 
   // ─── Interakcja z autem ───────────────────────────────────────────────────
@@ -241,6 +286,7 @@ export class Game {
     this._drivingCar = car;
     car.isOccupied   = true;
     car.resetDriveState?.();
+    car.suppressHandbrake?.(8);
     this.player.root.visible = false;
     // Hard-teleport player to the same position the game-loop will use (cp.y + 4).
     // Using +30 then next-frame +4 created ~1557 m/s downward kinematic velocity →
@@ -255,8 +301,9 @@ export class Game {
     // Kamera ustawia się za autem od razu
     this.camCtrl.yaw  = car.facing + Math.PI;
     this.camCtrl.dist = CAM_DIST_CAR;
+    this._applyCameraMode();
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; F – LOT &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; F – LOT &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
@@ -279,8 +326,9 @@ export class Game {
     this._exitCarThisFrame = true;
     this._interactCooldown = 25;  // ~0.4s blokady po wysiadaniu (żeby nie wsiadać natychmiast)
     this.camCtrl.dist = CAM_DIST_FOOT;
+    this._applyCameraMode();
     this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
 
   /** Czerwony dym z gęby — NPC i zwierzęta w promieniu 14 j.ś. zasypiają. */
@@ -314,14 +362,32 @@ export class Game {
 
   /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
   _updateInteraction() {
+    const keyEDown = this.input.isDown('KeyE');
+    const keyEPressed = this.input.isJustPressed('KeyE') || (keyEDown && !this._interactKeyWasDown);
+    this._interactKeyWasDown = keyEDown;
+    if (keyEPressed) this._interactQueuedFrames = 8;
+    else if (this._interactQueuedFrames > 0) this._interactQueuedFrames -= 1;
+
     if (this._interactCooldown > 0) { this._interactCooldown -= 1; return; }
     // Blokada po akcji (fart/burp) — zapobiega przypadkowemu wsiadaniu do auta
     if (this._actionCooldown   > 0) { this._actionCooldown   -= 1; return; }
 
-    // Klawiatura: E — wsiadaj/wysiadaj   Pad: button 1 (B/Circle) — OSOBNY od F/B/K
-    const ePressed = this.input.isJustPressed('KeyE') || this.input.isPadButtonPressed(1);
+    // G — tryb latania gracza (toggle)
+    if (this.input.isJustPressed('KeyG') && !this._drivingCar) {
+      this._playerFlyMode = !this._playerFlyMode;
+      this.player.setFlyMode?.(this._playerFlyMode);
+    }
+
+    if (this.input.isJustPressed('KeyC') || this.input.isPadButtonPressed(8)) {
+      this._toggleCameraMode();
+    }
+
+    // Klawiatura: E — wsiadaj/wysiadaj/wspinaj   Pad: button 0 (A/Cross)
+    // button 1 (B/Circle) jest zarezerwowany dla hamulca ręcznego w aucie.
+    const ePressed = this._interactQueuedFrames > 0 || this.input.isPadButtonPressed(0);
 
     if (ePressed) {
+      this._interactQueuedFrames = 0;
       if (this._drivingCar) {
         this._exitCar();
       } else if (this._insideBuilding) {
@@ -329,8 +395,21 @@ export class Game {
       } else {
         const nearCar  = this._nearestCar();
         const nearBldg = this._nearestBuilding();
-        if (nearCar)        this._enterCar(nearCar);
-        else if (nearBldg)  this._enterBuilding(nearBldg);
+        const nearLad  = this._nearestLadder();
+        if (nearCar) {
+          this._enterCar(nearCar);
+        } else if (nearBldg) {
+          this._enterBuilding(nearBldg);
+        } else if (nearLad) {
+          // Wspinaczka / zejście po drabince
+          const { ladder, atTop } = nearLad;
+          if (atTop) {
+            this.player._body.setNextKinematicTranslation(ladder.getBaseLandPos());
+          } else {
+            this.player._body.setNextKinematicTranslation(ladder.getTopLandPos());
+          }
+          this._interactCooldown = 20;
+        }
       }
     }
 
@@ -345,11 +424,15 @@ export class Game {
       } else {
         const nearCar  = this._nearestCar();
         const nearBldg = this._nearestBuilding();
+        const nearLad  = this._nearestLadder();
         if (nearCar) {
           this._interactEl.textContent = 'E — wsiądź';
           this._interactEl.style.display = 'block';
         } else if (nearBldg) {
           this._interactEl.textContent = 'E — wejdź';
+          this._interactEl.style.display = 'block';
+        } else if (nearLad) {
+          this._interactEl.textContent = nearLad.atTop ? 'E — zejdź' : 'E — wspinaj się';
           this._interactEl.style.display = 'block';
         } else {
           this._interactEl.style.display = 'none';
@@ -377,10 +460,12 @@ export class Game {
     // Widoczność gracza — synchronizuj co klatkę ze stanem gry.
     // Gracz niewidoczny gdy: w aucie LUB w budynku (FPP).
     // To eliminuje wszelkie race-conditions z `visible` ustawianym w callbackach.
-    this.player.root.visible = !this._drivingCar && !this._insideBuilding;
+    this.player.root.visible = !this._drivingCar && !this._insideBuilding && !this._userFirstPerson;
 
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
+
+    for (const ufo of this.ufos) ufo.update(dt);
 
     // ── 1. Wejście → Rapier vehicle controller (siły pojazdu + updateVehicle) ──
     if (this._drivingCar) {
@@ -442,6 +527,40 @@ export class Game {
         this._actionCooldown = 20;
       }
     }
+
+    let beamLift = 0;
+    if (this.ufos.length > 0) {
+      if (this._drivingCar?._chassis) {
+        const cp = this._drivingCar._chassis.translation();
+        for (const ufo of this.ufos) {
+          const infl = ufo.getBeamInfluence?.(cp.x, cp.y, cp.z) ?? 0;
+          beamLift = Math.max(beamLift, infl);
+        }
+        if (beamLift > 0) {
+          this._drivingCar._chassis.addForce({
+            x: 0,
+            y: 34000 * beamLift,
+            z: 0,
+          }, true);
+        }
+      } else if (!exitedThisFrame && this.player?._body) {
+        const pp = this.player._body.translation();
+        for (const ufo of this.ufos) {
+          const infl = ufo.getBeamInfluence?.(pp.x, pp.y, pp.z) ?? 0;
+          beamLift = Math.max(beamLift, infl);
+        }
+        if (beamLift > 0) {
+          const target = this.player._body.nextTranslation?.() ?? pp;
+          this.player._body.setNextKinematicTranslation({
+            x: target.x,
+            y: target.y + beamLift * dt * 10,
+            z: target.z,
+          });
+          this.player.velocityY = Math.max(this.player.velocityY ?? 0, beamLift * 9);
+        }
+      }
+    }
+
     this.physics.step(dt);
 
     // ── 4. Sync Rapier → Three.js (auto + gracz) ─────────────────────────
