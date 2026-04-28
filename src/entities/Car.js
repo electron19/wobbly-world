@@ -74,7 +74,6 @@ export class Car extends Entity {
     this._bodyPitch     = 0;      // wygładzone pochylenie przód/tył [rad]
     // Prędkość uderzenia z bieżącej klatki — dla camera shake
     this._impactVelThisFrame = 0;
-    this._flyMode            = false;   // tryb lotu (F key)
     this._build();
   }
 
@@ -805,50 +804,9 @@ export class Car extends Entity {
     const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
     this._horizSpeedKmh = _horizSpeedKmh;
 
-    // ── Tryb lotu: F toggleuje ────────────────────────────────────────────────
-    if (input.isJustPressed('KeyF')) {
-      this._flyMode = !this._flyMode;
-      if (this._flyMode) {
-        // Impuls startowy — wystrzel auto w górę
-        this._chassis.applyImpulse({ x: 0, y: 5000, z: 0 }, true);
-      }
-    }
-
     let brakeForce = 0;
 
-    if (this._flyMode) {
-      // ── Fizyka lotu ──────────────────────────────────────────────────────────
-      // 80% anty-grawitacja → auto powoli opada bez wejścia (realistyczny efekt)
-      this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 0.80, z: 0 }, true);
-
-      // Kierunek do przodu z kwaterniona chassis
-      const qF   = this._chassis.rotation();
-      const fwdX = 2 * (qF.x * qF.z + qF.w * qF.y);
-      const fwdZ = 1 - 2 * (qF.x * qF.x + qF.y * qF.y);
-
-      // W → silny ciąg do przodu
-      if (forwAmount > 0.01) {
-        this._chassis.addForce({
-          x: fwdX * 45000 * forwAmount,
-          y: 0,
-          z: fwdZ * 45000 * forwAmount,
-        }, true);
-      }
-      // Spacja → wznoszenie
-      if (handBrake) {
-        this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 2.4, z: 0 }, true);
-      }
-      // S → opadanie
-      if (backAmount > 0.1) {
-        this._chassis.addForce({ x: 0, y: -2000 * 9.81 * 1.8 * backAmount, z: 0 }, true);
-      }
-      // Koła bez sił (leci powietrzem)
-      for (let i = 0; i < 4; i++) {
-        this._vehicle.setWheelEngineForce(i, 0);
-        this._vehicle.setWheelBrake(i, 0);
-        this._vehicle.setWheelFrictionSlip(i, 0.5);
-      }
-    } else {
+    {
       // ── Maszyna stanów kierunku jazdy ──────────────────────────────────────────
       // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
       if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
@@ -910,46 +868,36 @@ export class Car extends Entity {
       this._vehicle.setWheelFrictionSlip(3, fR);
     }
 
-    // Downforce aerodynamiczny — tylko na ziemi (w locie niepotrzebny)
-    if (!this._flyMode && this._horizSpeedKmh > 20) {
+    // Downforce aerodynamiczny
+    if (this._horizSpeedKmh > 20) {
       const vMs = this._horizSpeedKmh / 3.6;
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
 
-    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw
-    // oraz przywraca chassis do pozycji poziomej (restoring torque).
-    // W powietrzu (koła nie dotykają ziemi) gwałtownie wzmacniamy tłumienie.
+    // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw.
+    // RESTORE celowo wyłączony (= 0 zawsze): wzory w przestrzeni świata dawały
+    // moment korygujący roll w zależności od kierunku jazdy — nie od faktycznego
+    // przechyłu chassis → progresywne wychylanie w prawo/lewo poza miastem.
+    // Zawieszenie samo utrzymuje chassis poziomo; auto-flip recovery naprawia wywrotki.
     {
       const av = this._chassis.angvel();
-      const qS = this._chassis.rotation();
 
-      // Restoring torque: przywraca chassis do pozycji poziomej.
-      // Wzory z macierzy rotacji kwaterniona (Y-up, Z-forward Rapier):
-      //   rollSin  = carUp.z = 2*(w*x + y*z) → aplikowany na torque.x (korekcja pitch)
-      //   pitchSin = 2*(w*z − x*y)           → aplikowany na torque.z (korekcja roll)
-      // Obydwa poprzednio miały błędne znaki i były zerowane (* 0).
-      const rollSin  = 2 * (qS.w * qS.x + qS.y * qS.z);   // był błąd: − zamiast +
-      const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
-
-      // Wykryj lot: średnia długość zawieszenia bliższa maksymalnej → brak kontaktu z ziemią
+      // Wykryj lot: koła poza zakresem kompresji zawieszenia
       const s0 = this._vehicle.wheelSuspensionLength(0);
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      const suspAvg  = (s0 + s1 + s2 + s3) / 4;
-      const airborne = suspAvg > 0.32 && !this._flyMode;  // > 0.32 = koła w powietrzu
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.50).length;
+      const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 4000;   // roll + pitch — silniejsze w powietrzu
-      const DAMP_Y    = airborne ? 22000 : 1200;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
-      // RESTORE tylko w powietrzu — na ziemi zawieszenie samo stabilizuje chassis.
-      // Restore na ziemi walczy z fizyką zawieszenia i blokuje normalne prowadzenie.
-      const RESTORE   = airborne ? 20000 : 0;
-      const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
+      // W powietrzu mocniejsze tłumienie — zapobiega tumbling po skoku/kolizji
+      const DAMP_XZ = airborne ? 16000 : 1200;
+      const DAMP_Y  = airborne ? 18000 :  600;
 
       this._chassis.addTorque({
-        x: -av.x * DAMP_XZ - rollSin  * RESTORE,
-        y: -av.y * DAMP_Y - yawQuadDamp,
-        z: -av.z * DAMP_XZ - pitchSin * RESTORE,
+        x: -av.x * DAMP_XZ,
+        y: -av.y * DAMP_Y,
+        z: -av.z * DAMP_XZ,
       }, true);
     }
 
@@ -964,6 +912,7 @@ export class Car extends Entity {
     // Stan hamowania — dla świateł stop
     this._isHandbraking = handBrake && absSpd > 3;
     this._isBraking     = !handBrake && brakeForce > IDLE_BRAKE && absSpd > 1
+
                           && (backAmount > 0.05 || (this._dirState === 'reverse' && _horizSpeedKmh > 3));
 
     // RPM factor — używany przez wydech
@@ -1004,8 +953,17 @@ export class Car extends Entity {
    */
   idleStep(dt) {
     if (!this._vehicle) return;
-    // Re-aplikuj hamulec co klatkę — bez tego zaparkowane auto może się stoczyć po zejściu gracza.
-    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
+    // Re-aplikuj hamulec i przywróć normalne tarcie co klatkę.
+    // Bez resetu frictionSlip auto wyjeżdżające z trybu jazdy (np. po wysiadaniu gracza
+    // podczas ruchu) mogło zachować zredukowane tarcie z ostatniej klatki update() —
+    // koła blokowały, ale brak tarcia dawał efekt lodu.
+    for (let i = 0; i < 4; i++) {
+      this._vehicle.setWheelEngineForce(i, 0);
+      this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
+      this._vehicle.setWheelFrictionSlip(i, 2.5);
+    }
+    this._vehicle.setWheelSteering(0, 0);
+    this._vehicle.setWheelSteering(1, 0);
     this._vehicle.updateVehicle(dt, 0, 0x0001FFFD, null);
   }
 

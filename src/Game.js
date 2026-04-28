@@ -75,6 +75,8 @@ export class Game {
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
     this._interactKeyWasDown = false;
     this._interactQueuedFrames = 0;
+    this._climbingLadder   = null;   // drabinka na której gracz aktualnie się wspina
+    this._climbT           = 0;      // aktualna wysokość wspinaczki [0..ladder.height]
     this._sky              = null;
     this._weather          = null;
     this._seasons          = null;
@@ -254,6 +256,32 @@ export class Game {
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
 
+  // ─── Wspinaczka po drabince ───────────────────────────────────────────────
+
+  _startClimbing(ladder, atTop) {
+    this._climbingLadder = ladder;
+    // Zaczynamy tuż przy końcu drabinki (0.3 j od krawędzi) żeby od razu ruszyć
+    this._climbT = atTop ? ladder.height - 0.4 : 0.4;
+    this._interactCooldown = 10;
+    this.player.velocityY = 0;
+    this._uiEl.innerHTML = 'W – w górę &nbsp;|&nbsp; S – w dół &nbsp;|&nbsp; E – odpuść drabinkę';
+  }
+
+  _stopClimbing(landTop = false, landBottom = false) {
+    const lad = this._climbingLadder;
+    this._climbingLadder = null;
+    this.player.velocityY = 0;   // zero gravity accumulation po wspinaczce
+    if (landTop) {
+      this.player._body.setNextKinematicTranslation(lad.getTopLandPos());
+    } else if (landBottom) {
+      this.player._body.setNextKinematicTranslation(lad.getBaseLandPos());
+    }
+    // else: odpuszczenie w połowie — gracz spada z bieżącej pozycji (wolna fizyka)
+    this._interactCooldown = 15;
+    this._uiEl.innerHTML =
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+  }
+
   // ─── Interakcja z autem ───────────────────────────────────────────────────
 
   /** Znajdź najbliższe auto w zasięgu ENTER_DIST (od krawędzi, nie centrum). */
@@ -303,7 +331,7 @@ export class Game {
     this.camCtrl.dist = CAM_DIST_CAR;
     this._applyCameraMode();
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; F – LOT &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
@@ -317,7 +345,6 @@ export class Game {
     });
     this.player.root.visible = true;
     car._audio    = null;
-    car._flyMode  = false;   // wyłącz lot przy wysiadaniu
     car.resetDriveState?.({ parked: true });
     this.audio.stopEngine();
     this.audio.stopTires();
@@ -390,6 +417,8 @@ export class Game {
       this._interactQueuedFrames = 0;
       if (this._drivingCar) {
         this._exitCar();
+      } else if (this._climbingLadder) {
+        this._stopClimbing();   // odpuść drabinkę — gracz spada z bieżącej pozycji
       } else if (this._insideBuilding) {
         this._exitBuilding();
       } else {
@@ -401,14 +430,7 @@ export class Game {
         } else if (nearBldg) {
           this._enterBuilding(nearBldg);
         } else if (nearLad) {
-          // Wspinaczka / zejście po drabince
-          const { ladder, atTop } = nearLad;
-          if (atTop) {
-            this.player._body.setNextKinematicTranslation(ladder.getBaseLandPos());
-          } else {
-            this.player._body.setNextKinematicTranslation(ladder.getTopLandPos());
-          }
-          this._interactCooldown = 20;
+          this._startClimbing(nearLad.ladder, nearLad.atTop);
         }
       }
     }
@@ -417,6 +439,9 @@ export class Game {
     if (this._interactEl) {
       if (this._drivingCar) {
         this._interactEl.textContent = 'E — wysiądź';
+        this._interactEl.style.display = 'block';
+      } else if (this._climbingLadder) {
+        this._interactEl.textContent = 'E — odpuść drabinkę';
         this._interactEl.style.display = 'block';
       } else if (this._insideBuilding) {
         this._interactEl.textContent = 'E — wyjdź';
@@ -502,6 +527,25 @@ export class Game {
       const brakingSkid = slip > 0.80 && this._drivingCar.isBraking;
       const lateralSlip = absCarSpd > 55 && this._drivingCar.steerAngle > 0.38;
       this.audio.updateSkid((brakingSkid || lateralSlip) && absCarSpd > 5, carOnRoad);
+    } else if (this._climbingLadder) {
+      // ── Wspinaczka — W/S porusza gracza wzdłuż drabinki ─────────────────────
+      const lad        = this._climbingLadder;
+      const CLIMB_SPD  = 3.8;   // j.ś./s
+      const up   = this.input.isDown('KeyW') || this.input.isDown('ArrowUp');
+      const dn   = this.input.isDown('KeyS') || this.input.isDown('ArrowDown');
+      if (up)  this._climbT = Math.min(lad.height, this._climbT + CLIMB_SPD * dt);
+      if (dn)  this._climbT = Math.max(0,           this._climbT - CLIMB_SPD * dt);
+
+      // Ustaw pozycję gracza na drabince (kinematic — nadpisuje grawitację)
+      this.player._body.setNextKinematicTranslation(lad.getClimbPos(this._climbT));
+      this.player.velocityY = 0;
+
+      // Automatyczne zakończenie wspinaczki
+      if (this._climbT >= lad.height) {
+        this._stopClimbing(true, false);   // lądowanie na szczycie
+      } else if (this._climbT <= 0) {
+        this._stopClimbing(false, true);   // lądowanie u podstawy
+      }
     } else {
       if (!exitedThisFrame) {
         const pp = this.player.root.position;
@@ -644,16 +688,6 @@ export class Game {
       const mapPos    = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
       const mapFacing = this._drivingCar ? this._drivingCar.facing       : this.player.facing;
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
-    }
-
-    // ── Fly mode badge ────────────────────────────────────────────────────────
-    if (this._drivingCar && this._interactEl) {
-      if (this._drivingCar._flyMode) {
-        this._interactEl.textContent = '✈ TRYB LOTU — SPACJA wznosi, S opada';
-        this._interactEl.style.display = 'block';
-      } else if (this._interactEl.textContent.startsWith('✈')) {
-        this._interactEl.style.display = 'none';
-      }
     }
 
     // ── HUD: FPS + pozycja XYZ ────────────────────────────────────────────
