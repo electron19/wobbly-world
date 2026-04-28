@@ -21,10 +21,10 @@ export class UFO {
     this._baseY = baseY;
     this._speed = speed;
     this._t = phase;
-    this._beamRadius = 6.8;
+    this._beamRadius = 7.5;
     this._beamHeight = 22;
     this._beamStrength = 0;
-    this._captureRadius = 3.1;
+    this._captureRadius = 6.0;
     this._state = 'orbit';
     this._target = null;
     this._departTimer = 0;
@@ -221,7 +221,7 @@ export class UFO {
     }
 
     const targetPos = this._target.root.position;
-    const hoverY = Math.max(this._baseY - 8, targetPos.y + 8.5);
+    const hoverY = Math.max(this._baseY - 16, targetPos.y + 6.5);
     const dx = targetPos.x - this.root.position.x;
     const dz = targetPos.z - this.root.position.z;
     this.root.rotation.y = Math.atan2(dx, dz);
@@ -248,7 +248,7 @@ export class UFO {
       this._beamHeight = Math.max(16, this.root.position.y + 2);
       this._carryPose = {
         x: this.root.position.x,
-        y: this.root.position.y - 1.6,
+        y: this.root.position.y - 1.2,
         z: this.root.position.z,
         facing: this.root.rotation.y + Math.PI,
       };
@@ -283,8 +283,8 @@ export class UFO {
     const beamActive = this._state === 'lowering' || this._state === 'lifting';
     if (beamActive) audio?.startUFOBeam?.(); else audio?.stopUFOBeam?.();
     const beamPulse = beamActive
-      ? 0.42 + (Math.sin(this._t * 9.0) * 0.5 + 0.5) * 0.22
-      : 0.18 + (Math.sin(this._t * 5.4) * 0.5 + 0.5) * 0.12;
+      ? 0.52 + (Math.sin(this._t * 9.0) * 0.5 + 0.5) * 0.26
+      : 0.20 + (Math.sin(this._t * 5.4) * 0.5 + 0.5) * 0.14;
 
     this._beam.material.opacity = beamPulse;
     this._beam.scale.x = beamActive ? 1.16 : 0.88 + Math.sin(this._t * 3.3) * 0.08;

@@ -48,6 +48,9 @@ export class PoppyFactory extends Building {
     const chromeMat = toonMat(0xBBBBBB);
     const darkMat   = toonMat(0x1A1A1A);
     const dockMat   = toonMat(0x888888);
+    const blueMat   = toonMat(0x1A4FC4);
+    const greenMat  = toonMat(0x1A8A2A);
+    const safeYel   = toonMat(0xFFCC00);
     const glassMat  = new THREE.MeshToonMaterial({
       color: glassColor, transparent: true, opacity: 0.78,
     });
@@ -75,12 +78,14 @@ export class PoppyFactory extends Building {
     this._box(-W / 2 - 0.05, 7.0, 0, 0.12, 0.38, D - pilW, trimMat);
     this._box( W / 2 + 0.05, 7.0, 0, 0.12, 0.38, D - pilW, trimMat);
 
-    // ── Front facade (+Z) — loading bays ─────────────────────────────────────
+    // ── Front facade (+Z) — loading bays + główne wejście Playtime Co. ──────
     const bayH = H * 0.50, bayW = 4.2;
     const bayPositions = [-12, 0, 12];   // 3 bays along X
     bayPositions.forEach(bx => {
-      // Bay door (dark)
-      this._box(bx, bayH / 2, D / 2 + 0.06, bayW, bayH, 0.12, darkMat);
+      const isMainEntry = bx === 0;
+      const doorMat = isMainEntry ? glassMat : darkMat;
+      // Bay door / główne wejście
+      this._box(bx, bayH / 2, D / 2 + 0.06, bayW, bayH, 0.12, doorMat);
       // Metal frame — top
       this._box(bx, bayH + 0.18, D / 2 + 0.07, bayW + 0.36, 0.36, 0.10, chromeMat);
       // Metal frame — sides
@@ -88,6 +93,14 @@ export class PoppyFactory extends Building {
       this._box(bx + bayW / 2 + 0.18, bayH / 2, D / 2 + 0.07, 0.36, bayH, 0.10, chromeMat);
       // Loading dock platform
       this._box(bx, 0.28, D / 2 + 1.0, bayW + 0.50, 0.56, 2.0, dockMat);
+      if (isMainEntry) {
+        // Kolorowe wejście jak w Playtime Co.
+        this._box(bx, bayH + 1.0, D / 2 + 0.14, bayW + 1.2, 1.0, 0.18, signMat);
+        this._box(bx, bayH + 0.92, D / 2 + 0.15, bayW + 0.5, 0.42, 0.10, whiteMat);
+        this._box(bx - 1.15, bayH + 0.20, D / 2 + 0.14, 0.28, bayH - 0.6, 0.08, safeYel);
+        this._box(bx + 1.15, bayH + 0.20, D / 2 + 0.14, 0.28, bayH - 0.6, 0.08, blueMat);
+        this._box(bx, 1.25, D / 2 + 1.2, bayW + 0.7, 0.22, 0.40, whiteMat);
+      }
     });
 
     // ── Front windows above bays (2 rows × 8 cols) ───────────────────────────
@@ -123,29 +136,37 @@ export class PoppyFactory extends Building {
       this._box(bwx, bayH / 2 + 1.5, -D / 2 - 0.075, winW + 0.16, winH + 0.16, 0.06, trimMat);
     });
 
-    // ── "PLAYTIME CO." sign on front facade, above windows ───────────────────
+    // ── Front marquee + wielkie logo "P" ─────────────────────────────────────
     const signY = H * 0.87;
-    // Red sign board
-    this._box(0, signY, D / 2 + 0.09, 24.0, 3.2, 0.18, signMat);
-    // White border frame
-    this._box(0, signY, D / 2 + 0.10, 24.6, 3.6, 0.12, whiteMat);
-    // White letter bars — 2 lines of text (simplified as horizontal bars)
-    // Line 1: "PLAYTIME" — 3 bars
-    [-0.70, 0, 0.70].forEach(offset => {
-      this._box(offset * 6.5, signY + 0.60, D / 2 + 0.14, 5.8, 0.52, 0.06, whiteMat);
+    this._box(0, signY, D / 2 + 0.09, 26.5, 4.2, 0.18, signMat);
+    this._box(0, signY, D / 2 + 0.10, 27.1, 4.6, 0.12, whiteMat);
+    // Kolorowe pasy dekoracyjne
+    this._box(-7.0, signY - 1.15, D / 2 + 0.14, 5.8, 0.42, 0.06, blueMat);
+    this._box( 0.0, signY - 1.15, D / 2 + 0.14, 5.8, 0.42, 0.06, safeYel);
+    this._box( 7.0, signY - 1.15, D / 2 + 0.14, 5.8, 0.42, 0.06, greenMat);
+    // Napis PLAYTIME CO.
+    this._box(5.6, signY + 0.92, D / 2 + 0.14, 10.8, 0.58, 0.06, whiteMat);
+    this._box(5.6, signY + 0.10, D / 2 + 0.14, 8.4, 0.44, 0.06, whiteMat);
+    // Wielka litera P po lewej stronie szyldu
+    const pX = -7.8;
+    this._box(pX - 1.05, signY + 0.05, D / 2 + 0.14, 0.80, 2.75, 0.06, whiteMat);
+    this._box(pX + 0.05, signY + 1.10, D / 2 + 0.14, 2.20, 0.80, 0.06, whiteMat);
+    this._box(pX + 0.05, signY + 0.20, D / 2 + 0.14, 2.20, 0.80, 0.06, whiteMat);
+    this._box(pX + 1.05, signY + 0.65, D / 2 + 0.14, 0.80, 1.70, 0.06, whiteMat);
+    this._box(pX + 0.30, signY + 0.65, D / 2 + 0.15, 1.05, 0.78, 0.05, signMat);
+    // Dekoracyjne gwiazdy / emblematy
+    [-11.8, -9.8, 11.0, 13.0].forEach(sx => {
+      this._box(sx, signY + 1.15, D / 2 + 0.14, 0.45, 0.45, 0.06, safeYel);
+      this._box(sx, signY - 0.15, D / 2 + 0.14, 0.30, 0.30, 0.06, blueMat);
     });
-    // Line 2: "CO." — single bar centred
-    this._box(0, signY - 0.60, D / 2 + 0.14, 10.0, 0.50, 0.06, whiteMat);
-    // Decorative stars (small white squares along sign edges)
-    [-10.5, -7, 7, 10.5].forEach(sx => {
-      this._box(sx, signY, D / 2 + 0.14, 0.45, 0.45, 0.06, whiteMat);
+
+    // ── Front color towers — bardziej "Poppy Playtime" ─────────────────────
+    [-W / 2 + 2.4, W / 2 - 2.4].forEach(px => {
+      this._box(px, H * 0.46, D / 2 + 0.08, 2.2, H * 0.92, 0.16, whiteMat);
+      this._box(px, H * 0.74, D / 2 + 0.09, 1.4, 2.2, 0.12, blueMat);
+      this._box(px, H * 0.40, D / 2 + 0.09, 1.4, 2.2, 0.12, safeYel);
+      this._box(px, H * 0.18, D / 2 + 0.09, 1.4, 1.5, 0.12, greenMat);
     });
-    // Logo circle left of sign (Playtime Co. round emblem — approximated with box)
-    this._box(-9.5, signY + 0.10, D / 2 + 0.14, 1.6, 1.6, 0.06, whiteMat);
-    this._box(-9.5, signY + 0.10, D / 2 + 0.15, 0.9, 0.9, 0.05, signMat); // inner
-    // Logo circle right
-    this._box( 9.5, signY + 0.10, D / 2 + 0.14, 1.6, 1.6, 0.06, whiteMat);
-    this._box( 9.5, signY + 0.10, D / 2 + 0.15, 0.9, 0.9, 0.05, signMat);
 
     // ── 3 Smokestacks on roof ────────────────────────────────────────────────
     const stacks = [{ x: -12, z: -7 }, { x: 0, z: -5 }, { x: 12, z: -7 }];

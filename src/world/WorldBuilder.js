@@ -471,15 +471,15 @@ export class WorldBuilder {
   _addNorthSuburbs() {
     const P = HOUSE_PALETTES;
 
-    // Sklep przy E-W północnej (z=-50), strona północna
-    this._regCircle( 30, -58, 9/2, 7/2);
+    // Sklep przy E-W północnej (z=-50), strona północna — z=-62 (4j od clear zone drogi)
+    this._regCircle( 30, -62, 9/2, 7/2);
     this._add(new Shop(this.scene, this.physics, { facing: FS,
       wallColor: 0xF5CBA7, roofColor: 0xCA6F1E,
-    }, this.vehiclePhysics).placeAt( 30, 0, -58));
-    this._regCircle(-30, -58, 9/2, 7/2);
+    }, this.vehiclePhysics).placeAt( 30, 0, -62));
+    this._regCircle(-30, -62, 9/2, 7/2);
     this._add(new Shop(this.scene, this.physics, { facing: FS,
       wallColor: 0xA9CCE3, roofColor: 0x1A5276,
-    }, this.vehiclePhysics).placeAt(-30, 0, -58));
+    }, this.vehiclePhysics).placeAt(-30, 0, -62));
 
     // Domy NE (x∈[8,58], z∈[-58,-88])
     this._house(P[0],  12, -62, FS, { roofStyle: 'pitched', hasChimney: true });
@@ -507,15 +507,15 @@ export class WorldBuilder {
   _addSouthSuburbs() {
     const P = HOUSE_PALETTES;
 
-    // Sklep przy E-W południowej (z=50), strona południowa
-    this._regCircle( 28, 58, 9/2, 7/2);
+    // Sklep przy E-W południowej (z=50), strona południowa — z=60 (2j od clear zone drogi)
+    this._regCircle( 28, 60, 9/2, 7/2);
     this._add(new Shop(this.scene, this.physics, { facing: FN,
       wallColor: 0xD5F5E3, roofColor: 0x1E8449,
-    }, this.vehiclePhysics).placeAt( 28, 0, 58));
-    this._regCircle(-28, 58, 9/2, 7/2);
+    }, this.vehiclePhysics).placeAt( 28, 0, 60));
+    this._regCircle(-28, 60, 9/2, 7/2);
     this._add(new Shop(this.scene, this.physics, { facing: FN,
       wallColor: 0xFCF3CF, roofColor: 0xD4AC0D, signColor: 0xCB4335,
-    }, this.vehiclePhysics).placeAt(-28, 0, 58));
+    }, this.vehiclePhysics).placeAt(-28, 0, 60));
 
     // Domy SE (x∈[8,58], z∈[58,88])
     this._house(P[6],  12, 62, FN, { roofStyle: 'pitched', hasChimney: true });
@@ -764,8 +764,8 @@ export class WorldBuilder {
     this._brick(172, -18, FW, { floors: 5, brickColor: 0x8B3A2A });
     this._brick(172,  18, FW, { floors: 4, brickColor: 0x7B5A3A });
     // Trójkątny budynek w polu na dalekim wschodzie — czubek skierowany ku miastu (FE = tip → W)
-    // x=200: front fasada x=200, czubek x=150 (od drogi x=130: 15.5j > ROAD_CLEAR ✓)
-    this._triOffice(200, -25, FE, { wallColor: 0xECF0EC, glassColor: 0x0A1520 });
+    // x=252: czubek x=202 (od drogi x=195: 6.5j > ROAD_CLEAR ✓; od drogi x=130: 72j ✓)
+    this._triOffice(252, -25, FE, { wallColor: 0xECF0EC, glassColor: 0x0A1520 });
 
     // Sklepy przy x=130
     this._regCircle(140, -38, 9/2, 7/2);
@@ -803,8 +803,8 @@ export class WorldBuilder {
     this._brick(-172,  18, FE, { floors: 5, brickColor: 0x8B3A2A });
 
     // Trójkątny budynek w polu — czubek skierowany ku miastu (FW = tip → E)
-    // x=-200: front x=-200, czubek x=-150 (od drogi x=-130: 15.5j > ROAD_CLEAR ✓)
-    this._triOffice(-200, 25, FW, { wallColor: 0xF0ECE8, glassColor: 0x1A0D05 });
+    // x=-252: czubek x=-202 (od drogi x=-195: 6.5j > ROAD_CLEAR ✓; od drogi x=-130: 72j ✓)
+    this._triOffice(-252, 25, FW, { wallColor: 0xF0ECE8, glassColor: 0x1A0D05 });
 
     // Sklepy przy x=-130
     this._regCircle(-140, -38, 9/2, 7/2);
@@ -1540,14 +1540,15 @@ export class WorldBuilder {
     this.airplanes.push(plane2);
 
     // ── Helikopter policyjny (czarno-biały) ─────────────────────────────────
-    // Parkuje przy komisariacie w centrum
-    const heli = new Helicopter(this.scene, 14, 2, -14);
-    heli.facing = -Math.PI / 4;
+    // Parkuje na otwartym terenie przy głównej drodze (chodnik na wschód od centrum)
+    const heli = new Helicopter(this.scene, 24, 1, -8);
+    heli.facing = -Math.PI / 2;
     heli.root.rotation.y = heli.facing;
     this.helicopters.push(heli);
   }
 
   _addUFOs() {
+    // Single UFO orbiting the entire city at medium altitude
     this.ufos.push(new UFO(this.scene, {
       centerX: 0,
       centerZ: 8,
@@ -1556,24 +1557,6 @@ export class WorldBuilder {
       baseY: 36,
       speed: 0.15,
       phase: Math.PI * 0.15,
-    }));
-    this.ufos.push(new UFO(this.scene, {
-      centerX: 18,
-      centerZ: -26,
-      radiusX: 88,
-      radiusZ: 54,
-      baseY: 49,
-      speed: -0.19,
-      phase: Math.PI * 1.1,
-    }));
-    this.ufos.push(new UFO(this.scene, {
-      centerX: -42,
-      centerZ: 34,
-      radiusX: 156,
-      radiusZ: 104,
-      baseY: 63,
-      speed: 0.11,
-      phase: Math.PI * 0.58,
     }));
   }
 
