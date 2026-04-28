@@ -1,5 +1,9 @@
 # Jolt Migration Plan
 
+> Status: archiwalny dokument projektowy.
+> Nie opisuje bieżącego stanu `main`.
+> Aktualny projekt używa Rapier3D dla świata, gracza i pojazdów; w repo nie ma aktywnego spike'a `joltSpike` ani pliku `VehiclePhysicsJolt.js`.
+
 Projekt: `/Users/krzysztof/Projects/wobbly-world`
 
 ## Cel
