@@ -55,7 +55,8 @@ export class WorldBuilder {
     this.ufos           = [];  // autonomiczne pojazdy latające
     this.airplanes      = [];  // samoloty — do wsiadania
     this.helicopters    = [];  // helikoptery — do wsiadania
-    this._circles       = []; // exclusion circles — budynki, drzewa omijają je
+    this._circles       = []; // exclusion circles (z marginem) — budynki, drzewa omijają je
+    this._npcObstacles  = []; // fizyczne kontury budynków/drzew bez marginu — dla NPCów
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
   }
@@ -107,7 +108,10 @@ export class WorldBuilder {
 
   /** Zarejestruj okrąg wykluczenia (hw, hd = półwymiary prostokąta). */
   _regCircle(cx, cz, hw, hd, margin = 1.5) {
-    this._circles.push({ cx, cz, r: Math.hypot(hw, hd) + margin });
+    const physR = Math.hypot(hw, hd);
+    this._circles.push({ cx, cz, r: physR + margin });
+    // Fizyczny kontur (bez marginu) — NPCy mogą przechodzić między budynkami
+    this._npcObstacles.push({ cx, cz, r: physR });
   }
 
   /** Czy punkt (tx, tz) jest wolny od dróg i budynków? */
@@ -1473,7 +1477,7 @@ export class WorldBuilder {
   // ─── NPC ─────────────────────────────────────────────────────────────────────
 
   _addNPCs() {
-    const obstacles = this._circles;
+    const obstacles = this._npcObstacles;   // fizyczne kontury — nie blokują przejść między budynkami
     // Centrum i okolice — chodniki, place, park
     const spots = [
       // centrum — główny plac
@@ -1497,7 +1501,7 @@ export class WorldBuilder {
   // ─── Zwierzęta ────────────────────────────────────────────────────────────────
 
   _addAnimals() {
-    const obstacles = this._circles;
+    const obstacles = this._npcObstacles;   // fizyczne kontury — j.w.
     // Pieski — przy domach w przedmieściach
     const dogSpots = [
       [ 22, 60], [-22, 60], [ 38, 78], [-40, 75],
