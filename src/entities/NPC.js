@@ -52,6 +52,7 @@ export class NPC {
     this._bobY      = 0;
 
     this._scareTimer = 0;
+    this._screamCooldown = 0;
     this._baseSpeed  = this._speed;
     this._sleepTimer = 0;
     this._sleepFall  = 0;   // 0=stoi, 1=leży na boku
@@ -75,9 +76,13 @@ export class NPC {
   }
 
   /** Wywołaj gdy gracz pierdzenie w pobliżu — NPC ucieka w panice. */
-  scare(px, pz) {
+  scare(px, pz, audio = null) {
     this._scareTimer = 5.0 + Math.random() * 3;
     this._speed = this._baseSpeed * 5.5;
+    if (this._screamCooldown <= 0) {
+      audio?.playNPCScream();
+      this._screamCooldown = 0.9 + Math.random() * 0.5;
+    }
     const awayAngle = Math.atan2(this.root.position.x - px, this.root.position.z - pz);
     this._target.set(
       this.root.position.x + Math.sin(awayAngle) * 28,
@@ -205,6 +210,8 @@ export class NPC {
   }
 
   update(dt) {
+    this._screamCooldown = Math.max(0, this._screamCooldown - dt);
+
     // ── Sen + wstawanie ────────────────────────────────────────────────────────
     if (this._sleepTimer > 0 || this._sleepFall > 0) {
       if (this._sleepTimer > 0) {

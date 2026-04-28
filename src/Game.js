@@ -393,7 +393,7 @@ export class Game {
     this.camCtrl.dist = CAM_DIST_CAR;
     this._applyCameraMode();
     this._uiEl.innerHTML =
-      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; F – LOT &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
+      'WASD – jedź &nbsp;|&nbsp; SPACJA – h. ręczny &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; H – klakson &nbsp;|&nbsp; Mysz – kamera &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitCar() {
@@ -407,7 +407,6 @@ export class Game {
     });
     this.player.root.visible = true;
     car._audio    = null;
-    car._flyMode  = false;   // wyłącz lot przy wysiadaniu
     car.resetDriveState?.({ parked: true });
     this.audio.stopEngine();
     this.audio.stopTires();
@@ -445,7 +444,7 @@ export class Game {
       const dx = npc.root.position.x - pp.x;
       const dz = npc.root.position.z - pp.z;
       if (dx * dx + dz * dz < 18 * 18) {
-        npc.scare?.(pp.x, pp.z);
+        npc.scare?.(pp.x, pp.z, this.audio);
       }
     }
   }
@@ -770,16 +769,6 @@ export class Game {
         ? this._drivingAircraft.facing
         : this._drivingCar ? this._drivingCar.facing : this.player.facing;
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
-    }
-
-    // ── Fly mode badge ────────────────────────────────────────────────────────
-    if (this._drivingCar && this._interactEl) {
-      if (this._drivingCar._flyMode) {
-        this._interactEl.textContent = '✈ TRYB LOTU — SPACJA wznosi, S opada';
-        this._interactEl.style.display = 'block';
-      } else if (this._interactEl.textContent.startsWith('✈')) {
-        this._interactEl.style.display = 'none';
-      }
     }
 
     // ── HUD: FPS + pozycja XYZ ────────────────────────────────────────────

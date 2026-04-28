@@ -74,7 +74,6 @@ export class Car extends Entity {
     this._bodyPitch     = 0;      // wygładzone pochylenie przód/tył [rad]
     // Prędkość uderzenia z bieżącej klatki — dla camera shake
     this._impactVelThisFrame = 0;
-    this._flyMode            = false;   // tryb lotu (F key)
     this._build();
   }
 
@@ -442,11 +441,51 @@ export class Car extends Entity {
     }
     this._vehicle.setWheelSteering(0, 0);
     this._vehicle.setWheelSteering(1, 0);
+    if (!parked) this._chassis.wakeUp?.();
   }
 
   /** Krótko wyłącza hamulec ręczny po wejściu z pada, żeby B nie blokowało ruszania. */
   suppressHandbrake(frames = 8) {
     this._suppressHandbrakeFrames = Math.max(this._suppressHandbrakeFrames, frames);
+  }
+
+  /**
+   * Awaryjne odzyskiwanie auta, które zbyt głęboko siadło w podłożu albo utknęło
+   * bez kontaktu kół po próbie ruszania.
+   */
+  _recoverGroundStall(dt, driveInput, onHardSurface) {
+    if (!this._vehicle || !this._chassis || !onHardSurface) {
+      this._groundStallTimer = 0;
+      return;
+    }
+
+    const pos = this._chassis.translation();
+    const s0 = this._vehicle.wheelSuspensionLength(0);
+    const s1 = this._vehicle.wheelSuspensionLength(1);
+    const s2 = this._vehicle.wheelSuspensionLength(2);
+    const s3 = this._vehicle.wheelSuspensionLength(3);
+    const suspAvg = (s0 + s1 + s2 + s3) / 4;
+    const wantsToMove = driveInput > 0.18;
+    const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
+    const sunkLow = pos.y < CHASSIS_OFFSET_Y - 0.12;
+    const lostWheelContact = suspAvg > 0.50;
+
+    if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
+      this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
+      if (this._groundStallTimer > 0.35) {
+        this._chassis.setTranslation({
+          x: pos.x,
+          y: Math.max(pos.y, CHASSIS_OFFSET_Y) + 0.55,
+          z: pos.z,
+        }, true);
+        this._chassis.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        this._chassis.setAngvel({ x: 0, y: 0, z: 0 }, true);
+        this._chassis.wakeUp?.();
+        this._groundStallTimer = 0;
+      }
+    } else {
+      this._groundStallTimer = 0;
+    }
   }
 
   /** Inicjalizuje system śladów — 4 koła (FL, FR, RL, RR). */
@@ -804,52 +843,11 @@ export class Car extends Entity {
     const _lv = this._chassis.linvel();
     const _horizSpeedKmh = Math.sqrt(_lv.x * _lv.x + _lv.z * _lv.z) * 3.6;
     this._horizSpeedKmh = _horizSpeedKmh;
-
-    // ── Tryb lotu: F toggleuje ────────────────────────────────────────────────
-    if (input.isJustPressed('KeyF')) {
-      this._flyMode = !this._flyMode;
-      if (this._flyMode) {
-        // Impuls startowy — wystrzel auto w górę
-        this._chassis.applyImpulse({ x: 0, y: 5000, z: 0 }, true);
-      }
-    }
+    if (Math.abs(gasIn) > 0.08 || Math.abs(this._steer) > 0.04) this._chassis.wakeUp?.();
 
     let brakeForce = 0;
 
-    if (this._flyMode) {
-      // ── Fizyka lotu ──────────────────────────────────────────────────────────
-      // 80% anty-grawitacja → auto powoli opada bez wejścia (realistyczny efekt)
-      this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 0.80, z: 0 }, true);
-
-      // Kierunek do przodu z kwaterniona chassis
-      const qF   = this._chassis.rotation();
-      const fwdX = 2 * (qF.x * qF.z + qF.w * qF.y);
-      const fwdZ = 1 - 2 * (qF.x * qF.x + qF.y * qF.y);
-
-      // W → silny ciąg do przodu
-      if (forwAmount > 0.01) {
-        this._chassis.addForce({
-          x: fwdX * 45000 * forwAmount,
-          y: 0,
-          z: fwdZ * 45000 * forwAmount,
-        }, true);
-      }
-      // Spacja → wznoszenie
-      if (handBrake) {
-        this._chassis.addForce({ x: 0, y: 2000 * 9.81 * 2.4, z: 0 }, true);
-      }
-      // S → opadanie
-      if (backAmount > 0.1) {
-        this._chassis.addForce({ x: 0, y: -2000 * 9.81 * 1.8 * backAmount, z: 0 }, true);
-      }
-      // Koła bez sił (leci powietrzem)
-      for (let i = 0; i < 4; i++) {
-        this._vehicle.setWheelEngineForce(i, 0);
-        this._vehicle.setWheelBrake(i, 0);
-        this._vehicle.setWheelFrictionSlip(i, 0.5);
-      }
-    } else {
-      // ── Maszyna stanów kierunku jazdy ──────────────────────────────────────────
+    // ── Maszyna stanów kierunku jazdy ──────────────────────────────────────────
       // Przejście do 'stopped' gdy auto prawie stoi (prędkość pozioma < 0.5 km/h)
       if (_horizSpeedKmh < 0.5) this._dirState = 'stopped';
       if (this._dirState === 'stopped') {
@@ -910,8 +908,8 @@ export class Car extends Entity {
       this._vehicle.setWheelFrictionSlip(3, fR);
     }
 
-    // Downforce aerodynamiczny — tylko na ziemi (w locie niepotrzebny)
-    if (!this._flyMode && this._horizSpeedKmh > 20) {
+    // Downforce aerodynamiczny przy większej prędkości pomaga utrzymać auto na drodze.
+    if (this._horizSpeedKmh > 20) {
       const vMs = this._horizSpeedKmh / 3.6;
       this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
     }
@@ -931,13 +929,13 @@ export class Car extends Entity {
       const rollSin  = 2 * (qS.w * qS.x + qS.y * qS.z);   // był błąd: − zamiast +
       const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
 
-      // Wykryj lot: średnia długość zawieszenia bliższa maksymalnej → brak kontaktu z ziemią
+      // Wykryj oderwanie od ziemi: średnia długość zawieszenia bliższa maksymalnej.
       const s0 = this._vehicle.wheelSuspensionLength(0);
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
       const suspAvg  = (s0 + s1 + s2 + s3) / 4;
-      const airborne = suspAvg > 0.32 && !this._flyMode;  // > 0.32 = koła w powietrzu
+      const airborne = suspAvg > 0.32;  // > 0.32 = koła w powietrzu
 
       const DAMP_XZ   = airborne ? 18000 : 4000;   // roll + pitch — silniejsze w powietrzu
       const DAMP_Y    = airborne ? 22000 : 1200;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
@@ -991,6 +989,8 @@ export class Car extends Entity {
     } else {
       this._flippedTimer = 0;
     }
+
+    this._recoverGroundStall(dt, Math.max(forwAmount, backAmount), onRoad || onSidewalk);
 
     // Krok vehicle controllera — musi być PO ustawieniu sił, PRZED world.step()
     // filterGroups 0x0001FFFD: promienie kół omijają grupę 2 (chassis innych aut).

@@ -162,6 +162,34 @@ export class AudioManager {
     src.start(now); src.stop(now + 0.09);
   }
 
+  playNPCScream() {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    const baseHz = 520 + Math.random() * 180;
+    osc.frequency.setValueAtTime(baseHz, now);
+    osc.frequency.linearRampToValueAtTime(baseHz * (1.18 + Math.random() * 0.14), now + 0.05);
+    osc.frequency.exponentialRampToValueAtTime(240 + Math.random() * 60, now + 0.30);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1400 + Math.random() * 500, now);
+    filter.Q.value = 1.1;
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.065 + Math.random() * 0.03, now + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.33);
+  }
+
   // ─── Silnik ───────────────────────────────────────────────────────────────
 
   /**

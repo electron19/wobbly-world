@@ -1410,10 +1410,13 @@ export class WorldBuilder {
 
     // ── Radiowozy policyjne ───────────────────────────────────────────────────
     const policeDefs = [
-      { x:  6, z:  -6, facing: Math.PI / 2 },   // przy komisariacie
-      { x: -6, z:  -6, facing: Math.PI / 2 },
-      { x: 35, z:  35, facing: 0 },
-      { x:-35, z: -35, facing: Math.PI },
+      // Stawiaj radiowozy bezpośrednio na pasach ruchu.
+      // Poprzednie pozycje trafiały w pobliże skrzyżowań albo poza jezdnię,
+      // przez co niektóre auta startowały w kolizji z otoczeniem i "źle jechały".
+      { x:   2, z: -18, facing:  0 },
+      { x:  -2, z: -26, facing:  Math.PI },
+      { x:  34, z:   2, facing: -Math.PI / 2 },
+      { x: -34, z:  -2, facing:  Math.PI / 2 },
     ];
     for (const { x, z, facing } of policeDefs) {
       const car = new Car(this.scene, 0xF5F5F5);  // biały lakier
