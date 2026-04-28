@@ -31,6 +31,8 @@ import { Car }                    from '../entities/Car.js';
 import { NPC }                    from '../entities/NPC.js';
 import { Dog, Cat }               from '../entities/Animal.js';
 import { UFO }                    from '../entities/UFO.js';
+import { Airplane }               from '../entities/Airplane.js';
+import { Helicopter }             from '../entities/Helicopter.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
 
@@ -51,6 +53,8 @@ export class WorldBuilder {
     this.ladders        = [];  // drabinki na dachy
     this.npcs           = [];  // NPC + animals — aktualizowane co klatkę przez Game.js
     this.ufos           = [];  // autonomiczne pojazdy latające
+    this.airplanes      = [];  // samoloty — do wsiadania
+    this.helicopters    = [];  // helikoptery — do wsiadania
     this._circles       = []; // exclusion circles — budynki, drzewa omijają je
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
@@ -80,6 +84,7 @@ export class WorldBuilder {
     this._addStreetLamps();
     this._addCars();
     this._addUFOs();
+    this._addAirplanes();
     this._addNPCs();
     this._addAnimals();
     this._addBoundaries();
@@ -1512,6 +1517,27 @@ export class WorldBuilder {
     for (const [x, z] of catSpots) {
       this.npcs.push(new Cat(this.scene, x, z, 8, obstacles));
     }
+  }
+
+  _addAirplanes() {
+    // ── Samoloty (do wsiadania) ─────────────────────────────────────────────
+    // Lotnisko na północy — otwarta przestrzeń między drogami
+    const plane1 = new Airplane(this.scene, 30, 2, -130);
+    plane1.facing = 0;
+    plane1.root.rotation.y = 0;
+    this.airplanes.push(plane1);
+
+    const plane2 = new Airplane(this.scene, -45, 2, 135);
+    plane2.facing = Math.PI;
+    plane2.root.rotation.y = Math.PI;
+    this.airplanes.push(plane2);
+
+    // ── Helikopter policyjny (czarno-biały) ─────────────────────────────────
+    // Parkuje przy komisariacie w centrum
+    const heli = new Helicopter(this.scene, 14, 2, -14);
+    heli.facing = -Math.PI / 4;
+    heli.root.rotation.y = heli.facing;
+    this.helicopters.push(heli);
   }
 
   _addUFOs() {
