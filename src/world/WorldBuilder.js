@@ -27,6 +27,7 @@ import { Ladder }                 from '../entities/Ladder.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
+import { Helipad }               from '../objects/Helipad.js';
 import { Car }                    from '../entities/Car.js';
 import { NPC }                    from '../entities/NPC.js';
 import { Dog, Cat }               from '../entities/Animal.js';
@@ -1539,8 +1540,8 @@ export class WorldBuilder {
     plane2.root.rotation.y = Math.PI;
     this.airplanes.push(plane2);
 
-    // ── Helikopter policyjny (czarno-biały) ─────────────────────────────────
-    // Parkuje na otwartym terenie przy głównej drodze (chodnik na wschód od centrum)
+    // ── Lądowisko + helikopter policyjny ────────────────────────────────────
+    new Helipad(this.scene, this.physics, this.vehiclePhysics).placeAt(24, 0, -8);
     const heli = new Helicopter(this.scene, 24, 1, -8);
     heli.facing = -Math.PI / 2;
     heli.root.rotation.y = heli.facing;
