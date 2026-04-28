@@ -23,12 +23,14 @@ import { TriOffice }             from '../objects/TriOffice.js';
 import { Church }                 from '../objects/Church.js';
 import { Warehouse }              from '../objects/Warehouse.js';
 import { PoppyFactory }           from '../objects/PoppyFactory.js';
+import { Ladder }                 from '../entities/Ladder.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
 import { Car }                    from '../entities/Car.js';
 import { NPC }                    from '../entities/NPC.js';
 import { Dog, Cat }               from '../entities/Animal.js';
+import { UFO }                    from '../entities/UFO.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
 
@@ -46,7 +48,9 @@ export class WorldBuilder {
     this.objects        = [];
     this.cars           = [];
     this.buildings      = [];  // domy z hasInterior=true — do interakcji E
+    this.ladders        = [];  // drabinki na dachy
     this.npcs           = [];  // NPC + animals — aktualizowane co klatkę przez Game.js
+    this.ufos           = [];  // autonomiczne pojazdy latające
     this._circles       = []; // exclusion circles — budynki, drzewa omijają je
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
@@ -70,10 +74,12 @@ export class WorldBuilder {
     this._addNewNorthEstate();
     this._addNewSouthEstate();
     this._addPoppyFactory();
+    this._addRoofLadders();
     this._addHills();
     this._addTrees();
     this._addStreetLamps();
     this._addCars();
+    this._addUFOs();
     this._addNPCs();
     this._addAnimals();
     this._addBoundaries();
@@ -81,6 +87,18 @@ export class WorldBuilder {
   }
 
   _add(obj) { this.objects.push(obj); return obj; }
+
+  /**
+   * Postaw drabinkę przemysłową i zarejestruj ją do interakcji E.
+   * @param {number} x, y, z   pozycja podstawy drabinki w świecie
+   * @param {number} height    wysokość drabinki
+   * @param {number} facingY   kierunek "na zewnątrz" (skąd gracz podchodzi)
+   */
+  _addLadder(x, y, z, height, facingY = 0) {
+    const lad = new Ladder(this.scene, x, y, z, height, facingY);
+    this.ladders.push(lad);
+    return lad;
+  }
 
   /** Zarejestruj okrąg wykluczenia (hw, hd = półwymiary prostokąta). */
   _regCircle(cx, cz, hw, hd, margin = 1.5) {
@@ -1002,9 +1020,20 @@ export class WorldBuilder {
   _addPoppyFactory() {
     const FW = -Math.PI / 2;
     this._regCircle(162, -125, 19, 12, 3.0);
-    this._add(new PoppyFactory(this.scene, this.physics, {
+    const factory = new PoppyFactory(this.scene, this.physics, {
       facing: FW,
-    }, this.vehiclePhysics).placeAt(162, 0, -125));
+    }, this.vehiclePhysics).placeAt(162, 0, -125);
+    this._add(factory);
+    this.buildings.push(factory);   // hasInterior=true → E wejście
+
+    // Drabinka na dach fabryki — po prawej stronie (local +X → world z=-106)
+    // Fabryka: x=162, z=-125, facing=FW=-π/2 → right wall at world z=-106
+    // facingY=0 → drabinka wskazuje na +Z (gracz podchodzi z zewnątrz z z>-106)
+    this._addLadder(162, 0, -106, 14, 0);
+
+    // Drabinka na dach z lewej strony fabryki (local -X → world z=-144)
+    // facingY=Math.PI → gracz podchodzi z z<-144 (od południa)
+    this._addLadder(162, 0, -144, 14, Math.PI);
   }
 
   // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────
@@ -1439,6 +1468,7 @@ export class WorldBuilder {
   // ─── NPC ─────────────────────────────────────────────────────────────────────
 
   _addNPCs() {
+    const obstacles = this._circles;
     // Centrum i okolice — chodniki, place, park
     const spots = [
       // centrum — główny plac
@@ -1455,13 +1485,14 @@ export class WorldBuilder {
        [-78,  12], [-92, -10], [-78, -30],
     ];
     for (const [x, z] of spots) {
-      this.npcs.push(new NPC(this.scene, x, z, 14));
+      this.npcs.push(new NPC(this.scene, x, z, 14, obstacles));
     }
   }
 
   // ─── Zwierzęta ────────────────────────────────────────────────────────────────
 
   _addAnimals() {
+    const obstacles = this._circles;
     // Pieski — przy domach w przedmieściach
     const dogSpots = [
       [ 22, 60], [-22, 60], [ 38, 78], [-40, 75],
@@ -1469,7 +1500,7 @@ export class WorldBuilder {
       [ 14,  30], [-18,  28],
     ];
     for (const [x, z] of dogSpots) {
-      this.npcs.push(new Dog(this.scene, x, z, 10));
+      this.npcs.push(new Dog(this.scene, x, z, 10, obstacles));
     }
 
     // Kotki — bardziej ukryte, blisko budynków
@@ -1479,8 +1510,68 @@ export class WorldBuilder {
       [ 72,   0], [-72,   0],
     ];
     for (const [x, z] of catSpots) {
-      this.npcs.push(new Cat(this.scene, x, z, 8));
+      this.npcs.push(new Cat(this.scene, x, z, 8, obstacles));
     }
+  }
+
+  _addUFOs() {
+    this.ufos.push(new UFO(this.scene, {
+      centerX: 0,
+      centerZ: 8,
+      radiusX: 124,
+      radiusZ: 82,
+      baseY: 36,
+      speed: 0.15,
+      phase: Math.PI * 0.15,
+    }));
+    this.ufos.push(new UFO(this.scene, {
+      centerX: 18,
+      centerZ: -26,
+      radiusX: 88,
+      radiusZ: 54,
+      baseY: 49,
+      speed: -0.19,
+      phase: Math.PI * 1.1,
+    }));
+    this.ufos.push(new UFO(this.scene, {
+      centerX: -42,
+      centerZ: 34,
+      radiusX: 156,
+      radiusZ: 104,
+      baseY: 63,
+      speed: 0.11,
+      phase: Math.PI * 0.58,
+    }));
+  }
+
+  // ─── Drabinki na dachy ───────────────────────────────────────────────────────
+  //
+  // Drabinki przy wieżowcach-blokach (TowerBlock, default d=14, back wall = d/2=7 od centrum).
+  //
+  // Konwencja facingY: kierunek "na zewnątrz" od ściany (skąd gracz podchodzi).
+  //   FW(-π/2) budynek → back ściany world +X → facingY = +π/2
+  //   FE(+π/2) budynek → back ściany world -X → facingY = -π/2
+
+  _addRoofLadders() {
+    const HPI = Math.PI / 2;
+
+    // ── Daleki wschód (x∈[135,185]) ──────────────────────────────────────────
+    // TowerBlock (150, 28, FW, h=38): back = x=150+7=157, z=28
+    this._addLadder(157, 0,  28, 38,  HPI);
+    // TowerBlock (168, 0, FW, h=44): back = x=168+7=175, z=0
+    this._addLadder(175, 0,   0, 44,  HPI);
+
+    // ── Daleki zachód (x∈[-185,-135]) ────────────────────────────────────────
+    // TowerBlock (-150, 28, FE, h=36): back = x=-150-7=-157, z=28
+    this._addLadder(-157, 0, 28, 36, -HPI);
+    // TowerBlock (-168, 0, FE, h=42): back = x=-168-7=-175, z=0
+    this._addLadder(-175, 0,  0, 42, -HPI);
+
+    // ── CBD (x=±82) ───────────────────────────────────────────────────────────
+    // TowerBlock (82, 26, FW, h=30): back = x=89, z=26
+    this._addLadder( 89, 0, 26, 30,  HPI);
+    // TowerBlock (-82, 26, FE, h=28): back = x=-89, z=26
+    this._addLadder(-89, 0, 26, 28, -HPI);
   }
 
   // ─── Granice ─────────────────────────────────────────────────────────────────
