@@ -2,15 +2,14 @@
 
 ## [v0.9.14] — 2026-04-28
 ### Added
-- `Ladder` i `UFO`: drabinki dachowe oraz latający obiekt z promieniem wpływu podpięte do `WorldBuilder` i pętli `Game`
+- `Ladder` i `UFO`: drabinki dachowe oraz 3 latające obiekty z promieniem wpływu podpięte do `WorldBuilder` i pętli `Game`
 - `PoppyFactory`: rozbudowana fabryka z wnętrzem i interakcją wejścia
-- Obrona NPC przed kolizją z przeszkodami: unikanie okręgów przeszkód i bezpieczniejszy wybór celu
+- NPC avoidance: unikanie okręgów przeszkód i bezpieczniejszy wybór celu podczas spaceru
 
 ### Fixed
-- `Car.update()`: naprawiony zakres `brakeForce`, który mógł zatrzymać pętlę gry po wejściu do auta
-- Wejście do auta z pada: krótka blokada hamulca ręcznego po zajęciu pojazdu, żeby `B` nie blokowało ruszania
-- `Game.js`: defensywna obsługa `ufo.getBeamInfluence()` — rozjazd między modułami nie zatrzymuje już klatki gry
-- README zsynchronizowany z aktualnym mapowaniem pada (`A` = interakcja, `B` = ręczny w aucie)
+- Interakcja `E` z klawiatury: lokalne kolejkowanie wejścia w `Game.js`, żeby wejście do auta / budynku / drabinki nie ginęło między klatkami lub cooldownami
+- Mapping pada rozdzielony: `A/Cross` = interakcja, `B/Circle` = hamulec ręczny w aucie
+- README zsynchronizowany z aktualnym sterowaniem, systemem UFO i aktualną listą encji
 
 ## [v0.9.13] — 2026-04-26
 ### Fixed
