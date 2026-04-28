@@ -19,6 +19,8 @@ const BUILDING_DIST     = 2.8;   // max odległość do drzwi budynku
 const LADDER_DIST       = 2.8;   // max odległość 3D do punktu podejścia drabinki
 const CAM_DIST_FOOT     = 8;     // dystans kamery pieszo
 const CAM_DIST_CAR      = 8.4;   // ciaśniejsza kamera w aucie = lepszy feeling prędkości
+const CAM_DIST_AIRCRAFT = 14;    // szersza kamera dla samolotu/helikoptera
+const AIRCRAFT_ENTER_DIST = 4.5; // zasięg wsiadania do samolotu/helikoptera
 
 /**
  * Główna klasa gry — orkiestrator.
@@ -52,8 +54,11 @@ export class Game {
     this.buildings      = [];
     this.npcs           = [];
     this.ufos           = [];
+    this.airplanes      = [];
+    this.helicopters    = [];
     this.audio          = new AudioManager();
     this._drivingCar    = null;
+    this._drivingAircraft = null;   // Airplane or Helicopter instance
     this._insideBuilding = null;
     this._playerFlyMode  = false;   // tryb latania gracza (G toggle)
     this._userFirstPerson = false;  // ręczny toggle kamery C / Select
@@ -136,6 +141,8 @@ export class Game {
     this.ladders       = wb.ladders;
     this.npcs          = wb.npcs;
     this.ufos          = wb.ufos;
+    this.airplanes     = wb.airplanes   ?? [];
+    this.helicopters   = wb.helicopters ?? [];
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -282,6 +289,63 @@ export class Game {
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
 
+  // ─── Interakcja z samolotem / helikopterem ───────────────────────────────
+
+  /** Znajdź najbliższy samolot lub helikopter w zasięgu AIRCRAFT_ENTER_DIST. */
+  _nearestAircraft() {
+    if (this._drivingCar) return null;
+    const pp = this.player.root.position;
+    let best = null, bestD = AIRCRAFT_ENTER_DIST;
+    for (const ac of [...this.airplanes, ...this.helicopters]) {
+      if (ac.isOccupied) continue;
+      const d = Math.hypot(
+        pp.x - ac.root.position.x,
+        pp.y - ac.root.position.y,
+        pp.z - ac.root.position.z,
+      );
+      if (d < bestD) { bestD = d; best = ac; }
+    }
+    return best;
+  }
+
+  _enterAircraft(ac) {
+    this._drivingAircraft = ac;
+    ac.isOccupied = true;
+    this.player.root.visible = false;
+    // Park player capsule above aircraft — avoid physics interference
+    const ap = ac.root.position;
+    this.player._body.setTranslation({ x: ap.x, y: ap.y + 6, z: ap.z }, false);
+    // Camera behind aircraft
+    this.camCtrl.yaw  = ac.facing + Math.PI;
+    this.camCtrl.dist = CAM_DIST_AIRCRAFT;
+    this._applyCameraMode();
+    this._interactCooldown = 20;
+    const isHeli = ac.type === 'helicopter';
+    this._uiEl.innerHTML = isHeli
+      ? 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; E – wysiądź'
+      : 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – ster &nbsp;|&nbsp; E – wysiądź';
+  }
+
+  _exitAircraft() {
+    const ac  = this._drivingAircraft;
+    const pos = ac.root.position;
+    // Drop player to the side at ground level
+    const sideX = pos.x + Math.cos(ac.facing) * 3.5;
+    const sideZ = pos.z - Math.sin(ac.facing) * 3.5;
+    this.player._body.setNextKinematicTranslation({
+      x: sideX, y: pos.y + 0.5, z: sideZ,
+    });
+    this.player.root.visible = true;
+    ac.resetFlightState?.();
+    ac.isOccupied          = false;
+    this._drivingAircraft  = null;
+    this._interactCooldown = 25;
+    this.camCtrl.dist = CAM_DIST_FOOT;
+    this._applyCameraMode();
+    this._uiEl.innerHTML =
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+  }
+
   // ─── Interakcja z autem ───────────────────────────────────────────────────
 
   /** Znajdź najbliższe auto w zasięgu ENTER_DIST (od krawędzi, nie centrum). */
@@ -399,8 +463,8 @@ export class Game {
     // Blokada po akcji (fart/burp) — zapobiega przypadkowemu wsiadaniu do auta
     if (this._actionCooldown   > 0) { this._actionCooldown   -= 1; return; }
 
-    // G — tryb latania gracza (toggle)
-    if (this.input.isJustPressed('KeyG') && !this._drivingCar) {
+    // G — tryb latania gracza (toggle) — zablokowany w pojeździe
+    if (this.input.isJustPressed('KeyG') && !this._drivingCar && !this._drivingAircraft) {
       this._playerFlyMode = !this._playerFlyMode;
       this.player.setFlyMode?.(this._playerFlyMode);
     }
@@ -415,17 +479,22 @@ export class Game {
 
     if (ePressed) {
       this._interactQueuedFrames = 0;
-      if (this._drivingCar) {
+      if (this._drivingAircraft) {
+        this._exitAircraft();
+      } else if (this._drivingCar) {
         this._exitCar();
       } else if (this._climbingLadder) {
         this._stopClimbing();   // odpuść drabinkę — gracz spada z bieżącej pozycji
       } else if (this._insideBuilding) {
         this._exitBuilding();
       } else {
+        const nearAC   = this._nearestAircraft();
         const nearCar  = this._nearestCar();
         const nearBldg = this._nearestBuilding();
         const nearLad  = this._nearestLadder();
-        if (nearCar) {
+        if (nearAC) {
+          this._enterAircraft(nearAC);
+        } else if (nearCar) {
           this._enterCar(nearCar);
         } else if (nearBldg) {
           this._enterBuilding(nearBldg);
@@ -437,7 +506,10 @@ export class Game {
 
     // Hint UI
     if (this._interactEl) {
-      if (this._drivingCar) {
+      if (this._drivingAircraft) {
+        this._interactEl.textContent = 'E — wysiądź';
+        this._interactEl.style.display = 'block';
+      } else if (this._drivingCar) {
         this._interactEl.textContent = 'E — wysiądź';
         this._interactEl.style.display = 'block';
       } else if (this._climbingLadder) {
@@ -447,10 +519,15 @@ export class Game {
         this._interactEl.textContent = 'E — wyjdź';
         this._interactEl.style.display = 'block';
       } else {
+        const nearAC   = this._nearestAircraft();
         const nearCar  = this._nearestCar();
         const nearBldg = this._nearestBuilding();
         const nearLad  = this._nearestLadder();
-        if (nearCar) {
+        if (nearAC) {
+          const label = nearAC.type === 'helicopter' ? 'E — wsiądź (helikopter)' : 'E — wsiądź (samolot)';
+          this._interactEl.textContent = label;
+          this._interactEl.style.display = 'block';
+        } else if (nearCar) {
           this._interactEl.textContent = 'E — wsiądź';
           this._interactEl.style.display = 'block';
         } else if (nearBldg) {
@@ -485,15 +562,25 @@ export class Game {
     // Widoczność gracza — synchronizuj co klatkę ze stanem gry.
     // Gracz niewidoczny gdy: w aucie LUB w budynku (FPP).
     // To eliminuje wszelkie race-conditions z `visible` ustawianym w callbackach.
-    this.player.root.visible = !this._drivingCar && !this._insideBuilding && !this._userFirstPerson;
+    this.player.root.visible = !this._drivingCar && !this._drivingAircraft && !this._insideBuilding && !this._userFirstPerson;
 
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
 
     for (const ufo of this.ufos) ufo.update(dt);
 
+    // ── Aircraft update (kinematic — no Rapier) ───────────────────────────
+    for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
+    for (const ac of this.helicopters) ac.update(dt, this.input);
+
     // ── 1. Wejście → Rapier vehicle controller (siły pojazdu + updateVehicle) ──
-    if (this._drivingCar) {
+    if (this._drivingAircraft) {
+      // Keep player capsule above aircraft so it doesn't interfere with physics
+      const ap = this._drivingAircraft.root.position;
+      this.player._body.setNextKinematicTranslation({
+        x: ap.x, y: ap.y + 6, z: ap.z,
+      });
+    } else if (this._drivingCar) {
       if (this._drivingCar.isDrivable) {
         this._drivingCar.update(dt, this.input, this.audio);
       } else {
@@ -511,7 +598,9 @@ export class Game {
     for (const lamp of this._knockableLamps) lamp.update(dt);
 
     // ── 3. Krok Rapier — auto + gracz + świat w jednym symulatorze ───────
-    if (this._drivingCar) {
+    if (this._drivingAircraft) {
+      // player capsule already teleported above aircraft in block above — nothing more to do
+    } else if (this._drivingCar) {
       // Gracz niewidoczny — ustaw capsule NAD autem (nie w środku chassis),
       // żeby kinematic body nie generowało sił na dynamic chassis i auto nie latało.
       // cp.y + 0.7 trafiał w chassis box (center y≈0.75, ±0.45) → penetracja.
@@ -635,24 +724,25 @@ export class Game {
     }
 
     // ── Sky / Weather / Season ───────────────────────────────────────────
-    const worldRef = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+    const worldRef = this._drivingAircraft
+      ? this._drivingAircraft.root.position
+      : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
     this._seasons.update(dt);
     this._sky.update(dt, worldRef, this._seasons);
     this._weather.update(dt, worldRef, this._sky, this._seasons.isWinter);
 
     // ── 5. Kamera + render ────────────────────────────────────────────────
-    const followPos = this._drivingCar
-      ? this._drivingCar.root.position
-      : this.player.root.position;
-    const autoFacing = this._drivingCar
-      ? this._drivingCar.facing
-      : this.player.facing;
+    const followPos = this._drivingAircraft
+      ? this._drivingAircraft.root.position
+      : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+    const autoFacing = this._drivingAircraft
+      ? this._drivingAircraft.facing
+      : this._drivingCar ? this._drivingCar.facing : this.player.facing;
 
     // Camera shake — przy uderzeniu pojazdu
     if (this._drivingCar) {
       const iv = this._drivingCar.impactVel;
       if (iv > 4) {
-        // trauma 0..0.85; pełny shake dopiero przy vel ≥ 20 m/s
         this.camCtrl.addTrauma(Math.min(0.85, (iv - 4) / 16));
       }
     }
@@ -669,7 +759,13 @@ export class Game {
     );
 
     // ── Dynamic FOV — poczucie prędkości ────────────────────────────────────
-    if (this._drivingCar) {
+    if (this._drivingAircraft?.type === 'airplane') {
+      const spd = Math.abs(this._drivingAircraft._speed ?? 0);
+      const sf  = Math.min(1, spd / 28);
+      const targetFov = 72 + sf * 20;   // 72 (stoi) → 92 (pełna prędkość)
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 3.5));
+      this.camera3.updateProjectionMatrix();
+    } else if (this._drivingCar) {
       const spd = Math.abs(this._drivingCar.speedKmh ?? 0);
       const sf = Math.min(1, spd / 140);
       const targetFov = 72 + sf * 26;   // 72 (spoczynek) → 98 (≈140 km/h)
@@ -685,8 +781,12 @@ export class Game {
 
     // ── Minimap ───────────────────────────────────────────────────────────────
     if (this._minimap && !this._insideBuilding) {
-      const mapPos    = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
-      const mapFacing = this._drivingCar ? this._drivingCar.facing       : this.player.facing;
+      const mapPos    = this._drivingAircraft
+        ? this._drivingAircraft.root.position
+        : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+      const mapFacing = this._drivingAircraft
+        ? this._drivingAircraft.facing
+        : this._drivingCar ? this._drivingCar.facing : this.player.facing;
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
     }
 
@@ -699,12 +799,14 @@ export class Game {
         this._fpsFrames  = 0;
         this._fpsSec     = 0;
       }
-      const pos = this._drivingCar
-        ? this._drivingCar.root.position
-        : this.player.root.position;
+      const pos = this._drivingAircraft
+        ? this._drivingAircraft.root.position
+        : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
       const spd = this._drivingCar
         ? `${Math.abs(Math.round(this._drivingCar.speedKmh ?? 0))} km/h`
-        : '';
+        : this._drivingAircraft?.type === 'airplane'
+          ? `${Math.abs(Math.round((this._drivingAircraft._speed ?? 0) * 3.6))} km/h`
+          : '';
       this._debugEl.innerHTML =
         `FPS: ${this._fpsDisplay}<br>` +
         `X: ${pos.x.toFixed(1)}&nbsp; Y: ${pos.y.toFixed(1)}&nbsp; Z: ${pos.z.toFixed(1)}` +
