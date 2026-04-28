@@ -906,7 +906,6 @@ export class Car extends Entity {
       this._vehicle.setWheelFrictionSlip(1, effBase);
       this._vehicle.setWheelFrictionSlip(2, fR);
       this._vehicle.setWheelFrictionSlip(3, fR);
-    }
 
     // Downforce aerodynamiczny przy większej prędkości pomaga utrzymać auto na drodze.
     if (this._horizSpeedKmh > 20) {
