@@ -110,6 +110,23 @@ export class UFO {
     column.position.set(0, -0.05, 0);
     this.root.add(column);
 
+    this._cargo = new THREE.Group();
+    this._cargo.visible = false;
+    const cargoBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.18, 0.32, 4, 8),
+      toonMat(0xF6E08E),
+    );
+    cargoBody.rotation.z = Math.PI / 2;
+    this._cargo.add(cargoBody);
+    const cargoHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.15, 8, 7),
+      toonMat(0xFFE8B3),
+    );
+    cargoHead.position.set(0, 0.21, 0.02);
+    this._cargo.add(cargoHead);
+    this._cargo.position.set(0, 0.38, -0.04);
+    this.root.add(this._cargo);
+
     this._beam = new THREE.Mesh(
       new THREE.ConeGeometry(2.7, 10, 32, 1, true),
       glowMat,
@@ -148,7 +165,7 @@ export class UFO {
     }
   }
 
-  update(dt, abductables = []) {
+  update(dt, abductables = [], audio = null) {
     this._t += dt * this._speed;
 
     if (this._state === 'orbit') {
@@ -158,7 +175,7 @@ export class UFO {
       this._updateCaptureState(dt);
     }
 
-    this._updateVisuals();
+    this._updateVisuals(audio);
   }
 
   _updateOrbit() {
@@ -190,6 +207,7 @@ export class UFO {
       if (!target.startAbduction?.(this)) continue;
       this._target = target;
       this._state = 'lowering';
+      this._cargo.visible = false;
       return;
     }
   }
@@ -238,6 +256,7 @@ export class UFO {
         this._target.finishAbduction?.();
         this._target = null;
         this._carryPose = null;
+        this._cargo.visible = true;
         this._state = 'departing';
         this._departTimer = 4.5;
         this._departDir.set(Math.sin(this.root.rotation.y), 0.12, Math.cos(this.root.rotation.y)).normalize();
@@ -254,13 +273,15 @@ export class UFO {
       this._beamStrength = 0.3;
       this._beamHeight = 12;
       if (this._departTimer <= 0) {
+        this._cargo.visible = false;
         this._state = 'orbit';
       }
     }
   }
 
-  _updateVisuals() {
+  _updateVisuals(audio) {
     const beamActive = this._state === 'lowering' || this._state === 'lifting';
+    if (beamActive) audio?.startUFOBeam?.(); else audio?.stopUFOBeam?.();
     const beamPulse = beamActive
       ? 0.42 + (Math.sin(this._t * 9.0) * 0.5 + 0.5) * 0.22
       : 0.18 + (Math.sin(this._t * 5.4) * 0.5 + 0.5) * 0.12;
@@ -270,6 +291,10 @@ export class UFO {
     this._beam.scale.z = beamActive ? 1.00 : 0.74 + Math.cos(this._t * 2.8) * 0.08;
     this._beam.scale.y = this._beamHeight / 10;
     this._beam.position.y = -(this._beamHeight * 0.5) + 0.1;
+    if (this._cargo.visible) {
+      this._cargo.rotation.y += 0.03;
+      this._cargo.position.y = 0.38 + Math.sin(this._t * 5.4) * 0.08;
+    }
 
     for (let i = 0; i < this._lights.length; i++) {
       const blink = Math.sin(this._t * (beamActive ? 15 : 8) + i * 0.75) > 0;

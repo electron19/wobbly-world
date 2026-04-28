@@ -71,6 +71,12 @@ export class AudioManager {
     this._hornGain    = null;
     this._hornRunning = false;
 
+    // ── UFO beam ──
+    this._ufoBeamOsc = null;
+    this._ufoBeamLfo = null;
+    this._ufoBeamGain = null;
+    this._ufoBeamRunning = false;
+
     // ── kroki ──
     this._lastFootFloor = 0;
   }
@@ -188,6 +194,56 @@ export class AudioManager {
     gain.connect(ctx.destination);
     osc.start(now);
     osc.stop(now + 0.33);
+  }
+
+  startUFOBeam() {
+    if (this._ufoBeamRunning) return;
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+
+    this._ufoBeamOsc = ctx.createOscillator();
+    this._ufoBeamOsc.type = 'sawtooth';
+    this._ufoBeamOsc.frequency.setValueAtTime(122, now);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(540, now);
+    filter.Q.value = 2.8;
+
+    this._ufoBeamGain = ctx.createGain();
+    this._ufoBeamGain.gain.setValueAtTime(0.001, now);
+    this._ufoBeamGain.gain.linearRampToValueAtTime(0.05, now + 0.10);
+
+    this._ufoBeamLfo = ctx.createOscillator();
+    this._ufoBeamLfo.type = 'sine';
+    this._ufoBeamLfo.frequency.setValueAtTime(7.5, now);
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 24;
+    this._ufoBeamLfo.connect(lfoGain);
+    lfoGain.connect(this._ufoBeamOsc.frequency);
+
+    this._ufoBeamOsc.connect(filter);
+    filter.connect(this._ufoBeamGain);
+    this._ufoBeamGain.connect(ctx.destination);
+    this._ufoBeamOsc.start(now);
+    this._ufoBeamLfo.start(now);
+    this._ufoBeamRunning = true;
+  }
+
+  stopUFOBeam() {
+    if (!this._ufoBeamRunning || !this._ufoBeamGain) return;
+    const now = this._ctx.currentTime;
+    this._ufoBeamGain.gain.setTargetAtTime(0.001, now, 0.10);
+    const osc = this._ufoBeamOsc;
+    const lfo = this._ufoBeamLfo;
+    setTimeout(() => {
+      try { osc?.stop(); } catch (_) {}
+      try { lfo?.stop(); } catch (_) {}
+    }, 350);
+    this._ufoBeamOsc = null;
+    this._ufoBeamLfo = null;
+    this._ufoBeamGain = null;
+    this._ufoBeamRunning = false;
   }
 
   // ─── Silnik ───────────────────────────────────────────────────────────────

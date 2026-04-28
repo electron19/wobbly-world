@@ -567,7 +567,7 @@ export class Game {
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
 
-    for (const ufo of this.ufos) ufo.update(dt, this.npcs);
+    for (const ufo of this.ufos) ufo.update(dt, this.npcs, this.audio);
 
     // ── Aircraft update (kinematic — no Rapier) ───────────────────────────
     for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
