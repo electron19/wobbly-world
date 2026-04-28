@@ -335,10 +335,12 @@ export class Helicopter {
     if (this._mainRotorGroup) this._mainRotorGroup.rotation.y -= dt * mainSpeed;
     if (this._tailRotorGroup) this._tailRotorGroup.rotation.x += dt * tailSpeed;
 
-    // Police light flash
-    const flash = Math.floor(performance.now() / 160) % 2 === 0;
-    this._policeLightsRed.forEach(l  => l.material.color.setHex(flash ? 0xFF1111 : 0x330000));
-    this._policeLightsBlue.forEach(l => l.material.color.setHex(flash ? 0x2255FF : 0x000822));
+    // Police lights — alternating red / blue (each side independently)
+    const phase = Math.floor(performance.now() / 160) % 2;   // 0 or 1, ~6 Hz
+    const redOn  = phase === 0;
+    const blueOn = phase === 1;
+    this._policeLightsRed.forEach(l  => l.material.color.setHex(redOn  ? 0xFF1111 : 0x1A0000));
+    this._policeLightsBlue.forEach(l => l.material.color.setHex(blueOn ? 0x2255FF : 0x00051A));
 
     // Searchlight glow — only when occupied
     if (this._searchlightCone) {

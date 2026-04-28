@@ -34,7 +34,9 @@ function rpmToHz(rpm) {
 
 export class AudioManager {
   constructor() {
-    this._ctx = null;
+    this._ctx         = null;
+    this._masterGain  = null;
+    this._volume      = 0.82;
 
     // ── silnik ──
     this._engineOsc1    = null;   // piłkowy — fundamental
@@ -83,8 +85,18 @@ export class AudioManager {
 
   // ─── Kontekst ─────────────────────────────────────────────────────────────
 
+  setVolume(v) {
+    this._volume = Math.max(0, Math.min(1, v));
+    if (this._masterGain) this._masterGain.gain.value = this._volume;
+  }
+
   _ensureCtx() {
-    if (!this._ctx) this._ctx = new AudioContext();
+    if (!this._ctx) {
+      this._ctx = new AudioContext();
+      this._masterGain = this._ctx.createGain();
+      this._masterGain.gain.value = this._volume;
+      this._masterGain.connect(this._ctx.destination);
+    }
     if (this._ctx.state === 'suspended') this._ctx.resume();
     return this._ctx;
   }
@@ -123,7 +135,7 @@ export class AudioManager {
     g.gain.setValueAtTime(onRoad ? 0.22 : 0.15, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + (onRoad ? 0.09 : 0.17));
 
-    src.connect(f); f.connect(g); g.connect(ctx.destination);
+    src.connect(f); f.connect(g); g.connect(this._masterGain);
     src.start(now);
     src.stop(now + (onRoad ? 0.09 : 0.18));
   }
@@ -140,7 +152,7 @@ export class AudioManager {
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.12, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
-    osc.connect(g); g.connect(ctx.destination);
+    osc.connect(g); g.connect(this._masterGain);
     osc.start(now); osc.stop(now + 0.15);
   }
 
@@ -155,7 +167,7 @@ export class AudioManager {
     const og = ctx.createGain();
     og.gain.setValueAtTime(0.28, now);
     og.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    osc.connect(og); og.connect(ctx.destination);
+    osc.connect(og); og.connect(this._masterGain);
     osc.start(now); osc.stop(now + 0.13);
 
     const buf = this._makeNoise(0.09);
@@ -164,7 +176,7 @@ export class AudioManager {
     const ng = ctx.createGain();
     ng.gain.setValueAtTime(0.20, now);
     ng.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
-    src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+    src.connect(f); f.connect(ng); ng.connect(this._masterGain);
     src.start(now); src.stop(now + 0.09);
   }
 
@@ -191,7 +203,7 @@ export class AudioManager {
 
     osc.connect(filter);
     filter.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this._masterGain);
     osc.start(now);
     osc.stop(now + 0.33);
   }
@@ -224,7 +236,7 @@ export class AudioManager {
 
     this._ufoBeamOsc.connect(filter);
     filter.connect(this._ufoBeamGain);
-    this._ufoBeamGain.connect(ctx.destination);
+    this._ufoBeamGain.connect(this._masterGain);
     this._ufoBeamOsc.start(now);
     this._ufoBeamLfo.start(now);
     this._ufoBeamRunning = true;
@@ -276,7 +288,7 @@ export class AudioManager {
 
     starterOsc.connect(starterF);
     starterF.connect(starterG);
-    starterG.connect(ctx.destination);
+    starterG.connect(this._masterGain);
     starterOsc.start(now);
     starterOsc.stop(now + 0.46);
 
@@ -293,7 +305,7 @@ export class AudioManager {
     catchG.gain.exponentialRampToValueAtTime(0.001, now + 0.65);
 
     catchOsc.connect(catchG);
-    catchG.connect(ctx.destination);
+    catchG.connect(this._masterGain);
     catchOsc.start(now + 0.40);
     catchOsc.stop(now + 0.65);
 
@@ -309,7 +321,7 @@ export class AudioManager {
     flareG.gain.exponentialRampToValueAtTime(0.001, now + 1.05);
 
     flareOsc.connect(flareG);
-    flareG.connect(ctx.destination);
+    flareG.connect(this._masterGain);
     flareOsc.start(now + 0.64);
     flareOsc.stop(now + 1.05);
 
@@ -374,7 +386,7 @@ export class AudioManager {
     osc1Gain.connect(this._engineGain);
     osc2Gain.connect(this._engineGain);
     noiseGain.connect(this._engineGain);
-    this._engineGain.connect(ctx.destination);
+    this._engineGain.connect(this._masterGain);
 
     this._engineOsc1.start();
     this._engineOsc2.start();
@@ -477,7 +489,7 @@ export class AudioManager {
 
     this._tireNoise.connect(this._tireFilter);
     this._tireFilter.connect(this._tireGain);
-    this._tireGain.connect(ctx.destination);
+    this._tireGain.connect(this._masterGain);
     this._tireNoise.start();
     this._tireRunning = true;
     this._tireOnRoad  = true;
@@ -562,7 +574,7 @@ export class AudioManager {
     this._skidGain = ctx.createGain();
     this._skidGain.gain.setValueAtTime(0.001, now);
     this._skidGain.gain.linearRampToValueAtTime(onRoad ? 0.32 : 0.14, now + 0.10);
-    this._skidGain.connect(ctx.destination);
+    this._skidGain.connect(this._masterGain);
 
     const makeNoiseSrc = () => {
       const buf = ctx.createBuffer(1, rate * 2, rate);
@@ -674,7 +686,7 @@ export class AudioManager {
     this._hornGain.gain.linearRampToValueAtTime(0.38, now + 0.06);
     this._hornOsc.connect(this._hornF);
     this._hornF.connect(this._hornGain);
-    this._hornGain.connect(ctx.destination);
+    this._hornGain.connect(this._masterGain);
     this._hornOsc.start(now);
     this._hornRunning = true;
   }
@@ -717,7 +729,7 @@ export class AudioManager {
     g.gain.linearRampToValueAtTime(0.22 * intensity, now + 0.05);
     g.gain.exponentialRampToValueAtTime(0.001, now + 0.40);
 
-    osc.connect(f); f.connect(g); g.connect(ctx.destination);
+    osc.connect(f); f.connect(g); g.connect(this._masterGain);
     osc.start(now); osc.stop(now + 0.40);
   }
 
@@ -743,7 +755,7 @@ export class AudioManager {
       const og = ctx.createGain();
       og.gain.setValueAtTime(0.35 * vol, now);
       og.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-      osc.connect(og); og.connect(ctx.destination);
+      osc.connect(og); og.connect(this._masterGain);
       osc.start(now); osc.stop(now + 0.18);
 
       const buf = this._makeNoise(0.12);
@@ -753,7 +765,7 @@ export class AudioManager {
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.20 * vol, now);
       ng.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-      src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+      src.connect(f); f.connect(ng); ng.connect(this._masterGain);
       src.start(now); src.stop(now + 0.12);
 
     } else if (material === 'wood') {
@@ -765,7 +777,7 @@ export class AudioManager {
       const og = ctx.createGain();
       og.gain.setValueAtTime(0.28 * vol, now);
       og.gain.exponentialRampToValueAtTime(0.001, now + 0.10);
-      osc.connect(og); og.connect(ctx.destination);
+      osc.connect(og); og.connect(this._masterGain);
       osc.start(now); osc.stop(now + 0.10);
 
       // Drżenie gałęzi — szum długi
@@ -776,7 +788,7 @@ export class AudioManager {
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.14 * vol, now);
       ng.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-      src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+      src.connect(f); f.connect(ng); ng.connect(this._masterGain);
       src.start(now); src.stop(now + 0.22);
 
     } else if (material === 'metal') {
@@ -788,7 +800,7 @@ export class AudioManager {
       const og = ctx.createGain();
       og.gain.setValueAtTime(0.22 * vol, now);
       og.gain.exponentialRampToValueAtTime(0.001, now + 0.50);  // długi zanik — metaliczny
-      osc.connect(og); og.connect(ctx.destination);
+      osc.connect(og); og.connect(this._masterGain);
       osc.start(now); osc.stop(now + 0.50);
 
       // Szum zderzenia
@@ -798,7 +810,7 @@ export class AudioManager {
       const ng = ctx.createGain();
       ng.gain.setValueAtTime(0.18 * vol, now);
       ng.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-      src.connect(f); f.connect(ng); ng.connect(ctx.destination);
+      src.connect(f); f.connect(ng); ng.connect(this._masterGain);
       src.start(now); src.stop(now + 0.07);
     }
   }
@@ -843,10 +855,10 @@ export class AudioManager {
     const cg = ctx.createGain();
     cg.gain.setValueAtTime(1.2, now + dur * 0.8);
     cg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.05);
-    click.connect(cg); cg.connect(ctx.destination);
+    click.connect(cg); cg.connect(this._masterGain);
     click.start(now + dur * 0.8); click.stop(now + dur + 0.06);
 
-    src.connect(bp); bp.connect(gain); gain.connect(ctx.destination);
+    src.connect(bp); bp.connect(gain); gain.connect(this._masterGain);
     lfo.start(now); lfo.stop(now + dur);
     src.start(now); src.stop(now + dur + 0.05);
   }
@@ -872,7 +884,7 @@ export class AudioManager {
     gain.gain.setValueAtTime(0.45, now);
     gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
 
-    osc.connect(lp); lp.connect(gain); gain.connect(ctx.destination);
+    osc.connect(lp); lp.connect(gain); gain.connect(this._masterGain);
     osc.start(now); osc.stop(now + dur + 0.05);
   }
 
@@ -899,7 +911,7 @@ export class AudioManager {
 
     noiseSrc.connect(bp);
     bp.connect(gain);
-    gain.connect(ctx.destination);
+    gain.connect(this._masterGain);
     noiseSrc.start(now);
     noiseSrc.stop(now + dur + 0.05);
   }

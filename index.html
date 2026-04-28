@@ -6,16 +6,22 @@
   <title>Wobbly World 🏘️</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>🏘️</text></svg>">
   <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────────── */
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { overflow: hidden; background: #5BA8E5; }
+    body { overflow: hidden; background: #5BA8E5; font-family: Arial, sans-serif; }
+
+    /* ── Loading screen ───────────────────────────────────────────────────── */
     #loading {
       position: fixed; inset: 0; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 12px;
       background: #5BA8E5; color: white;
       font: bold 28px 'Arial Rounded MT Bold', Arial, sans-serif;
-      z-index: 100; transition: opacity 0.6s;
+      z-index: 200; transition: opacity 0.6s;
     }
     #loading p { font-size: 14px; opacity: 0.75; font-weight: normal; }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+
+    /* ── Game HUD ─────────────────────────────────────────────────────────── */
     #ui {
       position: fixed; bottom: 20px; left: 50%;
       transform: translateX(-50%);
@@ -54,13 +60,161 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.8);
       pointer-events: none; user-select: none; display: none;
     }
+
+    /* ── Main Menu ────────────────────────────────────────────────────────── */
+    #mw-root {
+      position: fixed; inset: 0; z-index: 150;
+      display: flex; align-items: center; justify-content: center;
+    }
+    #mw-root[hidden] { display: none; }
+
+    .mw-overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(135deg, #1a1a3e 0%, #0d2137 60%, #1a1a3e 100%);
+      opacity: 0.93;
+    }
+
+    .mw-panel {
+      position: relative; z-index: 1;
+      background: #1e2235;
+      border: 2px solid rgba(255,255,255,0.08);
+      border-radius: 20px;
+      width: min(480px, 96vw);
+      max-height: 96vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+      color: #eee;
+    }
+
+    .mw-header {
+      padding: 28px 28px 12px;
+      text-align: center;
+    }
+    .mw-title {
+      font-size: 26px; font-weight: 900;
+      letter-spacing: -0.5px;
+      color: #fff;
+      text-shadow: 0 2px 12px rgba(91,168,229,0.6);
+    }
+
+    /* ── Tabs ─────────────────────────────────────────────────────────────── */
+    .mw-tabs {
+      display: flex; gap: 4px;
+      padding: 0 20px 0;
+      border-bottom: 2px solid rgba(255,255,255,0.07);
+    }
+    .mw-tab {
+      flex: 1; padding: 10px 6px; border: none;
+      background: none; color: rgba(255,255,255,0.45);
+      font: bold 13px Arial; cursor: pointer;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: color .15s, border-color .15s;
+      border-radius: 6px 6px 0 0;
+    }
+    .mw-tab:hover  { color: rgba(255,255,255,0.75); }
+    .mw-tab.active { color: #5BA8E5; border-bottom-color: #5BA8E5; }
+
+    /* ── Tab content ──────────────────────────────────────────────────────── */
+    .mw-content { display: none; padding: 22px 24px 24px; }
+    .mw-content.active { display: block; }
+
+    .mw-section-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; color: rgba(255,255,255,0.35);
+      margin: 18px 0 10px;
+    }
+    .mw-section-title:first-child { margin-top: 0; }
+
+    /* ── Character grid ───────────────────────────────────────────────────── */
+    .mw-char-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      margin-bottom: 20px;
+    }
+    .mw-char-card {
+      background: rgba(255,255,255,0.05);
+      border: 2px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 18px 12px 14px;
+      cursor: pointer; text-align: center;
+      transition: transform .12s, border-color .12s, background .12s;
+      color: #eee;
+    }
+    .mw-char-card:hover  { transform: translateY(-2px); background: rgba(255,255,255,0.09); }
+    .mw-char-card.selected {
+      border-color: #5BA8E5;
+      background: rgba(91,168,229,0.12);
+      box-shadow: 0 0 0 3px rgba(91,168,229,0.18);
+    }
+    .mw-char-emoji { font-size: 42px; margin-bottom: 8px; }
+    .mw-char-name  { font: bold 15px Arial; color: #fff; }
+    .mw-char-desc  { font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 3px; }
+
+    /* ── Start button ─────────────────────────────────────────────────────── */
+    .mw-btn-start {
+      display: block; width: 100%;
+      padding: 14px; border: none; border-radius: 12px;
+      background: linear-gradient(135deg, #4FC3F7, #1E88E5);
+      color: white; font: bold 17px Arial; cursor: pointer;
+      box-shadow: 0 6px 20px rgba(30,136,229,0.45);
+      transition: transform .1s, box-shadow .1s;
+    }
+    .mw-btn-start:hover  { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(30,136,229,0.55); }
+    .mw-btn-start:active { transform: translateY(0); }
+    .mw-btn-start.small  { width: auto; padding: 10px 22px; font-size: 14px; margin-left: auto; }
+
+    /* ── Settings rows ────────────────────────────────────────────────────── */
+    .mw-row {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 12px;
+    }
+    .mw-row label {
+      flex: 0 0 auto; min-width: 200px;
+      font-size: 13px; color: rgba(255,255,255,0.75);
+    }
+    .mw-row input[type="range"] {
+      flex: 1; accent-color: #5BA8E5;
+    }
+    .mw-row select {
+      flex: 1; background: #2a2f47; border: 1px solid rgba(255,255,255,0.12);
+      color: #eee; padding: 7px 10px; border-radius: 8px; font-size: 13px;
+    }
+    .mw-val { min-width: 36px; text-align: right; font: bold 13px Arial; color: #5BA8E5; }
+
+    .mw-settings-footer {
+      display: flex; align-items: center; gap: 12px; margin-top: 24px;
+    }
+    .mw-btn-reset {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.55); padding: 9px 18px; border-radius: 8px;
+      font-size: 13px; cursor: pointer; transition: background .12s;
+    }
+    .mw-btn-reset:hover { background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.80); }
+
+    /* ── Credits ──────────────────────────────────────────────────────────── */
+    .mw-credits-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;
+    }
+    .mw-credit-card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding: 22px 14px 18px;
+      text-align: center;
+    }
+    .mw-credit-avatar { font-size: 42px; margin-bottom: 10px; }
+    .mw-credit-name   { font: bold 18px Arial; color: #fff; }
+    .mw-credit-role   { font-size: 12px; color: rgba(255,255,255,0.45); margin-top: 4px; }
+
+    .mw-credits-note {
+      text-align: center; font-size: 13px;
+      color: rgba(255,255,255,0.35); padding-bottom: 4px;
+    }
   </style>
 </head>
 <body>
 
 <div id="loading">
   🏘️ Wobbly World
-  <p>Ładowanie fizyki...</p>
+  <p>Ładowanie...</p>
 </div>
 <div id="ui">WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; Mysz – kamera (kliknij ekran)</div>
 <div id="hint">🖱️ Kliknij by sterować kamerą</div>
@@ -71,9 +225,9 @@
 <script type="importmap">
 {
   "imports": {
-    "three":       "./lib/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
-    "seedrandom":  "https://esm.sh/seedrandom@3.0.5"
+    "three":          "./lib/three.module.js",
+    "three/addons/":  "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
+    "seedrandom":     "https://esm.sh/seedrandom@3.0.5"
   }
 }
 </script>

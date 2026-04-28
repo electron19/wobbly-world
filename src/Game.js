@@ -3,6 +3,7 @@ import { initRapier, PhysicsWorld } from './core/Physics.js';
 import { VehiclePhysics }           from './core/VehiclePhysics.js';
 import { InputManager }             from './core/InputManager.js';
 import { ThirdPersonCamera }        from './core/Camera.js';
+import { Player }                   from './entities/Player.js';
 import { PlayerMichaelMyers }       from './entities/PlayerMichaelMyers.js';
 import { WorldBuilder }             from './world/WorldBuilder.js';
 import { SEED }                     from './core/RNG.js';
@@ -12,6 +13,19 @@ import { Minimap }                  from './ui/Minimap.js';
 import { SkySystem }                from './world/SkySystem.js';
 import { WeatherSystem }            from './world/WeatherSystem.js';
 import { SeasonSystem }             from './world/SeasonSystem.js';
+import { DEFAULT_SETTINGS }        from './ui/MainMenu.js';
+
+// ── Render/quality presets ────────────────────────────────────────────────────
+const RENDER_PRESETS = {
+  near:   { fog: 0.025, cull: 55,  far: 110 },
+  medium: { fog: 0.008, cull: 85,  far: 180 },
+  far:    { fog: 0.003, cull: 140, far: 300 },
+};
+const QUALITY_PRESETS = {
+  low:    { shadows: false, shadowType: THREE.BasicShadowMap,   pixelRatio: 1.0 },
+  medium: { shadows: true,  shadowType: THREE.PCFShadowMap,     pixelRatio: 1.5 },
+  high:   { shadows: true,  shadowType: THREE.PCFSoftShadowMap, pixelRatio: Math.min(devicePixelRatio, 2) },
+};
 
 const PLAYER_SPAWN      = { x: 0, y: 1.5, z: 34 };
 const ENTER_DIST        = 2.2;   // max odległość od krawędzi auta do wejścia
@@ -102,24 +116,28 @@ export class Game {
     this._applyCameraMode();
   }
 
-  async init() {
+  async init(settings = DEFAULT_SETTINGS) {
+    this._initSettings = settings;
     // ─── 1. Fizyka ─────────────────────────────────────────────────────────
     await initRapier();
     this.physics        = new PhysicsWorld();
     this.vehiclePhysics = new VehiclePhysics();
 
     // ─── 2. Renderer + scena ───────────────────────────────────────────────
+    const rp = RENDER_PRESETS[settings.renderDistance]  ?? RENDER_PRESETS.medium;
+    const qp = QUALITY_PRESETS[settings.graphicsQuality] ?? QUALITY_PRESETS.high;
+    this._cullDist = rp.cull;
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7EC8F5);
-    // Gęstość mgły: 0.008 = widok ~100j — ukrywa odległe obiekty, poprawia wydajność
-    this.scene.fog = new THREE.FogExp2(0x7EC8F5, 0.008);
+    this.scene.fog = new THREE.FogExp2(0x7EC8F5, rp.fog);
 
-    this.camera3 = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, 110);
+    this.camera3 = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.1, rp.far);
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));  // max 1.5 zamiast 2
+    this.renderer.setPixelRatio(qp.pixelRatio);
     this.renderer.setSize(innerWidth, innerHeight);
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;  // gładkie krawędzie cieni
+    this.renderer.shadowMap.enabled = qp.shadows;
+    this.renderer.shadowMap.type    = qp.shadowType;
     document.body.appendChild(this.renderer.domElement);
 
     // ─── 3. Oświetlenie — zarządzane przez SkySystem ──────────────────────
@@ -145,7 +163,9 @@ export class Game {
     this._knockableLamps = wb.knockableLamps;
 
     // ─── 6. Gracz ──────────────────────────────────────────────────────────
-    this.player = new PlayerMichaelMyers(this.scene);
+    this.player = settings.avatar === 'classic'
+      ? new Player(this.scene)
+      : new PlayerMichaelMyers(this.scene);
     const { body, collider } = this.physics.addPlayerCapsule(
       PLAYER_SPAWN.x, PLAYER_SPAWN.y, PLAYER_SPAWN.z
     );
@@ -181,15 +201,40 @@ export class Game {
     this._minimap = new Minimap(document.body);
   }
 
+  // ─── Pauza / wznowienie ───────────────────────────────────────────────────
+
+  pause() {
+    this._paused = true;
+    this.audio?.stopEngine?.();
+    this.audio?.stopTires?.();
+  }
+
+  resume() {
+    this._paused = false;
+  }
+
+  /** Stosuje ustawienia menu na żywo (głośność, fog) bez restartu gry. */
+  applySettings(settings) {
+    if (settings.volume !== undefined) this.audio?.setVolume(settings.volume);
+    if (settings.renderDistance) {
+      const rp = RENDER_PRESETS[settings.renderDistance] ?? RENDER_PRESETS.medium;
+      this._cullDist = rp.cull;
+      if (this.scene?.fog)    this.scene.fog.density = rp.fog;
+      if (this.camera3)       this.camera3.far = rp.far;
+      this.camera3?.updateProjectionMatrix?.();
+    }
+  }
+
   // _setupLighting replaced by SkySystem
 
   // ─── Distance culling ────────────────────────────────────────────────────
 
-  /** Ukrywa obiekty dalej niż CULL_DIST jednostek od gracza. Sprawdza co 4 klatki. */
+  /** Ukrywa obiekty dalej niż _cullDist jednostek od gracza. Sprawdza co 4 klatki. */
   _updateCulling() {
     if (++this._cullFrame % 4 !== 0) return;
     const pp = this.player.root.position;
-    const DIST_SQ = 85 * 85;
+    const d  = this._cullDist ?? 85;
+    const DIST_SQ = d * d;
     for (const obj of this._worldObjects) {
       const dx = obj.root.position.x - pp.x;
       const dz = obj.root.position.z - pp.z;
@@ -546,11 +591,14 @@ export class Game {
   // ─── Game loop ────────────────────────────────────────────────────────────
 
   start() {
+    this._paused = false;
+    this.applySettings(this._initSettings ?? {});
     requestAnimationFrame(ts => this._loop(ts));
   }
 
   _loop(ts) {
     requestAnimationFrame(t => this._loop(t));
+    if (this._paused) return;
     if (ts - this._lastTs < this._frameMs - 0.5) return;  // cap 60 FPS
     const dt = Math.min((ts - this._lastTs) / 1000, 0.05);
     this._lastTs = ts;
