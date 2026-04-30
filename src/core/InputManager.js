@@ -57,13 +57,15 @@ export class InputManager {
 
     document.addEventListener('pointerlockchange', () => {
       this._locked = !!document.pointerLockElement;
-      const hint = document.getElementById('hint');
-      if (hint) hint.style.display = this._locked ? 'none' : 'block';
     });
 
-    document.addEventListener('click', () => {
+    // Request pointer lock immediately on first user gesture (keydown works too)
+    const _tryLock = () => {
       if (!this._locked) document.body.requestPointerLock();
-    });
+    };
+    document.addEventListener('click',   _tryLock, { once: false });
+    document.addEventListener('keydown',  _tryLock, { once: true  });
+    document.addEventListener('mousedown', _tryLock, { once: true  });
 
     document.addEventListener('mousedown', e => {
       if (!this._locked) return;

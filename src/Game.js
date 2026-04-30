@@ -10,6 +10,7 @@ import { SEED }                     from './core/RNG.js';
 import { AudioManager }             from './core/AudioManager.js';
 import { isOnRoad }                 from './world/zones.js';
 import { Minimap }                  from './ui/Minimap.js';
+import { HeliHUD }                  from './ui/HeliHUD.js';
 import { SkySystem }                from './world/SkySystem.js';
 import { WeatherSystem }            from './world/WeatherSystem.js';
 import { SeasonSystem }             from './world/SeasonSystem.js';
@@ -90,6 +91,7 @@ export class Game {
     this._debugEl          = null;
     this._savedCamPitch    = 0.35;
     this._minimap          = null;
+    this._heliHUD          = null;
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
     this._interactKeyWasDown = false;
@@ -199,6 +201,9 @@ export class Game {
 
     // ─── 10. Minimap ───────────────────────────────────────────────────────────
     this._minimap = new Minimap(document.body);
+
+    // ─── 11. Heli HUD ─────────────────────────────────────────────────────────
+    this._heliHUD = new HeliHUD();
   }
 
   // ─── Pauza / wznowienie ───────────────────────────────────────────────────
@@ -364,14 +369,18 @@ export class Game {
     this._applyCameraMode();
     this._interactCooldown = 20;
     const isHeli = ac.type === 'helicopter';
-    this._uiEl.innerHTML = isHeli
-      ? 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; LMB – strzał &nbsp;|&nbsp; E – wysiądź'
-      : 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – ster &nbsp;|&nbsp; E – wysiądź';
+    if (isHeli) {
+      this._heliHUD?.show();
+      this._uiEl.innerHTML = 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; LMB – strzał &nbsp;|&nbsp; E – wysiądź';
+    } else {
+      this._uiEl.innerHTML = 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – ster &nbsp;|&nbsp; E – wysiądź';
+    }
   }
 
   _exitAircraft() {
     const ac  = this._drivingAircraft;
     const pos = ac.root.position;
+    const wasHeli = ac.type === 'helicopter';
     // Drop player to the side at ground level
     const sideX = pos.x + Math.cos(ac.facing) * 3.5;
     const sideZ = pos.z - Math.sin(ac.facing) * 3.5;
@@ -385,6 +394,7 @@ export class Game {
     this._interactCooldown = 25;
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._applyCameraMode();
+    if (wasHeli) this._heliHUD?.hide();
     this._uiEl.innerHTML =
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
@@ -828,6 +838,28 @@ export class Game {
         ? this._drivingAircraft.facing
         : this._drivingCar ? this._drivingCar.facing : this.player.facing;
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
+    }
+
+    // ── HeliHUD — aktualizuj parametry lotu gdy w helikopterze ──────────────
+    if (this._heliHUD && this._drivingAircraft?.type === 'helicopter') {
+      const h   = this._drivingAircraft;
+      const pos = h.root.position;
+      const horizSpd = Math.hypot(h._velX ?? 0, h._velZ ?? 0) * 3.6;
+      const velY     = h._velY ?? 0;
+      const SHOOT_CD_MAX = 0.14;
+      // Szacowany g-force z przyspieszenia pionowego (prosta aproksymacja)
+      const gForce = 1 + Math.abs(velY) * 0.08;
+      this._heliHUD.update({
+        alt:           Math.max(0, pos.y - 1),
+        speedKmh:      horizSpd,
+        velY,
+        heading:       h.facing,
+        shootCooldown: h._shootCooldown ?? 0,
+        shootCdMax:    SHOOT_CD_MAX,
+        pitchRad:      h.root.rotation.x,
+        bankRad:       h.root.rotation.z,
+        gForce,
+      });
     }
 
     // ── HUD: FPS + pozycja XYZ ────────────────────────────────────────────
