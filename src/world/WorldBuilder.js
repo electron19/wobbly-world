@@ -34,6 +34,9 @@ import { Dog, Cat }               from '../entities/Animal.js';
 import { UFO }                    from '../entities/UFO.js';
 import { Airplane }               from '../entities/Airplane.js';
 import { Helicopter }             from '../entities/Helicopter.js';
+import { FighterJet }             from '../entities/FighterJet.js';
+import { Bomber }                 from '../entities/Bomber.js';
+import { Airport }                from '../objects/Airport.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
 
@@ -56,6 +59,8 @@ export class WorldBuilder {
     this.ufos           = [];  // autonomiczne pojazdy latające
     this.airplanes      = [];  // samoloty — do wsiadania
     this.helicopters    = [];  // helikoptery — do wsiadania
+    this.jets           = [];  // myśliwce — do wsiadania
+    this.bombers        = [];  // bombowce — do wsiadania
     this._circles       = []; // exclusion circles (z marginem) — budynki, drzewa omijają je
     this._npcObstacles  = []; // fizyczne kontury budynków/drzew bez marginu — dla NPCów
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
@@ -87,6 +92,7 @@ export class WorldBuilder {
     this._addCars();
     this._addUFOs();
     this._addAirplanes();
+    this._addAirport();
     this._addNPCs();
     this._addAnimals();
     this._addBoundaries();
@@ -1546,6 +1552,28 @@ export class WorldBuilder {
     heli.facing = -Math.PI / 2;
     heli.root.rotation.y = heli.facing;
     this.helicopters.push(heli);
+  }
+
+  _addAirport() {
+    // ── Military airport (far east, x=290, z=0) ────────────────────────────
+    new Airport(this.scene, 290, 0);
+
+    // 2 F-16 fighter jets on runway
+    const jet1 = new FighterJet(this.scene, 290, 1.2, -60);
+    jet1.facing = 0;
+    jet1.root.rotation.y = 0;
+    this.jets.push(jet1);
+
+    const jet2 = new FighterJet(this.scene, 290, 1.2, -40);
+    jet2.facing = 0;
+    jet2.root.rotation.y = 0;
+    this.jets.push(jet2);
+
+    // B-29 Enola Gay bomber
+    const enola = new Bomber(this.scene, 290, 1.5, 90);
+    enola.facing = Math.PI;
+    enola.root.rotation.y = Math.PI;
+    this.bombers.push(enola);
   }
 
   _addUFOs() {

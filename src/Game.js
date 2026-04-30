@@ -11,6 +11,7 @@ import { AudioManager }             from './core/AudioManager.js';
 import { isOnRoad }                 from './world/zones.js';
 import { Minimap }                  from './ui/Minimap.js';
 import { HeliHUD }                  from './ui/HeliHUD.js';
+import { JetHUD }                   from './ui/JetHUD.js';
 import { SkySystem }                from './world/SkySystem.js';
 import { WeatherSystem }            from './world/WeatherSystem.js';
 import { SeasonSystem }             from './world/SeasonSystem.js';
@@ -92,6 +93,9 @@ export class Game {
     this._savedCamPitch    = 0.35;
     this._minimap          = null;
     this._heliHUD          = null;
+    this._jetHUD           = null;
+    this.jets              = [];
+    this.bombers           = [];
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
     this._interactKeyWasDown = false;
@@ -161,6 +165,8 @@ export class Game {
     this.ufos          = wb.ufos;
     this.airplanes     = wb.airplanes   ?? [];
     this.helicopters   = wb.helicopters ?? [];
+    this.jets          = wb.jets        ?? [];
+    this.bombers       = wb.bombers     ?? [];
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -204,6 +210,9 @@ export class Game {
 
     // ─── 11. Heli HUD ─────────────────────────────────────────────────────────
     this._heliHUD = new HeliHUD();
+
+    // ─── 12. Jet HUD ──────────────────────────────────────────────────────────
+    this._jetHUD = new JetHUD();
   }
 
   // ─── Pauza / wznowienie ───────────────────────────────────────────────────
@@ -344,7 +353,7 @@ export class Game {
     if (this._drivingCar) return null;
     const pp = this.player.root.position;
     let best = null, bestD = AIRCRAFT_ENTER_DIST;
-    for (const ac of [...this.airplanes, ...this.helicopters]) {
+    for (const ac of [...this.airplanes, ...this.helicopters, ...this.jets, ...this.bombers]) {
       if (ac.isOccupied) continue;
       const d = Math.hypot(
         pp.x - ac.root.position.x,
@@ -368,10 +377,14 @@ export class Game {
     this.camCtrl.dist = CAM_DIST_AIRCRAFT;
     this._applyCameraMode();
     this._interactCooldown = 20;
-    const isHeli = ac.type === 'helicopter';
+    const isHeli   = ac.type === 'helicopter';
+    const isJetAC  = ac.type === 'jet' || ac.type === 'bomber';
     if (isHeli) {
       this._heliHUD?.show();
       this._uiEl.innerHTML = 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; LMB – strzał &nbsp;|&nbsp; E – wysiądź';
+    } else if (isJetAC) {
+      this._jetHUD?.show(ac.type);
+      this._uiEl.innerHTML = 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – pitch &nbsp;|&nbsp; E – wysiądź';
     } else {
       this._uiEl.innerHTML = 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – ster &nbsp;|&nbsp; E – wysiądź';
     }
@@ -380,7 +393,8 @@ export class Game {
   _exitAircraft() {
     const ac  = this._drivingAircraft;
     const pos = ac.root.position;
-    const wasHeli = ac.type === 'helicopter';
+    const wasHeli  = ac.type === 'helicopter';
+    const wasJetAC = ac.type === 'jet' || ac.type === 'bomber';
     // Drop player to the side at ground level
     const sideX = pos.x + Math.cos(ac.facing) * 3.5;
     const sideZ = pos.z - Math.sin(ac.facing) * 3.5;
@@ -394,7 +408,8 @@ export class Game {
     this._interactCooldown = 25;
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._applyCameraMode();
-    if (wasHeli) this._heliHUD?.hide();
+    if (wasHeli)  this._heliHUD?.hide();
+    if (wasJetAC) this._jetHUD?.hide();
     this._uiEl.innerHTML =
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
@@ -579,7 +594,10 @@ export class Game {
         const nearBldg = this._nearestBuilding();
         const nearLad  = this._nearestLadder();
         if (nearAC) {
-          const label = nearAC.type === 'helicopter' ? 'E — wsiądź (helikopter)' : 'E — wsiądź (samolot)';
+          const label = nearAC.type === 'helicopter' ? 'E — wsiądź (helikopter)'
+                      : nearAC.type === 'jet'        ? 'E — wsiądź (F-16)'
+                      : nearAC.type === 'bomber'     ? 'E — wsiądź (B-29 Enola Gay)'
+                      : 'E — wsiądź (samolot)';
           this._interactEl.textContent = label;
           this._interactEl.style.display = 'block';
         } else if (nearCar) {
@@ -629,6 +647,8 @@ export class Game {
 
     // ── Aircraft update (kinematic — no Rapier) ───────────────────────────
     for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
+    for (const ac of this.jets)        ac.update(dt, this.input, this.camCtrl, this.audio);
+    for (const ac of this.bombers)     ac.update(dt, this.input, this.camCtrl, this.audio);
     for (const ac of this.helicopters) {
       const bulletPositions = ac.update(dt, this.input, this.audio);
       // Sprawdź trafienia pocisków w NPC (promień 1.4 j.ś.)
@@ -809,7 +829,19 @@ export class Game {
     );
 
     // ── Dynamic FOV — poczucie prędkości ────────────────────────────────────
-    if (this._drivingAircraft?.type === 'airplane') {
+    if (this._drivingAircraft?.type === 'jet') {
+      const spd = Math.abs(this._drivingAircraft._speed ?? 0);
+      const sf  = Math.min(1, spd / 95);
+      const targetFov = 72 + sf * 30;   // 72 (stoi) → 102 (mach)
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 4));
+      this.camera3.updateProjectionMatrix();
+    } else if (this._drivingAircraft?.type === 'bomber') {
+      const spd = Math.abs(this._drivingAircraft._speed ?? 0);
+      const sf  = Math.min(1, spd / 36);
+      const targetFov = 72 + sf * 16;
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 3));
+      this.camera3.updateProjectionMatrix();
+    } else if (this._drivingAircraft?.type === 'airplane') {
       const spd = Math.abs(this._drivingAircraft._speed ?? 0);
       const sf  = Math.min(1, spd / 28);
       const targetFov = 72 + sf * 20;   // 72 (stoi) → 92 (pełna prędkość)
@@ -849,6 +881,24 @@ export class Game {
       this.audio.setListenerPos(lp.x, lp.y, lp.z);
     }
 
+    // ── JetHUD — aktualizuj parametry lotu gdy w jecie/bomberze ─────────────
+    if (this._jetHUD && (this._drivingAircraft?.type === 'jet' || this._drivingAircraft?.type === 'bomber')) {
+      const a   = this._drivingAircraft;
+      const pos = a.root.position;
+      this._jetHUD.update({
+        alt:           Math.max(0, pos.y - 1.2),
+        speedKmh:      Math.abs(a._speed ?? 0) * 3.6,
+        velY:          a._velY ?? 0,
+        heading:       a.facing,
+        throttle:      a._throttle ?? 0,
+        pitchRad:      -(a.root.rotation.x ?? 0),
+        bankRad:       a.root.rotation.z ?? 0,
+        gForce:        1 + Math.abs(a._velY ?? 0) * 0.06,
+        isAfterburner: (a._throttle ?? 0) > 0.7 && a.type === 'jet',
+        type:          a.type,
+      });
+    }
+
     // ── HeliHUD — aktualizuj parametry lotu gdy w helikopterze ──────────────
     if (this._heliHUD && this._drivingAircraft?.type === 'helicopter') {
       const h   = this._drivingAircraft;
@@ -885,7 +935,7 @@ export class Game {
         : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
       const spd = this._drivingCar
         ? `${Math.abs(Math.round(this._drivingCar.speedKmh ?? 0))} km/h`
-        : this._drivingAircraft?.type === 'airplane'
+        : (this._drivingAircraft?.type === 'airplane' || this._drivingAircraft?.type === 'jet' || this._drivingAircraft?.type === 'bomber')
           ? `${Math.abs(Math.round((this._drivingAircraft._speed ?? 0) * 3.6))} km/h`
           : '';
       this._debugEl.innerHTML =

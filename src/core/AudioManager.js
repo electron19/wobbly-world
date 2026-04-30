@@ -83,6 +83,10 @@ export class AudioManager {
     // ── helikoptery (spatial, jeden wpis na instancję) ──
     this._heliEngines = new Map();  // Helicopter → { panner, masterGain, rotorSrc, turbOsc, lfoOsc, hiSrc }
 
+    // ── odrzutowce i bombowce (spatial) ──
+    this._jetEngines    = new Map();  // FighterJet → { panner, masterGain, sawOsc, roarOsc, hiSrc }
+    this._bomberEngines = new Map();  // Bomber → { panner, masterGain, osc1, osc2 }
+
     // ── kroki ──
     this._lastFootFloor = 0;
   }
@@ -355,6 +359,209 @@ export class AudioManager {
     const entry = { panner, masterGain, rotorSrc, turbOsc, lfoOsc, hiSrc };
     this._heliEngines.set(heli, entry);
     return entry;
+  }
+
+  // ─── Silnik odrzutowy (spatial, looping) ──────────────────────────────────
+
+  /**
+   * Wywołaj co klatkę dla każdego myśliwca / boeinga.
+   * @param {object} aircraft  referencja do instancji (klucz w Map)
+   * @param {number} x,y,z     pozycja w świecie
+   * @param {number} throttle  [0..1]
+   */
+  updateJetEngine(aircraft, x, y, z, throttle) {
+    if (!this._ctx) return;
+    const now = this._ctx.currentTime;
+    let e = this._jetEngines.get(aircraft);
+    if (!e) {
+      e = this._startJetEngineFor(aircraft, x, y, z);
+      if (!e) return;
+    }
+    this._setPannerPos(e.panner, x, y, z);
+
+    // Pitch and volume scale with throttle
+    const tgtFreq  = 420 + throttle * 380;   // 420 Hz idle → 800 Hz full
+    const roarFreq = 180 + throttle * 120;
+    const tgtVol   = 0.05 + throttle * 0.40;
+
+    e.masterGain.gain.setTargetAtTime(tgtVol,   now, 0.25);
+    e.sawOsc.frequency.setTargetAtTime(tgtFreq,  now, 0.30);
+    e.roarOsc.frequency.setTargetAtTime(roarFreq, now, 0.40);
+  }
+
+  _startJetEngineFor(aircraft, x, y, z) {
+    const ctx = this._ctx;
+    const now = ctx.currentTime;
+
+    const panner = this._makePanner(x, y, z, 14, 180, 2.0);
+    panner.connect(this._masterGain);
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.05;
+    masterGain.connect(panner);
+
+    // 1. Sawtooth turbine whine
+    const sawOsc = ctx.createOscillator();
+    sawOsc.type = 'sawtooth';
+    sawOsc.frequency.value = 420;
+    const sawBP = ctx.createBiquadFilter();
+    sawBP.type = 'bandpass';
+    sawBP.frequency.value = 900;
+    sawBP.Q.value = 1.8;
+    const sawGain = ctx.createGain();
+    sawGain.gain.value = 0.65;
+    sawOsc.connect(sawBP);
+    sawBP.connect(sawGain);
+    sawGain.connect(masterGain);
+    sawOsc.start(now);
+
+    // 2. Low roar oscillator
+    const roarOsc = ctx.createOscillator();
+    roarOsc.type = 'sawtooth';
+    roarOsc.frequency.value = 180;
+    const roarLP = ctx.createBiquadFilter();
+    roarLP.type = 'lowpass';
+    roarLP.frequency.value = 400;
+    const roarGain = ctx.createGain();
+    roarGain.gain.value = 0.50;
+    roarOsc.connect(roarLP);
+    roarLP.connect(roarGain);
+    roarGain.connect(masterGain);
+    roarOsc.start(now);
+
+    // 3. High-frequency noise
+    const hiNoiseBuf = this._makeNoise(2.0);
+    const hiSrc = ctx.createBufferSource();
+    hiSrc.buffer = hiNoiseBuf;
+    hiSrc.loop = true;
+    const hiHP = ctx.createBiquadFilter();
+    hiHP.type = 'highpass';
+    hiHP.frequency.value = 1800;
+    const hiGain = ctx.createGain();
+    hiGain.gain.value = 0.08;
+    hiSrc.connect(hiHP);
+    hiHP.connect(hiGain);
+    hiGain.connect(masterGain);
+    hiSrc.start(now);
+
+    const entry = { panner, masterGain, sawOsc, roarOsc, hiSrc };
+    this._jetEngines.set(aircraft, entry);
+    return entry;
+  }
+
+  stopJetEngine(aircraft) {
+    const e = this._jetEngines.get(aircraft);
+    if (!e || !this._ctx) return;
+    const now = this._ctx.currentTime;
+    e.masterGain.gain.setTargetAtTime(0.001, now, 0.3);
+    const { sawOsc, roarOsc, hiSrc } = e;
+    setTimeout(() => {
+      try { sawOsc.stop();  } catch (_) {}
+      try { roarOsc.stop(); } catch (_) {}
+      try { hiSrc.stop();   } catch (_) {}
+    }, 1000);
+    this._jetEngines.delete(aircraft);
+  }
+
+  // ─── Silnik bombowca (spatial, looping) ───────────────────────────────────
+
+  /**
+   * Wywołaj co klatkę dla każdego bombowca.
+   */
+  updateBomberEngine(aircraft, x, y, z, throttle) {
+    if (!this._ctx) return;
+    const now = this._ctx.currentTime;
+    let e = this._bomberEngines.get(aircraft);
+    if (!e) {
+      e = this._startBomberEngineFor(aircraft, x, y, z);
+      if (!e) return;
+    }
+    this._setPannerPos(e.panner, x, y, z);
+
+    // 4 radial engines — deep piston rumble
+    const baseFreq  = 65 + throttle * 45;   // 65 Hz idle → 110 Hz full
+    const beatFreq  = baseFreq * 1.017;     // slight beat/detune for character
+    const tgtVol    = 0.06 + throttle * 0.30;
+
+    e.masterGain.gain.setTargetAtTime(tgtVol,     now, 0.5);
+    e.osc1.frequency.setTargetAtTime(baseFreq,    now, 0.6);
+    e.osc2.frequency.setTargetAtTime(beatFreq,    now, 0.6);
+  }
+
+  _startBomberEngineFor(aircraft, x, y, z) {
+    const ctx = this._ctx;
+    const now = ctx.currentTime;
+
+    const panner = this._makePanner(x, y, z, 16, 160, 1.8);
+    panner.connect(this._masterGain);
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.06;
+    masterGain.connect(panner);
+
+    // Osc1 — fundamental tłokowy
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sawtooth';
+    osc1.frequency.value = 65;
+    const lp1 = ctx.createBiquadFilter();
+    lp1.type = 'lowpass';
+    lp1.frequency.value = 320;
+    lp1.Q.value = 1.2;
+    const g1 = ctx.createGain();
+    g1.gain.value = 0.7;
+    osc1.connect(lp1);
+    lp1.connect(g1);
+    g1.connect(masterGain);
+    osc1.start(now);
+
+    // Osc2 — lekko roztrojony (beating effect — 4 silniki nigdy idealnie zsynchronizowane)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = 66.1;
+    const lp2 = ctx.createBiquadFilter();
+    lp2.type = 'lowpass';
+    lp2.frequency.value = 300;
+    lp2.Q.value = 1.0;
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.55;
+    osc2.connect(lp2);
+    lp2.connect(g2);
+    g2.connect(masterGain);
+    osc2.start(now);
+
+    // Mechaniczny szum (przekładnie)
+    const noiseBuf = this._makeNoise(2.2);
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    noiseSrc.loop = true;
+    const noiseBP = ctx.createBiquadFilter();
+    noiseBP.type = 'bandpass';
+    noiseBP.frequency.value = 240;
+    noiseBP.Q.value = 1.4;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.12;
+    noiseSrc.connect(noiseBP);
+    noiseBP.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSrc.start(now);
+
+    const entry = { panner, masterGain, osc1, osc2, noiseSrc };
+    this._bomberEngines.set(aircraft, entry);
+    return entry;
+  }
+
+  stopBomberEngine(aircraft) {
+    const e = this._bomberEngines.get(aircraft);
+    if (!e || !this._ctx) return;
+    const now = this._ctx.currentTime;
+    e.masterGain.gain.setTargetAtTime(0.001, now, 0.4);
+    const { osc1, osc2, noiseSrc } = e;
+    setTimeout(() => {
+      try { osc1.stop();     } catch (_) {}
+      try { osc2.stop();     } catch (_) {}
+      try { noiseSrc.stop(); } catch (_) {}
+    }, 1200);
+    this._bomberEngines.delete(aircraft);
   }
 
   stopHeliEngine(heli) {
