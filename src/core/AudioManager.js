@@ -74,10 +74,14 @@ export class AudioManager {
     this._hornRunning = false;
 
     // ── UFO beam ──
-    this._ufoBeamOsc = null;
-    this._ufoBeamLfo = null;
-    this._ufoBeamGain = null;
+    this._ufoBeamOsc     = null;
+    this._ufoBeamLfo     = null;
+    this._ufoBeamGain    = null;
+    this._ufoBeamPanner  = null;
     this._ufoBeamRunning = false;
+
+    // ── helikoptery (spatial, jeden wpis na instancję) ──
+    this._heliEngines = new Map();  // Helicopter → { panner, masterGain, rotorSrc, turbOsc, lfoOsc, hiSrc }
 
     // ── kroki ──
     this._lastFootFloor = 0;
@@ -208,10 +212,175 @@ export class AudioManager {
     osc.stop(now + 0.33);
   }
 
-  startUFOBeam() {
+  // ─── Przestrzenny dźwięk (pozycja w świecie) ──────────────────────────────
+
+  /**
+   * Aktualizuj pozycję AudioListener (= uszy gracza/kamera).
+   * Wywołaj co klatkę z pozycją gracza/kamery.
+   */
+  setListenerPos(x, y, z) {
+    if (!this._ctx) return;
+    const L = this._ctx.listener;
+    if (L.positionX) {
+      L.positionX.value = x;
+      L.positionY.value = y;
+      L.positionZ.value = z;
+    } else {
+      L.setPosition(x, y, z);
+    }
+  }
+
+  /** Tworzy PannerNode z pozycją (nie podłączony — caller musi .connect()). */
+  _makePanner(x, y, z, refDist = 10, maxDist = 120, rolloff = 2.0) {
+    const p = this._ctx.createPanner();
+    p.panningModel  = 'equalpower';
+    p.distanceModel = 'inverse';
+    p.refDistance   = refDist;
+    p.maxDistance   = maxDist;
+    p.rolloffFactor = rolloff;
+    this._setPannerPos(p, x, y, z);
+    return p;
+  }
+
+  _setPannerPos(p, x, y, z) {
+    if (p.positionX) {
+      p.positionX.value = x;
+      p.positionY.value = y;
+      p.positionZ.value = z;
+    } else {
+      p.setPosition(x, y, z);
+    }
+  }
+
+  // ─── Silnik helikoptera (spatial, looping) ────────────────────────────────
+
+  /**
+   * Wywołaj co klatkę dla każdego helikoptera.
+   * Automatycznie startuje dźwięk przy pierwszym wywołaniu po inicjalizacji ctx.
+   * @param {object} heli     referencja do instancji Helicopter (klucz w Map)
+   * @param {number} x,y,z    pozycja w świecie
+   * @param {boolean} occupied  czy gracz siedzi w środku
+   */
+  updateHeliEngine(heli, x, y, z, occupied) {
+    if (!this._ctx) return;
+    const now = this._ctx.currentTime;
+    let e = this._heliEngines.get(heli);
+    if (!e) {
+      e = this._startHeliEngineFor(heli, x, y, z);
+      if (!e) return;
+    }
+    this._setPannerPos(e.panner, x, y, z);
+    // Głośność: cicho gdy zaparkowany, głośno gdy pilotowany
+    const tgtVol  = occupied ? 0.40 : 0.09;
+    const tgtFreq = occupied ? 195  : 128;
+    const tgtLFO  = occupied ? 5.2  : 2.1;
+    e.masterGain.gain.setTargetAtTime(tgtVol,  now, 0.45);
+    e.turbOsc.frequency.setTargetAtTime(tgtFreq, now, 0.90);
+    e.lfoOsc.frequency.setTargetAtTime(tgtLFO,  now, 0.55);
+  }
+
+  _startHeliEngineFor(heli, x, y, z) {
+    const ctx = this._ctx;
+    const now = ctx.currentTime;
+
+    // PannerNode — helikopter słyszalny do ~140 j.ś.
+    const panner = this._makePanner(x, y, z, 14, 140, 1.8);
+    panner.connect(this._masterGain);
+
+    // Wspólny gain dla tego helikoptera
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.09;
+    masterGain.connect(panner);
+
+    // ── 1. Wirnik: szum → lowpass (rotor whomp) ──────────────────────────────
+    const rotorBuf = this._makeNoise(2.5);
+    const rotorSrc = ctx.createBufferSource();
+    rotorSrc.buffer = rotorBuf;
+    rotorSrc.loop   = true;
+
+    const rotorLP  = ctx.createBiquadFilter();
+    rotorLP.type   = 'lowpass';
+    rotorLP.frequency.value = 90;
+    rotorLP.Q.value = 2.0;
+
+    // LFO — "klap klap" łopat
+    const lfoOsc  = ctx.createOscillator();
+    lfoOsc.type   = 'sine';
+    lfoOsc.frequency.value = 2.1;
+    const lfoAmp  = ctx.createGain();
+    lfoAmp.gain.value = 48;  // moduluje cutoff filtra ±48 Hz
+    lfoOsc.connect(lfoAmp);
+    lfoAmp.connect(rotorLP.frequency);
+
+    const rotorGain = ctx.createGain();
+    rotorGain.gain.value = 0.9;
+    rotorSrc.connect(rotorLP);
+    rotorLP.connect(rotorGain);
+    rotorGain.connect(masterGain);
+    rotorSrc.start(now);
+    lfoOsc.start(now);
+
+    // ── 2. Turbina: piłokształtny → bandpass (whine) ──────────────────────────
+    const turbOsc  = ctx.createOscillator();
+    turbOsc.type   = 'sawtooth';
+    turbOsc.frequency.value = 128;
+
+    const turbBP   = ctx.createBiquadFilter();
+    turbBP.type    = 'bandpass';
+    turbBP.frequency.value = 260;
+    turbBP.Q.value = 1.6;
+
+    const turbGain = ctx.createGain();
+    turbGain.gain.value = 0.30;
+    turbOsc.connect(turbBP);
+    turbBP.connect(turbGain);
+    turbGain.connect(masterGain);
+    turbOsc.start(now);
+
+    // ── 3. Mechaniczny szum wysokoczęstotliwościowy (skrzynia, przekładnie) ───
+    const hiNoiseBuf = this._makeNoise(1.8);
+    const hiSrc  = ctx.createBufferSource();
+    hiSrc.buffer = hiNoiseBuf;
+    hiSrc.loop   = true;
+    const hiHP   = ctx.createBiquadFilter();
+    hiHP.type    = 'highpass';
+    hiHP.frequency.value = 1100;
+    const hiGain = ctx.createGain();
+    hiGain.gain.value = 0.055;
+    hiSrc.connect(hiHP);
+    hiHP.connect(hiGain);
+    hiGain.connect(masterGain);
+    hiSrc.start(now);
+
+    const entry = { panner, masterGain, rotorSrc, turbOsc, lfoOsc, hiSrc };
+    this._heliEngines.set(heli, entry);
+    return entry;
+  }
+
+  stopHeliEngine(heli) {
+    const e = this._heliEngines.get(heli);
+    if (!e || !this._ctx) return;
+    const now = this._ctx.currentTime;
+    e.masterGain.gain.setTargetAtTime(0.001, now, 0.3);
+    const { rotorSrc, turbOsc, lfoOsc, hiSrc } = e;
+    setTimeout(() => {
+      try { rotorSrc.stop(); } catch (_) {}
+      try { turbOsc.stop();  } catch (_) {}
+      try { lfoOsc.stop();   } catch (_) {}
+      try { hiSrc.stop();    } catch (_) {}
+    }, 1000);
+    this._heliEngines.delete(heli);
+  }
+
+  /** @param {number} x,y,z  pozycja UFO w świecie */
+  startUFOBeam(x = 0, y = 20, z = 0) {
     if (this._ufoBeamRunning) return;
     const ctx = this._ensureCtx();
     const now = ctx.currentTime;
+
+    // Panner — UFO słyszalne do ~180 j.ś.
+    this._ufoBeamPanner = this._makePanner(x, y, z, 18, 180, 1.2);
+    this._ufoBeamPanner.connect(this._masterGain);
 
     this._ufoBeamOsc = ctx.createOscillator();
     this._ufoBeamOsc.type = 'sawtooth';
@@ -236,25 +405,33 @@ export class AudioManager {
 
     this._ufoBeamOsc.connect(filter);
     filter.connect(this._ufoBeamGain);
-    this._ufoBeamGain.connect(this._masterGain);
+    this._ufoBeamGain.connect(this._ufoBeamPanner);  // → panner → masterGain
     this._ufoBeamOsc.start(now);
     this._ufoBeamLfo.start(now);
     this._ufoBeamRunning = true;
+  }
+
+  /** Aktualizuj pozycję UFO co klatkę gdy beam aktywny. */
+  updateUFOBeamPos(x, y, z) {
+    if (this._ufoBeamPanner) this._setPannerPos(this._ufoBeamPanner, x, y, z);
   }
 
   stopUFOBeam() {
     if (!this._ufoBeamRunning || !this._ufoBeamGain) return;
     const now = this._ctx.currentTime;
     this._ufoBeamGain.gain.setTargetAtTime(0.001, now, 0.10);
-    const osc = this._ufoBeamOsc;
-    const lfo = this._ufoBeamLfo;
+    const osc    = this._ufoBeamOsc;
+    const lfo    = this._ufoBeamLfo;
+    const panner = this._ufoBeamPanner;
     setTimeout(() => {
-      try { osc?.stop(); } catch (_) {}
-      try { lfo?.stop(); } catch (_) {}
+      try { osc?.stop();    } catch (_) {}
+      try { lfo?.stop();    } catch (_) {}
+      try { panner?.disconnect(); } catch (_) {}
     }, 350);
-    this._ufoBeamOsc = null;
-    this._ufoBeamLfo = null;
-    this._ufoBeamGain = null;
+    this._ufoBeamOsc    = null;
+    this._ufoBeamLfo    = null;
+    this._ufoBeamGain   = null;
+    this._ufoBeamPanner = null;
     this._ufoBeamRunning = false;
   }
 

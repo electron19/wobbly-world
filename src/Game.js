@@ -840,6 +840,15 @@ export class Game {
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
     }
 
+    // ── Spatial audio — pozycja uszu gracza (kamera) ────────────────────────
+    {
+      const lp = this._drivingAircraft
+        ? this._drivingAircraft.root.position
+        : this._drivingCar ? this._drivingCar.root.position
+        : this.player.root.position;
+      this.audio.setListenerPos(lp.x, lp.y, lp.z);
+    }
+
     // ── HeliHUD — aktualizuj parametry lotu gdy w helikopterze ──────────────
     if (this._heliHUD && this._drivingAircraft?.type === 'helicopter') {
       const h   = this._drivingAircraft;

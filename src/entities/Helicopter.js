@@ -361,6 +361,10 @@ export class Helicopter {
         : 0;
     }
 
+    // ── Silnik helikoptera — spatial, co klatkę ───────────────────────────────
+    const { x: hx, y: hy, z: hz } = this.root.position;
+    audio?.updateHeliEngine?.(this, hx, hy, hz, this.isOccupied);
+
     // ── Aktualizacja pocisków ─────────────────────────────────────────────────
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
     const hitPositions = [];

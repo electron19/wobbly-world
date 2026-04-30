@@ -281,7 +281,13 @@ export class UFO {
 
   _updateVisuals(audio) {
     const beamActive = this._state === 'lowering' || this._state === 'lifting';
-    if (beamActive) audio?.startUFOBeam?.(); else audio?.stopUFOBeam?.();
+    const { x, y, z } = this.root.position;
+    if (beamActive) {
+      audio?.startUFOBeam?.(x, y, z);
+      audio?.updateUFOBeamPos?.(x, y, z);
+    } else {
+      audio?.stopUFOBeam?.();
+    }
     const beamPulse = beamActive
       ? 0.52 + (Math.sin(this._t * 9.0) * 0.5 + 0.5) * 0.26
       : 0.20 + (Math.sin(this._t * 5.4) * 0.5 + 0.5) * 0.14;
