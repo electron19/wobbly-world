@@ -630,7 +630,7 @@ export class Game {
     // ── Aircraft update (kinematic — no Rapier) ───────────────────────────
     for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
     for (const ac of this.helicopters) {
-      const bulletPositions = ac.update(dt, this.input);
+      const bulletPositions = ac.update(dt, this.input, this.audio);
       // Sprawdź trafienia pocisków w NPC (promień 1.4 j.ś.)
       for (const bp of bulletPositions) {
         for (const npc of this.npcs) {

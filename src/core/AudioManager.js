@@ -926,4 +926,70 @@ export class AudioManager {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     return buf;
   }
+
+  // ─── Strzał z broni ───────────────────────────────────────────────────────
+
+  /**
+   * Krótki, ostry wystrzał — szum perkusyjny + "thump" na niskich.
+   * Wywołaj raz przy każdym spawnie pocisku.
+   */
+  playGunshot() {
+    const ctx = this._ensureCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    // Klik mechanizmu — bardzo krótki impuls perkusyjny (pitched noise)
+    const clickBuf = this._makeNoise(0.04);
+    const clickSrc = ctx.createBufferSource();
+    clickSrc.buffer = clickBuf;
+
+    const clickFilter = ctx.createBiquadFilter();
+    clickFilter.type = 'bandpass';
+    clickFilter.frequency.value = 3800;
+    clickFilter.Q.value = 0.7;
+
+    const clickGain = ctx.createGain();
+    clickGain.gain.setValueAtTime(0.55, now);
+    clickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.035);
+
+    clickSrc.connect(clickFilter);
+    clickFilter.connect(clickGain);
+    clickGain.connect(this._masterGain);
+    clickSrc.start(now);
+    clickSrc.stop(now + 0.04);
+
+    // "Boom" — niskie uderzenie jak bum wystrzelenia
+    const boomOsc = ctx.createOscillator();
+    boomOsc.type = 'sine';
+    boomOsc.frequency.setValueAtTime(140, now);
+    boomOsc.frequency.exponentialRampToValueAtTime(38, now + 0.08);
+
+    const boomGain = ctx.createGain();
+    boomGain.gain.setValueAtTime(0.30, now);
+    boomGain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    boomOsc.connect(boomGain);
+    boomGain.connect(this._masterGain);
+    boomOsc.start(now);
+    boomOsc.stop(now + 0.08);
+
+    // Szum wylotu lufy — krótki, wysoki "crack" (jak karabin maszynowy)
+    const crackBuf = this._makeNoise(0.06);
+    const crackSrc = ctx.createBufferSource();
+    crackSrc.buffer = crackBuf;
+
+    const crackHp = ctx.createBiquadFilter();
+    crackHp.type = 'highpass';
+    crackHp.frequency.value = 2200;
+
+    const crackGain = ctx.createGain();
+    crackGain.gain.setValueAtTime(0.25, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+
+    crackSrc.connect(crackHp);
+    crackHp.connect(crackGain);
+    crackGain.connect(this._masterGain);
+    crackSrc.start(now);
+    crackSrc.stop(now + 0.06);
+  }
 }

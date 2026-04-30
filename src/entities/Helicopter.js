@@ -342,7 +342,7 @@ export class Helicopter {
   /**
    * @returns {THREE.Vector3[]} pozycje pocisków które trafiły w coś (do sprawdzenia NPC)
    */
-  update(dt, input) {
+  update(dt, input, audio = null) {
     // Rotor spin — faster when occupied
     const mainSpeed = this.isOccupied ? 15 : 4;
     const tailSpeed = this.isOccupied ? 30 : 8;
@@ -447,6 +447,7 @@ export class Helicopter {
     const shootInput = (input.isMouseDown?.(0) || (input.pad?.r2 ?? 0) > 0.5);
     if (shootInput && this._shootCooldown <= 0) {
       this._shootCooldown = SHOOT_CD;
+      audio?.playGunshot();
       const bx = this.root.position.x + sinF * 2.2;
       const by = this.root.position.y - 0.5;
       const bz = this.root.position.z + cosF * 2.2;
