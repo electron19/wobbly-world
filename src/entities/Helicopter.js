@@ -15,10 +15,16 @@ import { toonMat, addOutline } from '../core/Materials.js';
 // Physics: kinematic. Hovers in place when idle.
 // Forward convention: facing=0 → +Z (same as Car/Airplane).
 
-const H_SPEED = 10;
-const V_SPEED = 7;
-const DRAG    = 3.8;
-const YAW_SPD = 1.9;
+const H_ACCEL     = 14;    // przyspieszenie poziome [m/s²]
+const H_DRAG      = 0.9;   // opór powietrza poziomo — mała wartość = duża bezwładność
+const V_ACCEL     = 10;    // przyspieszenie pionowe
+const V_DRAG      = 1.4;   // opór pionowy
+const H_MAX_SPD   = 28;    // max prędkość pozioma [m/s]
+const V_MAX_SPD   = 10;    // max prędkość pionowa [m/s]
+const YAW_SPD     = 1.9;
+const BULLET_SPD  = 65;    // prędkość pocisku [m/s]
+const BULLET_LIFE = 2.8;   // max czas życia pocisku [s]
+const SHOOT_CD    = 0.14;  // cooldown strzału [s] — ~7 pocisków/s
 
 export class Helicopter {
   constructor(scene, x = 0, y = 2, z = 0) {
@@ -27,10 +33,15 @@ export class Helicopter {
     this.isDrivable = true;
     this.facing     = 0;
     this.type       = 'helicopter';
+    this._scene     = scene;
 
     this._velX = 0;
     this._velY = 0;
     this._velZ = 0;
+
+    // Strzelanie
+    this._bullets      = [];
+    this._shootCooldown = 0;
 
     this._mainRotorGroup  = null;
     this._tailRotorGroup  = null;
@@ -328,6 +339,9 @@ export class Helicopter {
 
   // ── Update (called every frame) ──────────────────────────────────────────────
 
+  /**
+   * @returns {THREE.Vector3[]} pozycje pocisków które trafiły w coś (do sprawdzenia NPC)
+   */
   update(dt, input) {
     // Rotor spin — faster when occupied
     const mainSpeed = this.isOccupied ? 15 : 4;
@@ -335,12 +349,10 @@ export class Helicopter {
     if (this._mainRotorGroup) this._mainRotorGroup.rotation.y -= dt * mainSpeed;
     if (this._tailRotorGroup) this._tailRotorGroup.rotation.x += dt * tailSpeed;
 
-    // Police lights — alternating red / blue (each side independently)
-    const phase = Math.floor(performance.now() / 160) % 2;   // 0 or 1, ~6 Hz
-    const redOn  = phase === 0;
-    const blueOn = phase === 1;
-    this._policeLightsRed.forEach(l  => l.material.color.setHex(redOn  ? 0xFF1111 : 0x1A0000));
-    this._policeLightsBlue.forEach(l => l.material.color.setHex(blueOn ? 0x2255FF : 0x00051A));
+    // Police lights — alternating red / blue
+    const phase = Math.floor(performance.now() / 160) % 2;
+    this._policeLightsRed.forEach(l  => l.material.color.setHex(phase === 0 ? 0xFF1111 : 0x1A0000));
+    this._policeLightsBlue.forEach(l => l.material.color.setHex(phase === 1 ? 0x2255FF : 0x00051A));
 
     // Searchlight glow — only when occupied
     if (this._searchlightCone) {
@@ -349,7 +361,27 @@ export class Helicopter {
         : 0;
     }
 
-    if (!this.isOccupied) return;
+    // ── Aktualizacja pocisków ─────────────────────────────────────────────────
+    this._shootCooldown = Math.max(0, this._shootCooldown - dt);
+    const hitPositions = [];
+    for (let i = this._bullets.length - 1; i >= 0; i--) {
+      const b = this._bullets[i];
+      b.life += dt;
+      b.mesh.position.x += b.vx * dt;
+      b.mesh.position.y += b.vy * dt;
+      b.mesh.position.z += b.vz * dt;
+      b.vy -= 6 * dt; // grawitacja na pocisk
+      if (b.life > BULLET_LIFE || b.mesh.position.y < -2) {
+        this._scene.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mesh.material.dispose();
+        this._bullets.splice(i, 1);
+      } else {
+        hitPositions.push(b.mesh.position);
+      }
+    }
+
+    if (!this.isOccupied) return hitPositions;
 
     // ── Yaw: A/D keyboard + pad right stick X ────────────────────────────────
     const kbYaw = (input.isDown('KeyA') || input.isDown('ArrowLeft')  ? 1 : 0)
@@ -365,38 +397,71 @@ export class Helicopter {
     const kbFwd  = (input.isDown('KeyW') || input.isDown('ArrowUp')   ?  1 : 0)
                  - (input.isDown('KeyS') || input.isDown('ArrowDown') ?  1 : 0);
     const padLY  = input.pad?.leftY ?? 0;
-    const padFwd = Math.abs(padLY) > 0.12 ? -padLY : 0;   // push up = forward
+    const padFwd = Math.abs(padLY) > 0.12 ? -padLY : 0;
     const fwdIn  = kbFwd + padFwd;
 
-    // ── Strafe: pad left stick X only (no keyboard equivalent) ────────────────
-    const padLX   = input.pad?.leftX ?? 0;
-    const strafe  = Math.abs(padLX) > 0.12 ? padLX : 0;
+    // ── Strafe: pad left stick X ───────────────────────────────────────────────
+    const padLX  = input.pad?.leftX ?? 0;
+    const strafe = Math.abs(padLX) > 0.12 ? padLX : 0;
 
-    // World-space thrust
-    const thrustX = fwdIn * sinF * H_SPEED + strafe * cosF * H_SPEED;
-    const thrustZ = fwdIn * cosF * H_SPEED - strafe * sinF * H_SPEED;
+    // ── Prawdziwa bezwładność — przyspieszenie zamiast interpolacji ───────────
+    // Siła napędu w kierunku lokalnym, opór powietrza proporcjonalny do prędkości²
+    const thrustX  = (fwdIn * sinF + strafe * cosF) * H_ACCEL;
+    const thrustZ  = (fwdIn * cosF - strafe * sinF) * H_ACCEL;
+    const horizSpd = Math.hypot(this._velX, this._velZ);
 
-    this._velX += (thrustX - this._velX) * (1 - Math.exp(-DRAG * dt));
-    this._velZ += (thrustZ - this._velZ) * (1 - Math.exp(-DRAG * dt));
+    this._velX += (thrustX - this._velX * H_DRAG * (1 + horizSpd * 0.04)) * dt;
+    this._velZ += (thrustZ - this._velZ * H_DRAG * (1 + horizSpd * 0.04)) * dt;
+
+    // Ogranicz prędkość poziomą
+    if (horizSpd > H_MAX_SPD) {
+      const scale = H_MAX_SPD / horizSpd;
+      this._velX *= scale;
+      this._velZ *= scale;
+    }
 
     this.root.position.x += this._velX * dt;
     this.root.position.z += this._velZ * dt;
 
-    // ── Vertical: Space/Shift keyboard + pad right stick Y ───────────────────
-    const upIn  = input.isDown('Space') ? 1 : 0;
-    const dnIn  = (input.isDown('ShiftLeft')   || input.isDown('ShiftRight') ||
-                   input.isDown('ControlLeft') || input.isDown('ControlRight')) ? 1 : 0;
-    const padRY  = input.pad?.rightY ?? 0;
-    const padV   = Math.abs(padRY) > 0.12 ? -padRY : 0;   // push up = ascend
-    const vTgt   = ((upIn - dnIn) + padV) * V_SPEED;
-    this._velY  += (vTgt - this._velY) * (1 - Math.exp(-DRAG * 1.2 * dt));
+    // ── Pionowe — lekka grawitacja gdy nie ma wejścia ─────────────────────────
+    const upIn = input.isDown('Space') ? 1 : 0;
+    const dnIn = (input.isDown('ShiftLeft') || input.isDown('ShiftRight') ||
+                  input.isDown('ControlLeft') || input.isDown('ControlRight')) ? 1 : 0;
+    const padRY = input.pad?.rightY ?? 0;
+    const padV  = Math.abs(padRY) > 0.12 ? -padRY : 0;
+    const vIn   = (upIn - dnIn) + padV;
+
+    // Bez wejścia: lekkie opadanie (bezwładność ciężkiego helikoptera)
+    const vThrust = vIn * V_ACCEL;
+    const vGravity = this.isOccupied && vIn === 0 ? -1.8 : 0;
+    this._velY += (vThrust + vGravity - this._velY * V_DRAG) * dt;
+    this._velY = Math.max(-V_MAX_SPD, Math.min(V_MAX_SPD, this._velY));
 
     this.root.position.y += this._velY * dt;
-
-    // Ground clamp
     if (this.root.position.y < 1.0) {
       this.root.position.y = 1.0;
       if (this._velY < 0) this._velY = 0;
+    }
+
+    // ── Strzelanie: LMB / pad R2 ──────────────────────────────────────────────
+    const shootInput = (input.isMouseDown?.(0) || (input.pad?.r2 ?? 0) > 0.5);
+    if (shootInput && this._shootCooldown <= 0) {
+      this._shootCooldown = SHOOT_CD;
+      const bx = this.root.position.x + sinF * 2.2;
+      const by = this.root.position.y - 0.5;
+      const bz = this.root.position.z + cosF * 2.2;
+      const geo  = new THREE.SphereGeometry(0.10, 5, 4);
+      const mat  = new THREE.MeshBasicMaterial({ color: 0xFFEE00 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(bx, by, bz);
+      this._scene.add(mesh);
+      this._bullets.push({
+        mesh,
+        vx: sinF * BULLET_SPD + this._velX,
+        vy: 0,
+        vz: cosF * BULLET_SPD + this._velZ,
+        life: 0,
+      });
     }
 
     // ── Visual tilt (nose pitch + banking) ───────────────────────────────────
@@ -404,15 +469,13 @@ export class Helicopter {
     const sideSpeed = this._velX * cosF - this._velZ * sinF;
     this.root.rotation.y = this.facing;
     this.root.rotation.x = THREE.MathUtils.lerp(
-      this.root.rotation.x,
-      -fwdSpeed * 0.055,
-      1 - Math.exp(-dt * 6),
+      this.root.rotation.x, -fwdSpeed * 0.048, 1 - Math.exp(-dt * 4),
     );
     this.root.rotation.z = THREE.MathUtils.lerp(
-      this.root.rotation.z,
-      yawIn * -0.09 + sideSpeed * -0.04,
-      1 - Math.exp(-dt * 5),
+      this.root.rotation.z, yawIn * -0.09 + sideSpeed * -0.035, 1 - Math.exp(-dt * 4),
     );
+
+    return hitPositions;
   }
 
   /** Reset flight state on exit */

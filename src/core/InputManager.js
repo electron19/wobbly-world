@@ -22,6 +22,11 @@ export class InputManager {
     this._jpQueue   = new Set();  // klawisze wciśnięte od ostatniego flush()
     this._jpFrame   = new Set();  // klawisze "just pressed" w bieżącej klatce
 
+    // Przyciski myszy (0=LMB, 1=MMB, 2=RMB)
+    this._mouseButtons = {};
+    this._mbQueue      = new Set();
+    this._mbFrame      = new Set();
+
     // Stan pada
     this.pad = {
       connected: false,
@@ -59,9 +64,20 @@ export class InputManager {
     document.addEventListener('click', () => {
       if (!this._locked) document.body.requestPointerLock();
     });
+
+    document.addEventListener('mousedown', e => {
+      if (!this._locked) return;
+      if (!this._mouseButtons[e.button]) this._mbQueue.add(e.button);
+      this._mouseButtons[e.button] = true;
+    });
+    document.addEventListener('mouseup', e => {
+      this._mouseButtons[e.button] = false;
+    });
   }
 
-  isDown(code) { return !!this.keys[code]; }
+  isDown(code)              { return !!this.keys[code]; }
+  isMouseDown(button)       { return !!this._mouseButtons[button]; }
+  isMouseJustPressed(button){ return this._mbFrame.has(button); }
 
   /**
    * Zwraca true dokładnie przez 1 klatkę po wciśnięciu klawisza.
@@ -118,6 +134,8 @@ export class InputManager {
     // Przesuń kolejkę: to co było wciśnięte od ostatniego flush() → bieżąca klatka
     this._jpFrame = new Set(this._jpQueue);
     this._jpQueue.clear();
+    this._mbFrame = new Set(this._mbQueue);
+    this._mbQueue.clear();
 
     this._pollGamepad();
     this.mouse.dx        = this._pdx;

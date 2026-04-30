@@ -365,7 +365,7 @@ export class Game {
     this._interactCooldown = 20;
     const isHeli = ac.type === 'helicopter';
     this._uiEl.innerHTML = isHeli
-      ? 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; E – wysiądź'
+      ? 'WASD – leć &nbsp;|&nbsp; SPACJA – w górę &nbsp;|&nbsp; SHIFT – w dół &nbsp;|&nbsp; LMB – strzał &nbsp;|&nbsp; E – wysiądź'
       : 'W – gaz &nbsp;|&nbsp; S – hamulec &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; Mysz – ster &nbsp;|&nbsp; E – wysiądź';
   }
 
@@ -619,7 +619,18 @@ export class Game {
 
     // ── Aircraft update (kinematic — no Rapier) ───────────────────────────
     for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
-    for (const ac of this.helicopters) ac.update(dt, this.input);
+    for (const ac of this.helicopters) {
+      const bulletPositions = ac.update(dt, this.input);
+      // Sprawdź trafienia pocisków w NPC (promień 1.4 j.ś.)
+      for (const bp of bulletPositions) {
+        for (const npc of this.npcs) {
+          if (npc._dead || !npc.root.visible) continue;
+          if (Math.hypot(bp.x - npc.root.position.x, bp.z - npc.root.position.z) < 1.4) {
+            npc.kill();
+          }
+        }
+      }
+    }
 
     // ── 1. Wejście → Rapier vehicle controller (siły pojazdu + updateVehicle) ──
     if (this._drivingAircraft) {

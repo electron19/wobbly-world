@@ -77,13 +77,13 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   26);    // było 24 — wyższa sztywność redukuje odbijanie
-      vehicle.setWheelSuspensionCompression(i,  4.5);  // było 3.0 — mocniejsze tłumienie skoku
-      vehicle.setWheelSuspensionRelaxation(i,   4.0);  // było 3.0 — wolniejszy powrót = mniej "galaret"
-      vehicle.setWheelMaxSuspensionTravel(i,    0.55); // przywrócone 0.55 — lepszy off-road (jelly naprawione przez velocity damper)
-      vehicle.setWheelMaxSuspensionForce(i,     18000); // było 25000 — ogranicza impuls przy krawężnikach
-      vehicle.setWheelFrictionSlip(i,           1.8);  // było 1.5 — lekko wyższy grip
-      vehicle.setWheelSideFrictionStiffness(i,  1.0);  // było 0.65 — lepszy boczny grip (mniej ślizganie)
+      vehicle.setWheelSuspensionStiffness(i,   24);
+      vehicle.setWheelSuspensionCompression(i,  3.0);
+      vehicle.setWheelSuspensionRelaxation(i,   3.0);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.55);
+      vehicle.setWheelMaxSuspensionForce(i,     18000);
+      vehicle.setWheelFrictionSlip(i,           1.8);
+      vehicle.setWheelSideFrictionStiffness(i,  1.0);
     }
 
     return { vehicle, chassis };

@@ -96,7 +96,19 @@ export class NPC {
   }
 
   canBeAbducted() {
-    return !this._abduction && !this._abductedGone && this.root.visible;
+    return !this._abduction && !this._abductedGone && !this._dead && this.root.visible;
+  }
+
+  /** Zabija NPC — pada, zapada się w ziemię i znika. */
+  kill() {
+    if (this._dead || this._abductedGone) return;
+    this._dead       = true;
+    this._dyingTimer = 0;
+    this._speed      = 0;
+    this._waiting    = true;
+    this._sleepTimer = 0;
+    this._sleepFall  = 0;
+    this._scareTimer = 0;
   }
 
   startAbduction(ufo) {
@@ -235,6 +247,22 @@ export class NPC {
 
   update(dt) {
     if (this._abductedGone) return;
+
+    // ── Śmierć — pada i zapada się ───────────────────────────────────────────
+    if (this._dead) {
+      this._dyingTimer = (this._dyingTimer ?? 0) + dt;
+      const fallT = Math.min(1, this._dyingTimer / 0.35);
+      const p     = fallT * fallT * (3 - 2 * fallT);
+      this.root.rotation.z = p * (Math.PI / 2);
+      this.root.position.y = p * 0.45;
+      // Po 1.5 s — zapada się w ziemię i znika
+      if (this._dyingTimer > 1.5) {
+        this.root.position.y = 0.45 - (this._dyingTimer - 1.5) * 0.7;
+        if (this._dyingTimer > 3.2) this.root.visible = false;
+      }
+      return;
+    }
+
     this._screamCooldown = Math.max(0, this._screamCooldown - dt);
 
     if (this._abduction?.ufo) {

@@ -933,11 +933,12 @@ export class Car extends Entity {
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      const suspAvg  = (s0 + s1 + s2 + s3) / 4;
-      const airborne = suspAvg > 0.32;  // > 0.32 = koła w powietrzu
+      // > 0.48 = koło w powietrzu (rest length = 0.45, > rest = unosi się)
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.48).length;
+      const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 4000;   // roll + pitch — silniejsze w powietrzu
-      const DAMP_Y    = airborne ? 22000 : 1200;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
+      const DAMP_XZ   = airborne ? 18000 : 1200;   // roll + pitch — silniejsze w powietrzu
+      const DAMP_Y    = airborne ? 22000 :  600;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
       // RESTORE tylko w powietrzu — na ziemi zawieszenie samo stabilizuje chassis.
       // Restore na ziemi walczy z fizyką zawieszenia i blokuje normalne prowadzenie.
       const RESTORE   = airborne ? 20000 : 0;
