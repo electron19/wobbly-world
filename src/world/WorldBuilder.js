@@ -1038,59 +1038,135 @@ export class WorldBuilder {
     );
   }
 
-  // ─── Osiedle z wielkiej płyty — import z DXF site-export(2).dxf ─────────────
+  // ─── Osiedle z wielkiej płyty ────────────────────────────────────────────────
   //
-  // Centrum osiedla: cx=330, cz=-450 (far NE, poza drogami N-S x=195 i E-W z=-250).
-  // Mapowanie: game_x = 330 + dxf_x,  game_z = -450 − dxf_y.
-  // Weryfikacja: estate x: 227..433 (>199.5 road clear), z: -541..-362 (<-254.5 road clear).
-  // Ground size 1280 → ±640 — northernmost z=-541 safe.
+  // Estate bounds: x ∈ [203, 447], z ∈ [-358, -558]
+  // Internal E-W roads:
+  //   Road A: z=-392   south sidewalk outer: z=-387.5  north: z=-396.5
+  //   Road B: z=-472   south sidewalk outer: z=-467.5  north: z=-476.5
   //
-  // Budynki 4-piętrowe, polskie bloki lat 70.–80. (wielka płyta).
+  // Clearance rule: entry face ≥ sidewalk_outer + 2 units gap
+  //   → FN block south of road A: center_z ≥ -384.5 + d/2  (use z=-368 for d≤32)
+  //   → FS block north of road A: center_z ≤ -399.5 - d/2  (use z=-413 for d≤27)
+  //   → FN block south of road B: center_z ≥ -464.5 + d/2  (use z=-447 for d≤34)
+  //   → FS block north of road B: center_z ≤ -479.5 - d/2  (use z=-496 for d≤33)
+
+  /** Internal estate road segment — raw geometry, offset from world origin. */
+  _estateRoad(axis, center, from, to) {
+    const RW = 3.0, SWW = 1.5;
+    const len = to - from;
+    const mid = (from + to) / 2;
+    const roadMat = new THREE.MeshToonMaterial({ color: 0x888888 });
+
+    if (axis === 'z') {
+      // E-W road at z=center, x from `from` to `to`
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(len, RW * 2), roadMat);
+      road.rotation.x = -Math.PI / 2;
+      road.position.set(mid, 0.011, center);
+      road.receiveShadow = true;
+      this.scene.add(road);
+
+      // Dashed centre line
+      const lineMat = new THREE.MeshToonMaterial({ color: 0xFFFFCC });
+      const nDashes = Math.max(1, Math.floor(len / 10));
+      const step = len / nDashes;
+      for (let i = 0; i < nDashes; i++) {
+        const dash = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.25), lineMat);
+        dash.rotation.x = -Math.PI / 2;
+        dash.position.set(from + (i + 0.5) * step, 0.013, center);
+        this.scene.add(dash);
+      }
+
+      // Sidewalks on both sides
+      [-1, 1].forEach(side => {
+        const swZ = center + side * (RW + SWW / 2);
+        const sw = new THREE.Mesh(
+          new THREE.PlaneGeometry(len, SWW),
+          makeSidewalkMat(this._swCanvas, len, SWW),
+        );
+        sw.rotation.x = -Math.PI / 2;
+        sw.position.set(mid, SIDEWALK_H, swZ);
+        sw.receiveShadow = true;
+        this.scene.add(sw);
+        this.physics.addStaticBox(mid, 0, swZ, len / 2, SIDEWALK_H, SWW / 2);
+        if (this.vehiclePhysics)
+          this.vehiclePhysics.addStaticBox(mid, 0, swZ, len / 2, SIDEWALK_H, SWW / 2, 'ground');
+      });
+    } else {
+      // N-S road at x=center, z from `from` to `to`
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(RW * 2, len), roadMat);
+      road.rotation.x = -Math.PI / 2;
+      road.position.set(center, 0.011, mid);
+      road.receiveShadow = true;
+      this.scene.add(road);
+
+      [-1, 1].forEach(side => {
+        const swX = center + side * (RW + SWW / 2);
+        const sw = new THREE.Mesh(
+          new THREE.PlaneGeometry(SWW, len),
+          makeSidewalkMat(this._swCanvas, SWW, len),
+        );
+        sw.rotation.x = -Math.PI / 2;
+        sw.position.set(swX, SIDEWALK_H, mid);
+        sw.receiveShadow = true;
+        this.scene.add(sw);
+        this.physics.addStaticBox(swX, 0, mid, SWW / 2, SIDEWALK_H, len / 2);
+        if (this.vehiclePhysics)
+          this.vehiclePhysics.addStaticBox(swX, 0, mid, SWW / 2, SIDEWALK_H, len / 2, 'ground');
+      });
+    }
+  }
 
   _addPanelEstate() {
-    // ── Duże bloki płytowe — elongated slabs ──────────────────────────────────
-    // #2: 50.9×18.3m  dxf(22, 81.8)  → game(352, -532)
-    this._panel(352, -532, FN, { w: 51, d: 18, floors: 4, variant: 0 });
-    // #3: 52.6×21.6m  dxf(-21, 38.9) → game(309, -489)
-    this._panel(309, -489, FS, { w: 53, d: 22, floors: 4, variant: 1 });
-    // #4: 52.6×21.6m  dxf(7, 10.3)   → game(337, -460)
-    this._panel(337, -460, FN, { w: 53, d: 22, floors: 4, variant: 2 });
-    // #5: 63.7×26.0m  dxf(33, -17.1) → game(363, -433) — southernmost main slab
-    this._panel(363, -433, FN, { w: 64, d: 26, floors: 4, variant: 0 });
-    // #12: 40.8×18.4m dxf(50, -49.9) → game(380, -400)
-    this._panel(380, -400, FS, { w: 41, d: 18, floors: 4, variant: 3 });
-    // #13: 40.8×18.4m dxf(77, -78.7) → game(407, -371)
-    this._panel(407, -371, FN, { w: 41, d: 18, floors: 4, variant: 1 });
+    // ── Internal streets ──────────────────────────────────────────────────────
+    this._estateRoad('z', -392, 203, 447);   // Road A — south internal
+    this._estateRoad('z', -472, 203, 447);   // Road B — north internal
 
-    // ── Średnie bloki — some elongated N-S (16×26), some square ─────────────
-    // #0: 25.2×14.5m  dxf(-31, 72.9) → game(299, -523)
-    this._panel(299, -523, FS, { w: 25, d: 15, floors: 4, variant: 2 });
-    // #6: 15.8×26.3m  dxf(59, 58.0)  → game(389, -508) — tower block, N-S
-    this._panel(389, -508, FW, { w: 16, d: 26, floors: 4, variant: 3 });
-    // #7: 15.8×26.3m  dxf(61, 33.2)  → game(391, -483) — tower block, N-S
-    this._panel(391, -483, FW, { w: 16, d: 26, floors: 4, variant: 0 });
-    // #8: 15.9×26.3m  dxf(62, 8.3)   → game(392, -458) — tower block, N-S
-    this._panel(392, -458, FW, { w: 16, d: 26, floors: 4, variant: 1 });
-    // #9: 18.9×19.8m  dxf(-33, 16.1) → game(297, -466)
-    this._panel(297, -466, FS, { w: 19, d: 20, floors: 4, variant: 0 });
-    // #14: 25.5×29.6m dxf(-81, -8.2) → game(249, -442)
-    this._panel(249, -442, FE, { w: 26, d: 30, floors: 4, variant: 2 });
-    // #15: 45.8×47.2m dxf(-53, -41.5)→ game(277, -408) — large community block, 5 floors
-    this._panel(277, -408, FE, { w: 46, d: 47, floors: 5, variant: 3 });
-    // #16: 27.4×29.3m dxf(-84, -54.2)→ game(246, -396)
-    this._panel(246, -396, FE, { w: 27, d: 29, floors: 4, variant: 0 });
-    // #21: 27.4×24.6m dxf(-61, -5.4) → game(269, -445)
-    this._panel(269, -445, FE, { w: 27, d: 25, floors: 4, variant: 1 });
+    // ── Row S: south of road A (z=-392), FN — entries face north ─────────────
+    // Clearance: entry = center_z − d/2  ≥  -387.5 + 3 = -384.5
+    // z=-368 → entry offset: d=26→-381 (gap 3.5), d=18→-377 (gap 7.5) ✓
+    this._panel(252, -368, FN, { w: 64, d: 26, floors: 4, variant: 0 });  // x: 220..284
+    this._panel(374, -368, FN, { w: 51, d: 18, floors: 4, variant: 3 });  // x: 348..400
 
-    // ── Mały blok usługowy (1 kondygnacja, sklepy w parterze) ─────────────────
-    // #10: 16.0×7.9m  dxf(-41, 23.1) → game(289, -473)
-    this._panel(289, -473, FS, { w: 16, d: 8, floors: 1, variant: 2 });
+    // Service block close to road A south side
+    // z=-381: entry=-385, gap 2.5 from south sidewalk outer ✓
+    this._panel(438, -381, FN, { w: 16, d: 8,  floors: 1, variant: 2 });  // x: 430..446
 
-    // ── Drzewa wewnątrz osiedla — między blokami ──────────────────────────────
+    // ── Row MS: north of road A (z=-392), FS — entries face south ─────────────
+    // Clearance: entry = center_z + d/2  ≤  -396.5 − 3 = -399.5
+    // z=-413: entry offset: d=22→-402 (gap 2.5), d=25→-400.5 (gap 1) ✓ use z=-415 for d=25
+    this._panel(245, -415, FS, { w: 27, d: 25, floors: 4, variant: 1 });  // x: 231..259; entry=-402.5 gap 3 ✓
+    this._panel(328, -413, FS, { w: 53, d: 22, floors: 4, variant: 1 });  // x: 301..355; entry=-402 gap 2.5 ✓
+    this._panel(415, -413, FS, { w: 41, d: 18, floors: 4, variant: 2 });  // x: 394..436; entry=-404 gap 4.5 ✓
+
+    // ── Row MN: south of road B (z=-472), FN — entries face north ─────────────
+    // z=-447: entry offset: d=15→-454.5 (gap 10), d=20→-457 (gap 7.5), d=30→-462 (gap 2.5) ✓
+    this._panel(255, -447, FN, { w: 25, d: 15, floors: 4, variant: 2 });  // x: 242..268
+    this._panel(308, -447, FN, { w: 19, d: 20, floors: 4, variant: 0 });  // x: 298..318
+    this._panel(363, -447, FN, { w: 41, d: 18, floors: 4, variant: 3 });  // x: 342..384
+    this._panel(421, -447, FN, { w: 26, d: 30, floors: 4, variant: 2 });  // x: 408..434; entry=-462 ✓
+
+    // ── Row N: north of road B (z=-472), FS — entries face south ─────────────
+    // z=-496: entry offset: d=26→-483 (gap 3.5), d=18→-487 (gap 7.5) ✓
+    // z=-506 for big block d=47: entry=-506+23.5=-482.5 (gap 3) ✓
+    this._panel(224, -496, FS, { w: 27, d: 29, floors: 4, variant: 0 });  // x: 210..238; entry=-481.5 gap 2 ✓
+    this._panel(278, -506, FS, { w: 46, d: 47, floors: 5, variant: 3 });  // x: 255..301; entry=-482.5 gap 3 ✓
+    this._panel(351, -496, FS, { w: 16, d: 26, floors: 4, variant: 3 });  // x: 343..359; tower
+    this._panel(391, -496, FS, { w: 16, d: 26, floors: 4, variant: 0 });  // x: 383..399; tower
+    this._panel(431, -496, FS, { w: 16, d: 26, floors: 4, variant: 1 });  // x: 423..439; tower
+
+    // ── Trees — between buildings and alongside roads ──────────────────────────
     const estateTrees = [
-      [330, -470], [355, -470], [310, -505], [360, -505],
-      [330, -430], [370, -445], [300, -450], [320, -490],
-      [270, -420], [295, -490], [340, -415], [375, -415],
+      // Between road A and row MS / row MN
+      [293, -432], [340, -432], [385, -432], [430, -432],
+      // Between road A and road B (open median space)
+      [215, -430], [215, -460],
+      // Row MN gaps
+      [285, -448], [335, -448],
+      // Between road B and row N
+      [215, -484], [310, -484], [370, -484], [410, -484],
+      // North cluster surroundings
+      [215, -520], [340, -520], [420, -520],
     ];
     estateTrees.forEach(([tx, tz]) => {
       if (!this._isFreeForTree(tx, tz, 2.5)) return;
