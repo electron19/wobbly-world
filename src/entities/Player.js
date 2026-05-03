@@ -46,6 +46,8 @@ export class Player extends Entity {
     this._fartClouds  = [];   // aktywne chmury smrodu
     this._sleepClouds = [];   // aktywne chmury usypiające
 
+    this.root.rotation.order = 'YXZ';
+
     this._buildBody();
     this._buildEyes();
     this._buildLimbs();
