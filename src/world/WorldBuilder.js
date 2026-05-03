@@ -37,6 +37,7 @@ import { Helicopter }             from '../entities/Helicopter.js';
 import { FighterJet }             from '../entities/FighterJet.js';
 import { Bomber }                 from '../entities/Bomber.js';
 import { Airport }                from '../objects/Airport.js';
+import { PanelBlock }             from '../objects/PanelBlock.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
 
@@ -84,6 +85,7 @@ export class WorldBuilder {
     this._addFarFarSouth();
     this._addNewNorthEstate();
     this._addNewSouthEstate();
+    this._addPanelEstate();
     this._addPoppyFactory();
     this._addRoofLadders();
     this._addHills();
@@ -1024,6 +1026,81 @@ export class WorldBuilder {
     this._add(new Shop(this.scene, this.physics, {
       facing: FE, wallColor: 0xFFE8F0, roofColor: 0xAA2244,
     }, this.vehiclePhysics).placeAt(-184, 0, 210));
+  }
+
+  /** Blok z wielkiej płyty — rejestruje koło wykluczenia, stawia budynek. */
+  _panel(x, z, facing, opts = {}) {
+    const w = opts.w ?? 50, d = opts.d ?? 14;
+    this._regCircle(x, z, w / 2, d / 2, 2.5);
+    return this._add(
+      new PanelBlock(this.scene, this.physics, { facing, ...opts }, this.vehiclePhysics)
+        .placeAt(x, 0, z),
+    );
+  }
+
+  // ─── Osiedle z wielkiej płyty — import z DXF site-export(2).dxf ─────────────
+  //
+  // Centrum osiedla: cx=330, cz=-450 (far NE, poza drogami N-S x=195 i E-W z=-250).
+  // Mapowanie: game_x = 330 + dxf_x,  game_z = -450 − dxf_y.
+  // Weryfikacja: estate x: 227..433 (>199.5 road clear), z: -541..-362 (<-254.5 road clear).
+  // Ground size 1280 → ±640 — northernmost z=-541 safe.
+  //
+  // Budynki 4-piętrowe, polskie bloki lat 70.–80. (wielka płyta).
+
+  _addPanelEstate() {
+    // ── Duże bloki płytowe — elongated slabs ──────────────────────────────────
+    // #2: 50.9×18.3m  dxf(22, 81.8)  → game(352, -532)
+    this._panel(352, -532, FN, { w: 51, d: 18, floors: 4, variant: 0 });
+    // #3: 52.6×21.6m  dxf(-21, 38.9) → game(309, -489)
+    this._panel(309, -489, FS, { w: 53, d: 22, floors: 4, variant: 1 });
+    // #4: 52.6×21.6m  dxf(7, 10.3)   → game(337, -460)
+    this._panel(337, -460, FN, { w: 53, d: 22, floors: 4, variant: 2 });
+    // #5: 63.7×26.0m  dxf(33, -17.1) → game(363, -433) — southernmost main slab
+    this._panel(363, -433, FN, { w: 64, d: 26, floors: 4, variant: 0 });
+    // #12: 40.8×18.4m dxf(50, -49.9) → game(380, -400)
+    this._panel(380, -400, FS, { w: 41, d: 18, floors: 4, variant: 3 });
+    // #13: 40.8×18.4m dxf(77, -78.7) → game(407, -371)
+    this._panel(407, -371, FN, { w: 41, d: 18, floors: 4, variant: 1 });
+
+    // ── Średnie bloki — some elongated N-S (16×26), some square ─────────────
+    // #0: 25.2×14.5m  dxf(-31, 72.9) → game(299, -523)
+    this._panel(299, -523, FS, { w: 25, d: 15, floors: 4, variant: 2 });
+    // #6: 15.8×26.3m  dxf(59, 58.0)  → game(389, -508) — tower block, N-S
+    this._panel(389, -508, FW, { w: 16, d: 26, floors: 4, variant: 3 });
+    // #7: 15.8×26.3m  dxf(61, 33.2)  → game(391, -483) — tower block, N-S
+    this._panel(391, -483, FW, { w: 16, d: 26, floors: 4, variant: 0 });
+    // #8: 15.9×26.3m  dxf(62, 8.3)   → game(392, -458) — tower block, N-S
+    this._panel(392, -458, FW, { w: 16, d: 26, floors: 4, variant: 1 });
+    // #9: 18.9×19.8m  dxf(-33, 16.1) → game(297, -466)
+    this._panel(297, -466, FS, { w: 19, d: 20, floors: 4, variant: 0 });
+    // #14: 25.5×29.6m dxf(-81, -8.2) → game(249, -442)
+    this._panel(249, -442, FE, { w: 26, d: 30, floors: 4, variant: 2 });
+    // #15: 45.8×47.2m dxf(-53, -41.5)→ game(277, -408) — large community block, 5 floors
+    this._panel(277, -408, FE, { w: 46, d: 47, floors: 5, variant: 3 });
+    // #16: 27.4×29.3m dxf(-84, -54.2)→ game(246, -396)
+    this._panel(246, -396, FE, { w: 27, d: 29, floors: 4, variant: 0 });
+    // #21: 27.4×24.6m dxf(-61, -5.4) → game(269, -445)
+    this._panel(269, -445, FE, { w: 27, d: 25, floors: 4, variant: 1 });
+
+    // ── Mały blok usługowy (1 kondygnacja, sklepy w parterze) ─────────────────
+    // #10: 16.0×7.9m  dxf(-41, 23.1) → game(289, -473)
+    this._panel(289, -473, FS, { w: 16, d: 8, floors: 1, variant: 2 });
+
+    // ── Drzewa wewnątrz osiedla — między blokami ──────────────────────────────
+    const estateTrees = [
+      [330, -470], [355, -470], [310, -505], [360, -505],
+      [330, -430], [370, -445], [300, -450], [320, -490],
+      [270, -420], [295, -490], [340, -415], [375, -415],
+    ];
+    estateTrees.forEach(([tx, tz]) => {
+      if (!this._isFreeForTree(tx, tz, 2.5)) return;
+      const s = 0.8 + rand() * 0.5;
+      this._add(new Tree(this.scene, this.physics,
+        { trunkH: 3.2 * s, trunkR: 0.22 * s, leavesR: 2.0 * s },
+        this.vehiclePhysics,
+      ).placeAt(tx, 0, tz));
+      this._regCircle(tx, tz, 1.8, 1.8, 0.8);
+    });
   }
 
   // ─── Fabryka Playtime Co. (Poppy Playtime) — NE outskirts ───────────────────
