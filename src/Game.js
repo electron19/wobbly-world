@@ -19,9 +19,9 @@ import { DEFAULT_SETTINGS }        from './ui/MainMenu.js';
 
 // ── Render/quality presets ────────────────────────────────────────────────────
 const RENDER_PRESETS = {
-  near:   { fog: 0.025, cull: 55,  far: 110 },
-  medium: { fog: 0.008, cull: 85,  far: 180 },
-  far:    { fog: 0.003, cull: 140, far: 300 },
+  near:   { fog: 0.020, cull:  70, far:  160 },
+  medium: { fog: 0.005, cull: 130, far:  350 },
+  far:    { fog: 0.001, cull: 220, far:  750 },
 };
 const QUALITY_PRESETS = {
   low:    { shadows: false, shadowType: THREE.BasicShadowMap,   pixelRatio: 1.0 },
