@@ -296,9 +296,9 @@ export class WorldBuilder {
           sw.position.set(cx, SWH, swZ);
           sw.receiveShadow = true;
           this.scene.add(sw);
-          this.physics.addStaticBox(cx, 0, swZ, len / 2, SWH, SWW / 2);
+          this.physics.addStaticBox(cx, SWH / 2, swZ, len / 2, SWH / 2, SWW / 2);
           if (this.vehiclePhysics)
-            this.vehiclePhysics.addStaticBox(cx, 0, swZ, len / 2, SWH, SWW / 2, 'ground');
+            this.vehiclePhysics.addStaticBox(cx, SWH / 2, swZ, len / 2, SWH / 2, SWW / 2, 'ground');
         }
       });
     } else {
@@ -328,9 +328,9 @@ export class WorldBuilder {
           sw.position.set(swX, SWH, cz);
           sw.receiveShadow = true;
           this.scene.add(sw);
-          this.physics.addStaticBox(swX, 0, cz, SWW / 2, SWH, len / 2);
+          this.physics.addStaticBox(swX, SWH / 2, cz, SWW / 2, SWH / 2, len / 2);
           if (this.vehiclePhysics)
-            this.vehiclePhysics.addStaticBox(swX, 0, cz, SWW / 2, SWH, len / 2, 'ground');
+            this.vehiclePhysics.addStaticBox(swX, SWH / 2, cz, SWW / 2, SWH / 2, len / 2, 'ground');
         }
       });
     }
@@ -391,9 +391,9 @@ export class WorldBuilder {
             corner.position.set(cx, SWH, cz);
             corner.receiveShadow = true;
             this.scene.add(corner);
-            this.physics.addStaticBox(cx, 0, cz, SWW / 2, SWH, SWW / 2);
+            this.physics.addStaticBox(cx, SWH / 2, cz, SWW / 2, SWH / 2, SWW / 2);
             if (this.vehiclePhysics)
-              this.vehiclePhysics.addStaticBox(cx, 0, cz, SWW / 2, SWH, SWW / 2, 'ground');
+              this.vehiclePhysics.addStaticBox(cx, SWH / 2, cz, SWW / 2, SWH / 2, SWW / 2, 'ground');
           });
         });
       });
@@ -1088,9 +1088,9 @@ export class WorldBuilder {
         sw.position.set(mid, SIDEWALK_H, swZ);
         sw.receiveShadow = true;
         this.scene.add(sw);
-        this.physics.addStaticBox(mid, 0, swZ, len / 2, SIDEWALK_H, SWW / 2);
+        this.physics.addStaticBox(mid, SIDEWALK_H / 2, swZ, len / 2, SIDEWALK_H / 2, SWW / 2);
         if (this.vehiclePhysics)
-          this.vehiclePhysics.addStaticBox(mid, 0, swZ, len / 2, SIDEWALK_H, SWW / 2, 'ground');
+          this.vehiclePhysics.addStaticBox(mid, SIDEWALK_H / 2, swZ, len / 2, SIDEWALK_H / 2, SWW / 2, 'ground');
       });
     } else {
       // N-S road at x=center, z from `from` to `to`
@@ -1110,9 +1110,9 @@ export class WorldBuilder {
         sw.position.set(swX, SIDEWALK_H, mid);
         sw.receiveShadow = true;
         this.scene.add(sw);
-        this.physics.addStaticBox(swX, 0, mid, SWW / 2, SIDEWALK_H, len / 2);
+        this.physics.addStaticBox(swX, SIDEWALK_H / 2, mid, SWW / 2, SIDEWALK_H / 2, len / 2);
         if (this.vehiclePhysics)
-          this.vehiclePhysics.addStaticBox(swX, 0, mid, SWW / 2, SIDEWALK_H, len / 2, 'ground');
+          this.vehiclePhysics.addStaticBox(swX, SIDEWALK_H / 2, mid, SWW / 2, SIDEWALK_H / 2, len / 2, 'ground');
       });
     }
   }
