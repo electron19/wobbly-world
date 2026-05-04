@@ -1205,49 +1205,49 @@ export class WorldBuilder {
     this._addLadder(162, 0, -144, 14, Math.PI);
   }
 
-  // ─── Wzgórza — tylko 2, w odległych narożnikach ──────────────────────────────
+  // ─── Wzgórza — w odległych narożnikach świata ────────────────────────────────
 
   _addHills() {
     // ── Wzgórza w narożnikach świata ─────────────────────────────────────────
-    // Zasada: dist(cx, każda_droga) > radius + ROAD_CLEAR(4.5) + 2.0
-    // Drogi N-S: x=0,±65,±130 | Drogi E-W: z=0,±50,±100
+    // Zasada: dist(cx, każda_droga) > radius + ROAD_CLEAR(4.5)
+    // Drogi N-S: x=0,±65,±130,±195 | Drogi E-W: z=0,±50,±100,±150,±200,±250
     //
-    // NW (-175,-175, r=30): od x=-130 → 45 > 36.5 ✓, od z=-100 → 75 > 36.5 ✓
+    // NW (-250,-300, r=30): x=-195→55≥34.5✓  z=-250→50≥34.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 30, height: 16, color: 0x3a8a15, shape: 'round' },
       this.vehiclePhysics,
-    ).placeAt(-175, 0, -175));
+    ).placeAt(-250, 0, -300));
 
-    // SE (175,175, r=24): od x=130 → 45 > 30.5 ✓, od z=100 → 75 > 30.5 ✓
+    // SE (250,300, r=24): x=195→55≥28.5✓  z=250→50≥28.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 24, height: 11, color: 0x4a9a25, shape: 'mesa' },
       this.vehiclePhysics,
-    ).placeAt(175, 0, 175));
+    ).placeAt(250, 0, 300));
 
-    // NE (195,-195, r=28): od x=130 → 65 > 34.5 ✓, od z=-100 → 95 > 34.5 ✓
+    // NE (250,-300, r=28): x=195→55≥32.5✓  z=-250→50≥32.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 28, height: 14, color: 0x3d9020, shape: 'round' },
       this.vehiclePhysics,
-    ).placeAt(195, 0, -195));
+    ).placeAt(250, 0, -300));
 
-    // SW (-195,195, r=26): od x=-130 → 65 > 32.5 ✓, od z=100 → 95 > 32.5 ✓
+    // SW (-250,300, r=26): x=-195→55≥30.5✓  z=250→50≥30.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 26, height: 12, color: 0x509525, shape: 'mesa' },
       this.vehiclePhysics,
-    ).placeAt(-195, 0, 195));
+    ).placeAt(-250, 0, 300));
 
     // Dodatkowe — głęboko w narożnikach, daleko od wszystkich dróg
-    // (-220,220, r=22): od x=-130 → 90 > 28.5 ✓
+    // (-285,-330, r=22): x=-195→90≥26.5✓  z=-250→80≥26.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 22, height: 10, color: 0x4a8a1a, shape: 'round' },
       this.vehiclePhysics,
-    ).placeAt(-220, 0, 220));
+    ).placeAt(-285, 0, -330));
 
-    // (220,-220, r=20): od x=130 → 90 > 26.5 ✓
+    // (285,330, r=20): x=195→90≥24.5✓  z=250→80≥24.5✓
     this._add(new Hill(this.scene, this.physics,
       { radius: 20, height: 9, color: 0x558a2a, shape: 'mesa' },
       this.vehiclePhysics,
-    ).placeAt(220, 0, -220));
+    ).placeAt(285, 0, 330));
   }
 
   // ─── Drzewa ─────────────────────────────────────────────────────────────────
