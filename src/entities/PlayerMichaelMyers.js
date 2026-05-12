@@ -12,7 +12,7 @@ const HAND_L  = 0xFF3311;   // lewa łapka  — czerwona
 const HAND_R  = 0x2266FF;   // prawa łapka — niebieska
 
 /**
- * The Player (Poppy Playtime) — szczupły, wysoki, żółty manekin.
+ * PlayerMichaelMyers — szczupły, wysoki, żółty manekin z przyłbicą.
  * Okrągły tułów, beztwarzowa głowa, GrabPack z dłońmi i palcami DO PRZODU.
  *
  * inner.rotation.x = +π/2 → oś Y kapsuły → +Z w świecie (do przodu) ✓

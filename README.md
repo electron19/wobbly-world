@@ -21,6 +21,9 @@ Gra 3D przeglądarkowa inspirowana Wobbly Life — wobbly postać spaceruje po o
 |---|---|
 | `WASD` / strzałki | Ruch |
 | `Spacja` / `Z` | Skok |
+| `E` | Wejście / wyjście z auta |
+| `H` | Klakson (w aucie) |
+| `F` / `B` | Efekty dźwiękowe postaci |
 | `Mysz` (klik) | Kamera — pointer lock |
 
 ## Architektura
@@ -36,7 +39,8 @@ src/
 │   └── Materials.js         ← toon shading + paleta
 ├── entities/
 │   ├── Entity.js            ← baza (root + physics body)
-│   └── Player.js            ← gracz (spring squish + CharacterController)
+│   ├── Player.js            ← bazowy gracz (ruch, skok, animacje)
+│   └── PlayerMichaelMyers.js← aktualny model gracza używany w grze
 ├── objects/                 ← BIBLIOTEKA obiektów
 │   ├── WorldObject.js       ← baza statycznych obiektów
 │   ├── Building.js          ← abstrakcja budynku

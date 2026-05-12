@@ -3,20 +3,12 @@
  *
  * ─── SIATKA DRÓG ─────────────────────────────────────────────────────────────
  *
- *   N-S główna      : x =    0  (oś Z)
- *   N-S wschodnia   : x =   65  (oś Z)
- *   N-S zachodnia   : x =  −65  (oś Z)
- *   N-S dalsza E    : x =  130  (oś Z)   ← nowe
- *   N-S dalsza W    : x = −130  (oś Z)   ← nowe
+ * Aktualna lista dróg jest definiowana wyłącznie przez tablicę `ROADS`
+ * (niżej), aby uniknąć rozjazdów między komentarzem i konfiguracją.
  *
- *   E-W główna      : z =    0  (oś X)
- *   E-W północna    : z =  −50  (oś X)
- *   E-W południowa  : z =   50  (oś X)
- *   E-W daleka N    : z = −100  (oś X)   ← nowe
- *   E-W daleka S    : z =  100  (oś X)   ← nowe
- *
- *   Pas jezdni : ROAD_HALF = ±3   (jezdnia)
- *   Pas czysty : ROAD_CLEAR = ±4.5 (jezdnia + chodnik)
+ * Parametry pasów:
+ *   - ROAD_HALF  = ±3.0   (sama jezdnia)
+ *   - ROAD_CLEAR = ±4.5   (jezdnia + chodnik / strefa ochronna)
  *
  * ─── BLOKI MIASTA ────────────────────────────────────────────────────────────
  *
