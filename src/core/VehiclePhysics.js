@@ -76,12 +76,16 @@ export class VehiclePhysics {
     }
 
     // Suspension & friction tuning
+    // Stiffness 80000 sized to support chassis mass (2000kg × gravity 20 = 40000N total weight;
+    // 4 springs at rest-compression 0.125m each → 4×80000×0.125 = 40000N ✓).
+    // Chassis_y at static equilibrium ≈ 0.45+0.40 = 0.85 – compression = 0.85 – 0.125 = 0.725.
+    // Adequate wheel normal-force → full engine traction delivered without wheel spin.
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   24);
-      vehicle.setWheelSuspensionCompression(i,  3.0);
-      vehicle.setWheelSuspensionRelaxation(i,   3.0);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.55);
-      vehicle.setWheelMaxSuspensionForce(i,     18000);
+      vehicle.setWheelSuspensionStiffness(i,   80000);
+      vehicle.setWheelSuspensionCompression(i,  200);
+      vehicle.setWheelSuspensionRelaxation(i,   150);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.35);
+      vehicle.setWheelMaxSuspensionForce(i,     200000);
       vehicle.setWheelFrictionSlip(i,           1.8);
       vehicle.setWheelSideFrictionStiffness(i,  1.0);
     }

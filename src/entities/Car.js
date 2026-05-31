@@ -471,8 +471,10 @@ export class Car extends Entity {
     const suspAvg = (s0 + s1 + s2 + s3) / 4;
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
-    const sunkLow = pos.y < CHASSIS_OFFSET_Y - 0.12;
-    const lostWheelContact = suspAvg > 0.50;
+    // sunkLow: chassis genuinely below floor (normal resting ~0.72 with new stiffness 80000).
+    // Threshold 0.35 avoids false trigger from CHASSIS_OFFSET_Y mismatch.
+    const sunkLow = pos.y < 0.35;
+    const lostWheelContact = suspAvg > 0.60;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
       this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
