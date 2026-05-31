@@ -938,10 +938,15 @@ export class Game {
         : (this._drivingAircraft?.type === 'airplane' || this._drivingAircraft?.type === 'jet' || this._drivingAircraft?.type === 'bomber')
           ? `${Math.abs(Math.round((this._drivingAircraft._speed ?? 0) * 3.6))} km/h`
           : '';
+      const ds = this._drivingCar?.debugState;
       this._debugEl.innerHTML =
         `FPS: ${this._fpsDisplay}<br>` +
         `X: ${pos.x.toFixed(1)}&nbsp; Y: ${pos.y.toFixed(1)}&nbsp; Z: ${pos.z.toFixed(1)}` +
-        (spd ? `<br>${spd}` : '');
+        (spd ? `<br>${spd}` : '') +
+        (ds ? `<br>chassisY: ${ds.chassisY} &nbsp; suspAvg: ${ds.suspAvg}<br>` +
+              `susp: ${ds.susp}<br>` +
+              `linVel: ${ds.linVel} m/s &nbsp; angY: ${ds.angVelY}<br>` +
+              `airborne: ${ds.airborne}/4 &nbsp; road: ${ds.onRoad}` : '');
     }
 
   }

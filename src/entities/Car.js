@@ -972,6 +972,26 @@ export class Car extends Entity {
     this._speedKmh   = speedKmh;
     this._gasIn      = gasIn;
 
+    // Debug state — eksponowane do HUD
+    {
+      const ds0 = this._vehicle.wheelSuspensionLength(0);
+      const ds1 = this._vehicle.wheelSuspensionLength(1);
+      const ds2 = this._vehicle.wheelSuspensionLength(2);
+      const ds3 = this._vehicle.wheelSuspensionLength(3);
+      const dPos = this._chassis.translation();
+      const dLv  = this._chassis.linvel();
+      const dAv  = this._chassis.angvel();
+      this.debugState = {
+        chassisY: dPos.y.toFixed(3),
+        suspAvg:  ((ds0 + ds1 + ds2 + ds3) / 4).toFixed(3),
+        susp:     [ds0, ds1, ds2, ds3].map(v => v.toFixed(2)).join(' '),
+        linVel:   Math.sqrt(dLv.x**2 + dLv.y**2 + dLv.z**2).toFixed(2),
+        angVelY:  dAv.y.toFixed(3),
+        airborne: [ds0, ds1, ds2, ds3].filter(v => v > 0.48).length,
+        onRoad,
+      };
+    }
+
     // Auto-flip recovery: po 2 s wywrotka → wyprostowanie
     const q = this._chassis.rotation();
     const worldUpY = 1 - 2 * (q.x * q.x + q.z * q.z);
