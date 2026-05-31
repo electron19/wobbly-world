@@ -76,15 +76,12 @@ export class VehiclePhysics {
     }
 
     // Suspension & friction tuning
-    // Stiffness 30000: supports chassis weight (40000N / 4 springs = 10000N each;
-    // compression 0.333m → susp=0.117, chassis_y≈0.517).  Damping chosen for ζ≈0.7
-    // (c = 5500, c_crit = 2×√(30000×500) = 7746 → ζ=0.71) — well-damped, no bounce.
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   30000);
-      vehicle.setWheelSuspensionCompression(i,  5500);
-      vehicle.setWheelSuspensionRelaxation(i,   4000);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.45);
-      vehicle.setWheelMaxSuspensionForce(i,     50000);
+      vehicle.setWheelSuspensionStiffness(i,   24);
+      vehicle.setWheelSuspensionCompression(i,  3.0);
+      vehicle.setWheelSuspensionRelaxation(i,   3.0);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.55);
+      vehicle.setWheelMaxSuspensionForce(i,     18000);
       vehicle.setWheelFrictionSlip(i,           1.8);
       vehicle.setWheelSideFrictionStiffness(i,  1.0);
     }
