@@ -31,6 +31,10 @@ export class Car extends Entity {
     this.facing     = 0;
     this.isOccupied = false;
     this._wheels    = [];
+    // Physics debug logger
+    this._physLog       = [];    // ring buffer — ostatnie 8 s
+    this._physLogTimer  = 0;
+    this._physLogSent   = false; // wyślij tylko raz na zdarzenie stall
     // Rapier DynamicRayCastVehicleController
     this._vehicle   = null;   // Rapier VehicleController
     this._chassis   = null;   // Rapier RigidBody (dynamic)
@@ -972,7 +976,7 @@ export class Car extends Entity {
     this._speedKmh   = speedKmh;
     this._gasIn      = gasIn;
 
-    // Debug state — eksponowane do HUD
+    // Debug state — eksponowane do HUD + logger
     {
       const ds0 = this._vehicle.wheelSuspensionLength(0);
       const ds1 = this._vehicle.wheelSuspensionLength(1);
@@ -981,15 +985,46 @@ export class Car extends Entity {
       const dPos = this._chassis.translation();
       const dLv  = this._chassis.linvel();
       const dAv  = this._chassis.angvel();
+      const airCnt = [ds0, ds1, ds2, ds3].filter(v => v > 0.48).length;
       this.debugState = {
         chassisY: dPos.y.toFixed(3),
         suspAvg:  ((ds0 + ds1 + ds2 + ds3) / 4).toFixed(3),
         susp:     [ds0, ds1, ds2, ds3].map(v => v.toFixed(2)).join(' '),
         linVel:   Math.sqrt(dLv.x**2 + dLv.y**2 + dLv.z**2).toFixed(2),
         angVelY:  dAv.y.toFixed(3),
-        airborne: [ds0, ds1, ds2, ds3].filter(v => v > 0.48).length,
+        airborne: airCnt,
         onRoad,
       };
+
+      // ── Physics ring buffer (co 0.25 s) ──────────────────────────────────
+      this._physLogTimer = (this._physLogTimer ?? 0) + dt;
+      if (this._physLogTimer >= 0.25) {
+        this._physLogTimer = 0;
+        this._physLog.push({
+          t:   performance.now().toFixed(0),
+          x:   dPos.x.toFixed(1), y: dPos.y.toFixed(3), z: dPos.z.toFixed(1),
+          spd: absSpd.toFixed(1),
+          lv:  Math.sqrt(dLv.x**2 + dLv.y**2 + dLv.z**2).toFixed(2),
+          ay:  dAv.y.toFixed(3),
+          s:   [ds0, ds1, ds2, ds3].map(v => +v.toFixed(3)),
+          air: airCnt,
+          gas: gasIn.toFixed(2),
+          road: onRoad ? 1 : 0,
+        });
+        if (this._physLog.length > 32) this._physLog.shift();
+      }
+
+      // ── Wykryj stall: gaz wciśnięty ale prędkość spada do zera ──────────
+      const isStall = forwAmount > 0.3 && absSpd < 3.0 && this._horizSpeedKmh < 3.0;
+      if (isStall && !this._physLogSent && this._physLog.length >= 4) {
+        this._physLogSent = true;
+        fetch('/log.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event: 'STALL', log: this._physLog }),
+        }).catch(() => {});
+      }
+      if (absSpd > 15) this._physLogSent = false;
     }
 
     // Auto-flip recovery: po 2 s wywrotka → wyprostowanie
