@@ -215,9 +215,9 @@ export class Ground extends WorldObject {
     }
 
     // ─── Fizyczna podłoga (gruba warstwa poniżej y=0) ─────────────────────
-    // Rozmiar 670 przekracza granicę świata (±662) — auto nie wpada w pustkę
+    // Rozmiar 1400 przekracza pełny teren trawy (1280) z marginesem bezpieczeństwa
     this._bodies.push(
-      this.physics.addStaticBox(0, -0.5, 0, 670, 0.5, 670)
+      this.physics.addStaticBox(0, -0.5, 0, 1400, 0.5, 1400)
     );
   }
 }

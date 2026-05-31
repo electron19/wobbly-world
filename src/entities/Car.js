@@ -14,7 +14,7 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 // ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
 const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
 const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
-const BRAKE_GRASS_MULT   = 0.62;  // trawa: 62% siły hamowania
+const BRAKE_GRASS_MULT   = 1.0;   // trawa: pełna siła hamowania (0.62 zbyt mocno hamowało samo z siebie)
 const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
 const IDLE_BRAKE         = 2;     // tarcie spoczynkowe (parking na stoku)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -454,7 +454,7 @@ export class Car extends Entity {
    * bez kontaktu kół po próbie ruszania.
    */
   _recoverGroundStall(dt, driveInput, onHardSurface) {
-    if (!this._vehicle || !this._chassis || !onHardSurface) {
+    if (!this._vehicle || !this._chassis) {
       this._groundStallTimer = 0;
       return;
     }
@@ -899,7 +899,7 @@ export class Car extends Entity {
       // frictionSlip niemal do zera przy pełnym gazie od miejsca.
       const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.55;
       const cornerSlip = cornerT * 1.5;
-      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 1.20);
+      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 1.55);
       const fR = Math.max(rearGripFloor, effBase - launchGripLoss - cornerSlip);
 
       this._vehicle.setWheelFrictionSlip(0, effBase);
@@ -908,9 +908,11 @@ export class Car extends Entity {
       this._vehicle.setWheelFrictionSlip(3, fR);
 
     // Downforce aerodynamiczny przy większej prędkości pomaga utrzymać auto na drodze.
+    // Na trawie zmniejszony — nie pogarsza podskakiwania na nierównym terenie.
     if (this._horizSpeedKmh > 20) {
       const vMs = this._horizSpeedKmh / 3.6;
-      this._chassis.addForce({ x: 0, y: -0.50 * vMs * vMs, z: 0 }, true);
+      const downforceMult = onRoad ? 0.50 : (onSidewalk ? 0.40 : 0.20);
+      this._chassis.addForce({ x: 0, y: -downforceMult * vMs * vMs, z: 0 }, true);
     }
 
     // Anti-roll stabilizer — tłumi prędkość kątową roll/pitch/yaw
