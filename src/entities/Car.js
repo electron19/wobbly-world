@@ -947,9 +947,9 @@ export class Car extends Entity {
 
       const DAMP_XZ   = airborne ? 18000 : 1200;   // roll + pitch — silniejsze w powietrzu
       const DAMP_Y    = airborne ? 22000 :  600;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
-      // RESTORE tylko w powietrzu — na ziemi zawieszenie samo stabilizuje chassis.
-      // Restore na ziemi walczy z fizyką zawieszenia i blokuje normalne prowadzenie.
-      const RESTORE   = airborne ? 20000 : 0;
+      // RESTORE: w powietrzu silne, na ziemi słabe ale niezerowe.
+      // k=24 (miękkie sprężyny) nie wystarczają do stabilizacji — chassis bez RESTORE powoli się przechyla.
+      const RESTORE   = airborne ? 20000 : 8000;
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({
