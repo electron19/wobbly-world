@@ -895,7 +895,20 @@ export class Car extends Entity {
         this._vehicle.setWheelEngineForce(3, engineForce);
         for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
 
-        this._suppF = 0; // suppF removed — chassis friction=0 fix makes it unnecessary
+        // Direct chassis drive force. Rapier frictionSlip model needs normal wheel force
+        // to generate traction; with k=24 springs the normal force is ~10 N/wheel →
+        // frictionSlip × 10 N = 18 N traction vs ~2000 N linear damping at 100 km/h.
+        // Applying force directly to chassis bypasses the slip model and makes the car driveable.
+        if (!handBrake && Math.abs(engineForce) > 0) {
+          const q    = this._chassis.rotation();
+          const fwdX = 2 * (q.x * q.z + q.w * q.y);
+          const fwdZ = 1 - 2 * (q.x * q.x + q.y * q.y);
+          const suppF = engineForce * 2.0;
+          this._chassis.addForce({ x: fwdX * suppF, y: 0, z: fwdZ * suppF }, true);
+          this._suppF = suppF;
+        } else {
+          this._suppF = 0;
+        }
       }
 
       // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
