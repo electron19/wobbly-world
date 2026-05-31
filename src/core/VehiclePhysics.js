@@ -46,7 +46,7 @@ export class VehiclePhysics {
     rapierWorld.createCollider(
       R.ColliderDesc.cuboid(1.07, 0.45, 2.20)
         .setMass(2000)
-        .setFriction(0.4)
+        .setFriction(0.0)   // 0 = chassis slides freely; traction comes from wheel frictionSlip only
         .setRestitution(0.0)
         .setCollisionGroups(0x0002FFFF),
       chassis,

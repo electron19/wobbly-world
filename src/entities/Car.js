@@ -895,19 +895,7 @@ export class Car extends Entity {
         this._vehicle.setWheelEngineForce(3, engineForce);
         for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
 
-        // Supplemental direct chassis force — wheel springs (k=24) are too soft to
-        // generate meaningful normal force, so wheel engine forces produce near-zero
-        // traction. This bypasses the wheel friction model to maintain driveability.
-        if (!handBrake && Math.abs(engineForce) > 0) {
-          const q  = this._chassis.rotation();
-          const fwdX = 2 * (q.x * q.z + q.w * q.y);
-          const fwdZ = 1 - 2 * (q.x * q.x + q.y * q.y);
-          const suppF = engineForce * 1.5;
-          this._chassis.addForce({ x: fwdX * suppF, y: 0, z: fwdZ * suppF }, true);
-          this._suppF = suppF;
-        } else {
-          this._suppF = 0;
-        }
+        this._suppF = 0; // suppF removed — chassis friction=0 fix makes it unnecessary
       }
 
       // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
