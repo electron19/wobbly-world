@@ -175,7 +175,7 @@ export class Car extends Entity {
         const spoke = new THREE.Mesh(
           new THREE.BoxGeometry(WHEEL_W + 0.06, WHEEL_R * 1.48, 0.09), rimMat,
         );
-        spoke.rotation.x = (s / 3) * Math.PI;
+        spoke.rotation.x = (s / 3) * Math.PI * 2;
         inner.add(spoke);
       }
 
@@ -894,6 +894,20 @@ export class Car extends Entity {
         this._vehicle.setWheelEngineForce(2, engineForce);
         this._vehicle.setWheelEngineForce(3, engineForce);
         for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
+
+        // Supplemental direct chassis force — wheel springs (k=24) are too soft to
+        // generate meaningful normal force, so wheel engine forces produce near-zero
+        // traction. This bypasses the wheel friction model to maintain driveability.
+        if (!handBrake && Math.abs(engineForce) > 0) {
+          const q  = this._chassis.rotation();
+          const fwdX = 2 * (q.x * q.z + q.w * q.y);
+          const fwdZ = 1 - 2 * (q.x * q.x + q.y * q.y);
+          const suppF = engineForce * 1.5;
+          this._chassis.addForce({ x: fwdX * suppF, y: 0, z: fwdZ * suppF }, true);
+          this._suppF = suppF;
+        } else {
+          this._suppF = 0;
+        }
       }
 
       // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
@@ -1011,6 +1025,8 @@ export class Car extends Entity {
           s:   [ds0, ds1, ds2, ds3].map(v => +v.toFixed(3)),
           air: airCnt,
           gas: gasIn.toFixed(2),
+          engF: engineForce.toFixed(0),
+          suppF: (this._suppF ?? 0).toFixed(0),
           road: onRoad ? 1 : 0,
         });
         if (this._physLog.length > 32) this._physLog.shift();
