@@ -172,19 +172,29 @@ export class Ground extends WorldObject {
     const nsCuts = ROADS.filter(r => r.axis === 'x')
       .map(r => [r.center - ROAD_CLEAR, r.center + ROAD_CLEAR]);
 
+    // Granica chodnika = ostatnia droga w danej osi + ROAD_CLEAR.
+    // Chodnik nie może sięgać poza miasto — koła aut zachodzą na krawędź collidera
+    // i Rapier generuje ujemne zawieszenie → pętlę penetracji (bug przy z=274).
+    const ewExtents = ROADS.filter(r => r.axis === 'z').map(r => Math.abs(r.center));
+    const nsExtents = ROADS.filter(r => r.axis === 'x').map(r => Math.abs(r.center));
+    const swLimitNS = Math.max(...ewExtents) + ROAD_CLEAR; // max |z| E-W + ROAD_CLEAR
+    const swLimitEW = Math.max(...nsExtents) + ROAD_CLEAR; // max |x| N-S + ROAD_CLEAR
+
     // 4 rogi głównego skrzyżowania (x=0, z=0)
     [-BW, BW].forEach(cx => [-BW, BW].forEach(cz => addSW(cx, cz, SW, SW)));
 
     // Paski N-S (x=±BW, wzdłuż Z) — segmenty z przerwami przy drogach E-W
+    // Kończy się przy ostatniej drodze E-W (nie sięga do krawędzi terenu)
     [-BW, BW].forEach(cx => {
-      for (const [s0, s1] of splitSegs( EX,  s / 2, ewCuts)) addSW(cx, (s0+s1)/2, SW, s1-s0);
-      for (const [s0, s1] of splitSegs(-s/2, -EX,  ewCuts)) addSW(cx, (s0+s1)/2, SW, s1-s0);
+      for (const [s0, s1] of splitSegs( EX,  swLimitNS, ewCuts)) addSW(cx, (s0+s1)/2, SW, s1-s0);
+      for (const [s0, s1] of splitSegs(-swLimitNS, -EX, ewCuts)) addSW(cx, (s0+s1)/2, SW, s1-s0);
     });
 
     // Paski E-W (z=±BW, wzdłuż X) — segmenty z przerwami przy drogach N-S
+    // Kończy się przy ostatniej drodze N-S (nie sięga do krawędzi terenu)
     [-BW, BW].forEach(cz => {
-      for (const [s0, s1] of splitSegs( EX,  s / 2, nsCuts)) addSW((s0+s1)/2, cz, s1-s0, SW);
-      for (const [s0, s1] of splitSegs(-s/2, -EX,  nsCuts)) addSW((s0+s1)/2, cz, s1-s0, SW);
+      for (const [s0, s1] of splitSegs( EX,  swLimitEW, nsCuts)) addSW((s0+s1)/2, cz, s1-s0, SW);
+      for (const [s0, s1] of splitSegs(-swLimitEW, -EX, nsCuts)) addSW((s0+s1)/2, cz, s1-s0, SW);
     });
 
     // ─── Drogi ───────────────────────────────────────────────────────────────
