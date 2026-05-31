@@ -1032,17 +1032,43 @@ export class Car extends Entity {
         if (this._physLog.length > 32) this._physLog.shift();
       }
 
-      // ── Wykryj stall: gaz wciśnięty ale prędkość spada do zera ──────────
-      const isStall = forwAmount > 0.3 && absSpd < 3.0 && this._horizSpeedKmh < 3.0;
-      if (isStall && !this._physLogSent && this._physLog.length >= 4) {
-        this._physLogSent = true;
-        fetch('/log.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ event: 'STALL', log: this._physLog }),
-        }).catch(() => {});
+      // ── Ciągły debug: gaz wciśnięty a prędkość maleje lub zerowa ─────────
+      // Warunek: forwAmount > 0.3 i (spd spada lub < 5 km/h)
+      const prevSpd = this._prevAbsSpd ?? absSpd;
+      const speedDropping = absSpd < prevSpd - 0.3;   // spada wyraźnie
+      const gasStall = forwAmount > 0.3 && (absSpd < 5.0 || speedDropping);
+      this._prevAbsSpd = absSpd;
+
+      if (gasStall) {
+        this._stallLogTimer = (this._stallLogTimer ?? 0) + dt;
+        if (this._stallLogTimer >= 0.5) {   // co 0.5 s
+          this._stallLogTimer = 0;
+          const q2 = this._chassis.rotation();
+          const rollSin  = 2 * (q2.w * q2.x + q2.y * q2.z);
+          const pitchSin = 2 * (q2.w * q2.z - q2.x * q2.y);
+          const entry = {
+            t:     performance.now().toFixed(0),
+            x:     dPos.x.toFixed(1),  z: dPos.z.toFixed(1),
+            chassY: dPos.y.toFixed(3),
+            spd:   absSpd.toFixed(1),
+            gas:   forwAmount.toFixed(2),
+            engF:  engineForce.toFixed(0),
+            suppF: (this._suppF ?? 0).toFixed(0),
+            susp:  [ds0, ds1, ds2, ds3].map(v => v.toFixed(3)).join(' '),
+            roll:  rollSin.toFixed(3),
+            pitch: pitchSin.toFixed(3),
+            road:  onRoad ? 1 : 0,
+            drop:  speedDropping ? 1 : 0,
+          };
+          fetch('/log.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ event: 'GAS_STALL', ...entry }),
+          }).catch(() => {});
+        }
+      } else {
+        this._stallLogTimer = 0;
       }
-      if (absSpd > 15) this._physLogSent = false;
     }
 
     // Auto-flip recovery: po 2 s wywrotka → wyprostowanie
