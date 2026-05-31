@@ -471,7 +471,9 @@ export class Car extends Entity {
     const suspAvg = (s0 + s1 + s2 + s3) / 4;
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
-    const sunkLow = pos.y < CHASSIS_OFFSET_Y - 0.12;
+    // Normal resting chassisY ≈ 0.547 — threshold below that to avoid false triggers.
+    // Only fire if chassis genuinely sank through the floor (near y=0).
+    const sunkLow = pos.y < 0.10;
     const lostWheelContact = suspAvg > 0.50;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
