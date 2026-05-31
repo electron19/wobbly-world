@@ -142,13 +142,15 @@ export class Ground extends WorldObject {
       m.position.set(cx, SW_H, cz);
       m.receiveShadow = true;
       this.root.add(m);
-      // Center at y=SW_H/2 — collider spans y=0 to y=+SW_H (no FLOOR overlap).
-      // FLOOR covers y=-1..0; sidewalk covers y=0..+SW_H — they touch at y=0.
+      // Sidewalk physics: nominally 1 mm thick so wheels roll over edge without resistance.
+      // Visual height (SW_H=0.06) is preserved; physics step must not exceed ~1 cm
+      // or wheel rays get trapped on the edge and create deceleration (log 2026-05-31).
+      const PHYS_H = 0.005;
       this._bodies.push(
-        this.physics.addStaticBox(cx, SW_H / 2, cz, w / 2, SW_H / 2, d / 2)
+        this.physics.addStaticBox(cx, PHYS_H / 2, cz, w / 2, PHYS_H / 2, d / 2)
       );
       if (this.vehiclePhysics) {
-        this.vehiclePhysics.addStaticBox(cx, SW_H / 2, cz, w / 2, SW_H / 2, d / 2, 'ground');
+        this.vehiclePhysics.addStaticBox(cx, PHYS_H / 2, cz, w / 2, PHYS_H / 2, d / 2, 'ground');
       }
     };
 
