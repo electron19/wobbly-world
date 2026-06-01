@@ -28,11 +28,12 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Spawn at CHASSIS_OFFSET_Y + 0.1 = 0.85 m.
-    // With k=24 the wheel ray just grazes the ground at this height (compression≈0);
-    // the car settles quickly to ~0.65 m as the MaxSuspensionForce cap takes over.
+    // Spawn at 0.65 m = spring equilibrium.
+    // Formula: F = k·compression·M_chassis → equilibrium c_eq = g/(4·k) = 20/(4·24) = 0.208 m
+    // chassis_Y = wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.208 = 0.642 m ≈ 0.65 m
+    // Spawning here means zero net force on frame 1 → no settling, no bounce.
     const chassisDesc = R.RigidBodyDesc.dynamic()
-      .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
+      .setTranslation(x, 0.65, z)
       .setLinearDamping(0.04)
       .setAngularDamping(0.20);
 
