@@ -475,10 +475,10 @@ export class Car extends Entity {
     const suspAvg = (s0 + s1 + s2 + s3) / 4;
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
-    // With k=38000, chassis rests at y≈0.65; only fire if it genuinely sank through floor.
     const sunkLow = pos.y < 0.10;
-    // rest susp ≈ 0.25 m; > 0.44 = wheels in air (rest_length = 0.45)
-    const lostWheelContact = suspAvg > 0.44;
+    // Przy k=5000 susp ≈ 0.449 m na ziemi (prawie rest_length = 0.45).
+    // Utrata kontaktu = wszystkie 4 koła przy maksimum = samochód naprawdę w powietrzu.
+    const lostWheelContact = suspAvg >= 0.449 && pos.y > 0.5;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
       this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
@@ -941,18 +941,24 @@ export class Car extends Entity {
       const rollSin  = 2 * (qS.w * qS.x + qS.y * qS.z);   // był błąd: − zamiast +
       const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
 
-      // Wykryj oderwanie od ziemi: średnia długość zawieszenia bliższa maksymalnej.
+      // Wykryj oderwanie od ziemi: przy k=5000 susp ≈ rest_length = 0.45 m na ziemi
+      // (prawie brak kompresji), więc próg długości zawieszenia nie działa.
+      // Używamy prędkości pionowej + sprawdzamy czy Rapier widzi kontakt kół z podłożem.
       const s0 = this._vehicle.wheelSuspensionLength(0);
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      // > 0.42 = koło w powietrzu (rest length = 0.45; at rest on ground susp ≈ 0.25)
-      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.42).length;
-      const airborne = airborneWheels >= 3;
+      // Koło w powietrzu = brak kontaktu (susp = max rest length = 0.45 m)
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v >= 0.449).length;
+      // Samochód w powietrzu: 3+ kół bez kontaktu LUB duża prędkość pionowa (skok/zjazd)
+      const lv = this._chassis.linvel();
+      const airborne = airborneWheels >= 3 || Math.abs(lv.y) > 3.0;
 
-      const DAMP_XZ   = airborne ? 18000 : 1500;   // roll + pitch
+      const DAMP_XZ   = airborne ? 18000 : 1200;   // roll + pitch
       const DAMP_Y    = airborne ? 22000 : 2500;   // yaw — musi być wysokie, sprężyny nie blokują obrotu
-      const RESTORE   = airborne ? 20000 : 1200;   // przywraca chassis do poziomu
+      // RESTORE = 0 na ziemi: przy k=5000 sprężyny same stabilizują chassis; dodatkowy torque
+      // walczyłby ze sprężynami i powodował drgania. Tylko w powietrzu potrzebujemy restoracji.
+      const RESTORE   = airborne ? 20000 : 0;
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({

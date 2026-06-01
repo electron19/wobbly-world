@@ -5,25 +5,20 @@
  * so car collisions with the environment are natural — no duplicate
  * static bodies and no kinematic ghost body sync needed.
  *
- * Physics design (g = -20 m/s², mass = 1500 kg):
- *   Weight per wheel = 1500 × 20 / 4 = 7 500 N
- *   Target static compression ≈ 0.20 m  →  k = 7500 / 0.20 = 37 500 ≈ 38 000 N/m
- *   Chassis rest height ≈ 0.85 − 7500/38000 ≈ 0.65 m  (wheels flush with road)
- *   Damping (quarter-car, m_eff = 375 kg):
- *     c_crit = 2√(k·m) = 2√(38000·375) ≈ 7 550 N·s/m
- *     compression ζ ≈ 0.29  →  c = 2 200 N·s/m
- *     relaxation  ζ ≈ 0.24  →  c = 1 800 N·s/m
+ * Physics design (g = -20 m/s², mass = 1500 kg, Rapier/Bullet3 formula: F = k × c × M):
+ *   Stability criterion: ω_n × dt < 2  →  sqrt(k) / 60 < 2  →  k < 14 400
+ *   k = 5 000: ω_n×dt = 1.18 ✓ (stable, no dancing)
+ *   Equilibrium: c_eq = g / (4 × k) = 20 / 20000 = 0.001 m  (almost no compression)
+ *   Chassis height on ground ≈ wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.001 ≈ 0.849 m
+ *   Damping (Rapier formula): c_crit = 2 × sqrt(k) = 2 × 70.7 = 141
+ *     compression ζ = 180/141 = 1.27 — overdamped: absorbs bounce
+ *     relaxation  ζ = 150/141 = 1.06 — near-critical: smooth rebound
  */
 
 import { getRapier } from './Physics.js';
 
-// Chassis center Y used for recovery teleport and visual reference.
+// Chassis center Y above road level — spawn and recovery reference.
 export const CHASSIS_OFFSET_Y = 0.75;
-
-// Equilibrium spawn height: wheel_radius + rest_length − (mass·g)/(4·k)
-// = 0.40 + 0.45 − (1500·20)/(4·20000) = 0.85 − 0.375 = 0.475 m
-// Spawning here means springs are already at rest — no fall, no bounce.
-const CHASSIS_SPAWN_Y = 0.49;  // 0.475 + 0.015 m tiny cushion
 
 export class VehiclePhysics {
   /**
@@ -37,11 +32,15 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Dynamic chassis — spawn at spring equilibrium to avoid initial fall/bounce
+    // Dynamic chassis — spawn slightly above equilibrium to avoid initial fall/bounce.
+    // With Rapier/Bullet3 formula F = k × c × M_chassis, equilibrium at:
+    //   c_eq = (M × g) / (4 × k × M) = g / (4 × k) = 20 / (4 × 5000) = 0.001 m
+    // So wheel contact point is at: wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.001 ≈ 0.849 m
+    // CHASSIS_OFFSET_Y = 0.75 is below that — spawn at CHASSIS_OFFSET_Y + 0.10 = 0.85 ≈ equilibrium.
     const chassisDesc = R.RigidBodyDesc.dynamic()
-      .setTranslation(x, CHASSIS_SPAWN_Y, z)
+      .setTranslation(x, CHASSIS_OFFSET_Y + 0.10, z)
       .setLinearDamping(0.03)
-      .setAngularDamping(0.80);  // silne tłumienie rotacji chassis (zapobiega wirowaniu)
+      .setAngularDamping(0.55);  // tłumienie rotacji chassis (zapobiega wirowaniu)
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
@@ -90,16 +89,16 @@ export class VehiclePhysics {
     }
 
     // Suspension & friction tuning
-    // k = 20 000 N/m: supports 1500 kg at g=20 with ~0.375 m static deflection.
-    //   F_eq = 20000 × 0.375 = 7500 N = weight/wheel ✓
-    //   Spawning at CHASSIS_SPAWN_Y = 0.49 m (equilibrium) → no initial fall → no bounce.
-    // Damping: c_crit = 2√(k·m_eff) = 2√(20000·375) ≈ 5477 N·s/m
-    //   compression ζ = 6000/5477 ≈ 1.10 — overdamped: absorbs any residual energy
-    //   relaxation  ζ = 5000/5477 ≈ 0.91 — near-critical rebound
+    // k = 5 000: numerically stable — ω_n×dt = sqrt(5000)/60 = 1.18 < 2 ✓
+    //   With Rapier/Bullet3 formula F = k × c × M_chassis, equilibrium compression ≈ 0.001 m
+    //   → nearly no compression on ground → susp ≈ rest_length = 0.45 m always on ground.
+    // Damping (Rapier formula c_crit = 2×sqrt(k) = 2×70.7 = 141):
+    //   compression ζ = 180/141 = 1.27 — overdamped: absorbs any residual bounce
+    //   relaxation  ζ = 150/141 = 1.06 — near-critical: smooth rebound
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,  20000);
-      vehicle.setWheelSuspensionCompression(i, 6000);
-      vehicle.setWheelSuspensionRelaxation(i,  5000);
+      vehicle.setWheelSuspensionStiffness(i,   5000);
+      vehicle.setWheelSuspensionCompression(i,  180);
+      vehicle.setWheelSuspensionRelaxation(i,   150);
       vehicle.setWheelMaxSuspensionTravel(i,    0.45);
       vehicle.setWheelMaxSuspensionForce(i,    80000);  // wysoki limit — nie przycinaj siły sprężyny
       vehicle.setWheelFrictionSlip(i,            2.0);
