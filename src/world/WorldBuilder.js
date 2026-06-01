@@ -37,6 +37,7 @@ import { Helicopter }             from '../entities/Helicopter.js';
 import { FighterJet }             from '../entities/FighterJet.js';
 import { Bomber }                 from '../entities/Bomber.js';
 import { Airport }                from '../objects/Airport.js';
+import { Soldier }               from '../entities/Soldier.js';
 import { PanelBlock }             from '../objects/PanelBlock.js';
 import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
 import { rand }                   from '../core/RNG.js';
@@ -64,6 +65,7 @@ export class WorldBuilder {
     this.bombers        = [];  // bombowce — do wsiadania
     this._circles       = []; // exclusion circles (z marginem) — budynki, drzewa omijają je
     this._npcObstacles  = []; // fizyczne kontury budynków/drzew bez marginu — dla NPCów
+    this.soldiers       = [];  // żołnierze pilnujący lotniska
     this.knockableLamps = [];   // lampy do aktualizacji co klatkę
     this._swCanvas      = makeSidewalkCanvas(); // jeden canvas dla wszystkich chodników
   }
@@ -1714,6 +1716,17 @@ export class WorldBuilder {
   _addAirport() {
     // ── Military airport (far east, x=290, z=0) ────────────────────────────
     new Airport(this.scene, 290, 0);
+
+    // ── Żołnierze — patrol po obwodzie lotniska ────────────────────────────
+    // 8 żołnierzy, każdy startuje od innego punktu patrolu
+    const soldierSpawns = [
+      [258, -140, 0], [290, -140, 1], [322, -140, 2],
+      [322,    0, 3], [322,  140, 4],
+      [290,  140, 5], [258,  140, 6], [258,    0, 7],
+    ];
+    for (const [sx, sz, pi] of soldierSpawns) {
+      this.soldiers.push(new Soldier(this.scene, sx, sz, pi));
+    }
 
     // 2 F-16 fighter jets on runway
     const jet1 = new FighterJet(this.scene, 290, 1.2, -60);

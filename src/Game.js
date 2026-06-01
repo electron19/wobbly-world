@@ -96,6 +96,8 @@ export class Game {
     this._jetHUD           = null;
     this.jets              = [];
     this.bombers           = [];
+    this.soldiers          = [];
+    this._bloodDecals      = [];  // czerwone plamy krwi na ziemi
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
     this._interactKeyWasDown = false;
@@ -167,6 +169,7 @@ export class Game {
     this.helicopters   = wb.helicopters ?? [];
     this.jets          = wb.jets        ?? [];
     this.bombers       = wb.bombers     ?? [];
+    this.soldiers      = wb.soldiers    ?? [];
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
 
@@ -519,6 +522,60 @@ export class Game {
     }
   }
 
+  /**
+   * Gracz trafiony przez żołnierza — dodaje plamę krwi na ziemi pod graczem.
+   * Max 20 plam; najstarsze znikają.
+   */
+  _onShotByNPC(_soldierPos) {
+    const pp = this.player.root.position;
+    const r  = 0.35 + Math.random() * 0.45;
+    const geo = new THREE.CircleGeometry(r, 8);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xAA0000,
+      transparent: true,
+      opacity: 0.88,
+      depthWrite: false,
+    });
+    const decal = new THREE.Mesh(geo, mat);
+    // Lekko obrócony losowo
+    decal.rotation.x = -Math.PI / 2;
+    decal.rotation.z = Math.random() * Math.PI * 2;
+    decal.position.set(
+      pp.x + (Math.random() - 0.5) * 0.6,
+      0.01,
+      pp.z + (Math.random() - 0.5) * 0.6,
+    );
+    this.scene.add(decal);
+    this._bloodDecals.push(decal);
+
+    // Dodatkowe małe krople wokół
+    const splatterCount = 2 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < splatterCount; i++) {
+      const sr = 0.06 + Math.random() * 0.14;
+      const sg = new THREE.CircleGeometry(sr, 6);
+      const sm = new THREE.MeshBasicMaterial({
+        color: 0x880000, transparent: true, opacity: 0.75, depthWrite: false,
+      });
+      const splat = new THREE.Mesh(sg, sm);
+      splat.rotation.x = -Math.PI / 2;
+      splat.position.set(
+        pp.x + (Math.random() - 0.5) * 1.8,
+        0.01,
+        pp.z + (Math.random() - 0.5) * 1.8,
+      );
+      this.scene.add(splat);
+      this._bloodDecals.push(splat);
+    }
+
+    // Limit 80 obiektów krwi — usuń najstarsze
+    while (this._bloodDecals.length > 80) {
+      const old = this._bloodDecals.shift();
+      this.scene.remove(old);
+      old.geometry.dispose();
+      old.material.dispose();
+    }
+  }
+
   /** Obsługa wejścia/wyjścia z auta i budynków + hint UI. */
   _updateInteraction() {
     const keyEDown = this.input.isDown('KeyE');
@@ -776,6 +833,11 @@ export class Game {
       const dx = npc.root.position.x - npcRef.x;
       const dz = npc.root.position.z - npcRef.z;
       if (dx * dx + dz * dz < 14400) npc.update(dt);
+    }
+
+    // ── Żołnierze — zawsze aktywni w strefie lotniska ────────────────────
+    for (const soldier of this.soldiers) {
+      soldier.update(dt, this.player, (soldierPos) => this._onShotByNPC(soldierPos));
     }
 
     // ── Lamp knockdown — proximity check po detekcji uderzenia ───────────
