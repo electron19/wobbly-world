@@ -5,15 +5,10 @@
  * so car collisions with the environment are natural — no duplicate
  * static bodies and no kinematic ghost body sync needed.
  *
- * Physics design (g = -20 m/s², mass = 1500 kg, standard formula: F = k × compression):
- *   Weight per wheel = 1500 × 20 / 4 = 7 500 N
- *   k = 38 000 N/m: c_eq = 7500 / 38000 = 0.197 m (static compression)
- *   Chassis height at rest = wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.197 = 0.653 m
- *   → spawn at 0.65 m = equilibrium → no initial fall, no bounce
- *   Damping (quarter-car, m_eff = 375 kg):
- *     c_crit = 2√(k·m_eff) = 2√(38000·375) = 7 550 N·s/m
- *     compression ζ = 15000/7550 = 1.99 — heavily overdamped: absorbs bounce
- *     relaxation  ζ =  8000/7550 = 1.06 — near-critical: smooth rebound
+ * Suspension design: soft spring (k=24) + MaxSuspensionForce cap.
+ * The cap (18 000 N/wheel) provides the actual support load; the soft
+ * spring adds damping over small displacements without exciting oscillations.
+ * High k values (e.g. 38 000) cause "dancing" at 60 Hz regardless of damping.
  */
 
 import { getRapier } from './Physics.js';
@@ -33,15 +28,13 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Dynamic chassis — spawn at spring equilibrium to avoid initial fall/bounce.
-    // F = k × compression (standard, N/m × m = N)
-    // c_eq = weight_per_wheel / k = (1500×20/4) / 38000 = 7500 / 38000 = 0.197 m
-    // chassis_Y = wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.197 = 0.653 m
-    // Spawn at 0.655 m (+ 0.002 m tiny buffer) → springs at equilibrium → no fall.
+    // Spawn at CHASSIS_OFFSET_Y + 0.1 = 0.85 m.
+    // With k=24 the wheel ray just grazes the ground at this height (compression≈0);
+    // the car settles quickly to ~0.65 m as the MaxSuspensionForce cap takes over.
     const chassisDesc = R.RigidBodyDesc.dynamic()
-      .setTranslation(x, 0.655, z)
-      .setLinearDamping(0.03)
-      .setAngularDamping(0.80);  // silne tłumienie rotacji chassis (zapobiega wirowaniu)
+      .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
+      .setLinearDamping(0.04)
+      .setAngularDamping(0.20);
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
@@ -60,7 +53,7 @@ export class VehiclePhysics {
     rapierWorld.createCollider(
       R.ColliderDesc.cuboid(1.07, 0.45, 2.20)
         .setMass(1500)
-        .setFriction(0.0)   // 0 = chassis slides freely; traction comes from wheel frictionSlip only
+        .setFriction(0.0)   // 0 = chassis slides freely; traction from wheel frictionSlip only
         .setRestitution(0.0)
         .setCollisionGroups(0x0002FFFF),
       chassis,
@@ -89,19 +82,17 @@ export class VehiclePhysics {
       );
     }
 
-    // Suspension & friction tuning
-    // k = 38 000 N/m: c_eq = 0.197 m → chassis at 0.653 m on flat ground
-    // Damping: c_crit = 2√(38000×375) = 7 550 N·s/m
-    //   compression ζ = 15000/7550 = 1.99 — heavily overdamped: zero bounce on landing
-    //   relaxation  ζ =  8000/7550 = 1.06 — near-critical: smooth rebound, no oscillation
+    // k=24 (soft) — avoids resonance oscillations at 60 Hz.
+    // MaxSuspensionForce=18000 N/wheel is the real load-bearing limit
+    // (18000 > weight/wheel=7500 → car supported; 4×18000=72000 > total weight=30000 ✓).
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,  38000);
-      vehicle.setWheelSuspensionCompression(i, 15000);
-      vehicle.setWheelSuspensionRelaxation(i,   8000);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.45);
-      vehicle.setWheelMaxSuspensionForce(i,    80000);  // wysoki limit — nie przycinaj siły sprężyny
-      vehicle.setWheelFrictionSlip(i,            2.0);
-      vehicle.setWheelSideFrictionStiffness(i,   0.8);
+      vehicle.setWheelSuspensionStiffness(i,   24);
+      vehicle.setWheelSuspensionCompression(i,  3.0);
+      vehicle.setWheelSuspensionRelaxation(i,   3.0);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.55);
+      vehicle.setWheelMaxSuspensionForce(i,    18000);
+      vehicle.setWheelFrictionSlip(i,           1.8);
+      vehicle.setWheelSideFrictionStiffness(i,  1.0);
     }
 
     return { vehicle, chassis };

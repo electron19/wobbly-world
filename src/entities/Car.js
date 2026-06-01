@@ -476,8 +476,8 @@ export class Car extends Entity {
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
     const sunkLow = pos.y < 0.10;
-    // k=38000: susp≈0.253m na ziemi, rest_length=0.45m. > 0.44 = koła w powietrzu.
-    const lostWheelContact = suspAvg > 0.44;
+    // k=24, maxTravel=0.55: susp≈0.24m na ziemi. > 0.50 = koła w powietrzu.
+    const lostWheelContact = suspAvg > 0.50;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
       this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
@@ -941,19 +941,17 @@ export class Car extends Entity {
       const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
 
       // Wykryj oderwanie od ziemi.
-      // k=38000: c_eq=0.197m → susp ≈ 0.253m na ziemi; > 0.42 = koło w powietrzu.
+      // k=24, maxTravel=0.55: susp ≈ 0.24 m na ziemi; > 0.48 = koło w powietrzu.
       const s0 = this._vehicle.wheelSuspensionLength(0);
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.42).length;
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.48).length;
       const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 1500;   // roll + pitch
-      const DAMP_Y    = airborne ? 22000 : 2500;   // yaw
-      // RESTORE = 0 na ziemi: sprężyny k=38000 same utrzymują chassis poziomo.
-      // Dodatkowy torque restoracji walczyłby ze sprężynami i powodował "taniec".
-      const RESTORE   = airborne ? 20000 : 0;
+      const DAMP_XZ   = airborne ? 18000 : 1200;
+      const DAMP_Y    = airborne ? 22000 :  600;
+      const RESTORE   = airborne ? 20000 :    0;
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({
