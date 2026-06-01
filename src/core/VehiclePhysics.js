@@ -17,8 +17,13 @@
 
 import { getRapier } from './Physics.js';
 
-// Chassis center Y above road level — spawn point; spring settles to ~0.65 at rest.
+// Chassis center Y used for recovery teleport and visual reference.
 export const CHASSIS_OFFSET_Y = 0.75;
+
+// Equilibrium spawn height: wheel_radius + rest_length − (mass·g)/(4·k)
+// = 0.40 + 0.45 − (1500·20)/(4·20000) = 0.85 − 0.375 = 0.475 m
+// Spawning here means springs are already at rest — no fall, no bounce.
+const CHASSIS_SPAWN_Y = 0.49;  // 0.475 + 0.015 m tiny cushion
 
 export class VehiclePhysics {
   /**
@@ -32,9 +37,9 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Dynamic chassis
+    // Dynamic chassis — spawn at spring equilibrium to avoid initial fall/bounce
     const chassisDesc = R.RigidBodyDesc.dynamic()
-      .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
+      .setTranslation(x, CHASSIS_SPAWN_Y, z)
       .setLinearDamping(0.03)
       .setAngularDamping(0.80);  // silne tłumienie rotacji chassis (zapobiega wirowaniu)
 
@@ -87,15 +92,16 @@ export class VehiclePhysics {
     // Suspension & friction tuning
     // k = 20 000 N/m: supports 1500 kg at g=20 with ~0.375 m static deflection.
     //   F_eq = 20000 × 0.375 = 7500 N = weight/wheel ✓
+    //   Spawning at CHASSIS_SPAWN_Y = 0.49 m (equilibrium) → no initial fall → no bounce.
     // Damping: c_crit = 2√(k·m_eff) = 2√(20000·375) ≈ 5477 N·s/m
-    //   compression ζ = 6000/5477 ≈ 1.10 — slightly overdamped: zero bounce
+    //   compression ζ = 6000/5477 ≈ 1.10 — overdamped: absorbs any residual energy
     //   relaxation  ζ = 5000/5477 ≈ 0.91 — near-critical rebound
     for (let i = 0; i < 4; i++) {
       vehicle.setWheelSuspensionStiffness(i,  20000);
       vehicle.setWheelSuspensionCompression(i, 6000);
       vehicle.setWheelSuspensionRelaxation(i,  5000);
       vehicle.setWheelMaxSuspensionTravel(i,    0.45);
-      vehicle.setWheelMaxSuspensionForce(i,    40000);
+      vehicle.setWheelMaxSuspensionForce(i,    80000);  // wysoki limit — nie przycinaj siły sprężyny
       vehicle.setWheelFrictionSlip(i,            2.0);
       vehicle.setWheelSideFrictionStiffness(i,   0.8);
     }
