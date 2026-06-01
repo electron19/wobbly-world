@@ -508,6 +508,16 @@ export class Game {
       const dot = (dx / len) * fwdX + (dz / len) * fwdZ;
       if (dot > 0.34) npc.sleep?.();   // stożek ±70°
     }
+    // Żołnierze też mogą zostać uśpieni beknięciem
+    for (const soldier of this.soldiers) {
+      const dx = soldier.root.position.x - pp.x;
+      const dz = soldier.root.position.z - pp.z;
+      const dist2 = dx * dx + dz * dz;
+      if (dist2 > 14 * 14) continue;
+      const len = Math.sqrt(dist2) || 1;
+      const dot = (dx / len) * fwdX + (dz / len) * fwdZ;
+      if (dot > 0.34) soldier.sleep?.();
+    }
   }
 
   /** Wywołuje strach u NPC i zwierząt w promieniu 18 j.ś. */

@@ -209,6 +209,15 @@ export class Soldier {
     this._dyingTimer = 0;
   }
 
+  /** Beknięcie gracza — żołnierz pada i śpi jak cywil */
+  sleep() {
+    if (this._dead) return;
+    this._sleepTimer = 6.0 + Math.random() * 4;
+    this._sleepFall  = 0;
+    this._state      = 'patrol';
+    this._waiting    = true;
+  }
+
   /**
    * Aktualizacja logiki żołnierza.
    * @param {number} dt
@@ -228,6 +237,23 @@ export class Soldier {
       if (this._dyingTimer > 1.5) {
         this.root.position.y = 0.45 - (this._dyingTimer - 1.5) * 0.7;
         if (this._dyingTimer > 3.2) this.root.visible = false;
+      }
+      return;
+    }
+
+    // ── Sen (beknięcie gracza) ────────────────────────────────────────────────
+    if (this._sleepTimer > 0) {
+      this._sleepTimer -= dt;
+      this._sleepFall = Math.min(1, (this._sleepFall ?? 0) + dt / 0.35);
+      const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
+      this.root.rotation.z = p * (Math.PI / 2);
+      this.root.position.y = p * 0.45;
+      if (this._sleepTimer <= 0) {
+        this._sleepFall  = 0;
+        this._sleepTimer = 0;
+        this.root.rotation.z = 0;
+        this.root.position.y = 0;
+        this._waiting = true;
       }
       return;
     }
