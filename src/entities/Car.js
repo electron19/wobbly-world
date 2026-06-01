@@ -946,10 +946,9 @@ export class Car extends Entity {
       const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.42).length;
       const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 200;    // na ziemi minimalny — k=38000 same tłumią roll
-      const DAMP_Y    = airborne ? 22000 : 200;    // yaw: w powietrzu mocne, na ziemi subtelne
-      // RESTORE: na ziemi wyłączone — sprężyny są teraz symetryczne i same utrzymują poziom
-      const RESTORE   = airborne ? 20000 :    0;
+      const DAMP_XZ   = airborne ? 18000 : 1500;   // roll + pitch
+      const DAMP_Y    = airborne ? 22000 : 2500;   // yaw — musi być wysokie, sprężyny nie blokują obrotu
+      const RESTORE   = airborne ? 20000 : 1200;   // przywraca chassis do poziomu
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({

@@ -36,7 +36,7 @@ export class VehiclePhysics {
     const chassisDesc = R.RigidBodyDesc.dynamic()
       .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
       .setLinearDamping(0.03)
-      .setAngularDamping(0.18);
+      .setAngularDamping(0.55);  // wyższe — tłumi spontaniczne wirowanie chassis
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
