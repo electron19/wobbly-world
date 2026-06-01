@@ -264,12 +264,14 @@ export class Soldier {
     const playerInZone = Soldier.isInAirportZone(pp.x, pp.z);
 
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
+    // Odliczanie strachu po pierdnięciu
+    if (this._scaredTimer > 0) this._scaredTimer -= dt;
 
     // ── Maszyna stanów AI ─────────────────────────────────────────────────────
     switch (this._state) {
       case 'patrol':
-        // Wykryj gracza w strefie lotniska lub bardzo blisko żołnierza
-        if (playerInZone || distToPlayer < 25) {
+        // Wykryj gracza — ale nie gdy przestraszony pierdnięciem
+        if ((playerInZone || distToPlayer < 25) && !(this._scaredTimer > 0)) {
           this._state = 'chase';
         } else {
           this._doPatrol(dt);
@@ -277,8 +279,8 @@ export class Soldier {
         break;
 
       case 'chase':
-        // Gracz wyszedł ze strefy i jest daleko → wróć do patrolu
-        if (!playerInZone && distToPlayer > 60) {
+        // Gracz wyszedł ze strefy, jest daleko, lub przestraszył żołnierza → patrol
+        if ((!playerInZone && distToPlayer > 60) || this._scaredTimer > 0) {
           this._state = 'patrol';
           this._pickNextPatrolPoint();
           break;

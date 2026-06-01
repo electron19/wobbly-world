@@ -15,6 +15,7 @@ import { JetHUD }                   from './ui/JetHUD.js';
 import { SkySystem }                from './world/SkySystem.js';
 import { WeatherSystem }            from './world/WeatherSystem.js';
 import { SeasonSystem }             from './world/SeasonSystem.js';
+import { Zombie }                   from './entities/Zombie.js';
 import { DEFAULT_SETTINGS }        from './ui/MainMenu.js';
 
 // ── Render/quality presets ────────────────────────────────────────────────────
@@ -97,6 +98,9 @@ export class Game {
     this.jets              = [];
     this.bombers           = [];
     this.soldiers          = [];
+    this.zombies           = [];
+    this._zombieSpawnTimer = 0;
+    this._wasNight         = false;
     this._bloodDecals      = [];  // czerwone plamy krwi na ziemi
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
@@ -518,6 +522,12 @@ export class Game {
       const dot = (dx / len) * fwdX + (dz / len) * fwdZ;
       if (dot > 0.34) soldier.sleep?.();
     }
+    // Zombie usypiane beknięciem (szerszy zasięg — 18 j.ś., bez stożka)
+    for (const zombie of this.zombies) {
+      const dx = zombie.root.position.x - pp.x;
+      const dz = zombie.root.position.z - pp.z;
+      if (dx * dx + dz * dz < 18 * 18) zombie.sleep?.();
+    }
   }
 
   /** Wywołuje strach u NPC i zwierząt w promieniu 18 j.ś. */
@@ -528,6 +538,69 @@ export class Game {
       const dz = npc.root.position.z - pp.z;
       if (dx * dx + dz * dz < 18 * 18) {
         npc.scare?.(pp.x, pp.z, this.audio);
+      }
+    }
+  }
+
+  /** Pierdnięcie — żołnierze przerywają pościg i cofają się na patrol. */
+  _scareSoldiers() {
+    const pp = this.player.root.position;
+    for (const soldier of this.soldiers) {
+      if (soldier._dead) continue;
+      const dx = soldier.root.position.x - pp.x;
+      const dz = soldier.root.position.z - pp.z;
+      if (dx * dx + dz * dz < 22 * 22) {
+        soldier._state = 'patrol';
+        soldier._scaredTimer = 8.0;  // 8s zanim znowu zaczną gonić
+      }
+    }
+  }
+
+  /** Spawn zombie w nocy w pobliżu gracza (poza zasięgiem wzroku). */
+  _spawnZombies() {
+    const pp = this.player.root.position;
+    const count = 2 + Math.floor(Math.random() * 3);  // 2-4 zombie naraz
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist  = 35 + Math.random() * 20;  // 35-55 j.ś. od gracza (poza widokiem)
+      const x = pp.x + Math.sin(angle) * dist;
+      const z = pp.z + Math.cos(angle) * dist;
+      this.zombies.push(new Zombie(this.scene, x, z));
+    }
+  }
+
+  /** Update zombie + spawn w nocy + usuwanie martwych. */
+  _updateZombies(dt) {
+    const isNight = this._sky && !this._sky.isDay;
+
+    // Spawn nowych zombie w nocy co ~15s, max 12 aktywnych
+    if (isNight) {
+      this._zombieSpawnTimer -= dt;
+      const activeCount = this.zombies.filter(z => z.root.visible && !z._dead).length;
+      if (this._zombieSpawnTimer <= 0 && activeCount < 12) {
+        this._spawnZombies();
+        this._zombieSpawnTimer = 12 + Math.random() * 8;
+      }
+    }
+
+    // Gdy przejście dzień→noc: reset timer, pierwsze zombie zaraz
+    if (isNight && !this._wasNight) {
+      this._zombieSpawnTimer = 2;
+    }
+    this._wasNight = !!isNight;
+
+    // Update każdego zombie (tylko blisko gracza ≤ 120 j.ś.)
+    const pp = this.player.root.position;
+    for (let i = this.zombies.length - 1; i >= 0; i--) {
+      const z = this.zombies[i];
+      const dx = z.root.position.x - pp.x;
+      const dz = z.root.position.z - pp.z;
+      if (dx * dx + dz * dz < 14400) z.update(dt, this.player);
+
+      // Usuń całkowicie znikniętych
+      if (!z.root.visible) {
+        z.dispose();
+        this.zombies.splice(i, 1);
       }
     }
   }
@@ -787,6 +860,7 @@ export class Game {
         this.audio.playFart();
         this.player._emitFartCloud();
         this._scareNPCs();
+        this._scareSoldiers();
         this._actionCooldown = 20;   // ~0.33 s blokady wsiadania po akcji
       }
       if (burp || yawn) {
@@ -849,6 +923,9 @@ export class Game {
     for (const soldier of this.soldiers) {
       soldier.update(dt, this.player, (soldierPos) => this._onShotByNPC(soldierPos));
     }
+
+    // ── Zombie — nocne potwory ────────────────────────────────────────────
+    this._updateZombies(dt);
 
     // ── Lamp knockdown — proximity check po detekcji uderzenia ───────────
     if (this._drivingCar && this._drivingCar.impactVel > 3) {
