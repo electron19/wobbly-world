@@ -86,13 +86,15 @@ export class VehiclePhysics {
 
     // Suspension & friction tuning
     // k = 38 000 N/m: correctly supports 1500 kg at g=20 with ~0.20 m static deflection.
-    // Previous k=24 provided <14 N per wheel — chassis rested on floor collider, not springs.
+    // Damping: c_crit = 2√(k·m_eff) = 2√(38000·375) ≈ 7550 N·s/m
+    // ζ_compression = 5500/7550 ≈ 0.73 — slightly underdamped (no visible bounce)
+    // ζ_relaxation  = 4000/7550 ≈ 0.53 — lighter rebound for natural feel
     for (let i = 0; i < 4; i++) {
       vehicle.setWheelSuspensionStiffness(i,  38000);
-      vehicle.setWheelSuspensionCompression(i, 2200);
-      vehicle.setWheelSuspensionRelaxation(i,  1800);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.40);
-      vehicle.setWheelMaxSuspensionForce(i,    40000);
+      vehicle.setWheelSuspensionCompression(i, 5500);
+      vehicle.setWheelSuspensionRelaxation(i,  4000);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.45);
+      vehicle.setWheelMaxSuspensionForce(i,    42000);
       vehicle.setWheelFrictionSlip(i,            2.0);
       vehicle.setWheelSideFrictionStiffness(i,   0.8);
     }
