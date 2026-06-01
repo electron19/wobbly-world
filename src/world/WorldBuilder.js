@@ -245,9 +245,13 @@ export class WorldBuilder {
 
   // ─── Podłoże ────────────────────────────────────────────────────────────────
 
+  // Rozmiar boku terenu [j.ś.] — JEDYNE miejsce gdzie zmienia się wielkość świata.
+  // _addBoundaries() automatycznie skaluje ściany graniczne do tego rozmiaru.
+  static get WORLD_SIZE() { return 1280; }
+
   _addGround() {
     // Ground jest zawsze widoczny — nie trafia do listy cullingowej
-    new Ground(this.scene, this.physics, this.vehiclePhysics, 1280);
+    new Ground(this.scene, this.physics, this.vehiclePhysics, WorldBuilder.WORLD_SIZE);
   }
 
   // ─── Drogi ──────────────────────────────────────────────────────────────────
@@ -1772,19 +1776,27 @@ export class WorldBuilder {
     this._addLadder(-89, 0, 26, 28, -HPI);
   }
 
-  // ─── Granice ─────────────────────────────────────────────────────────────────
+  // ─── Granice świata ───────────────────────────────────────────────────────────
+  //
+  // Niewidoczne pionowe ściany 5m od krawędzi terenu — nieprzekraczalne dla
+  // każdego obiektu (samochód, gracz, NPC). Wymiary obliczane z WORLD_SIZE,
+  // więc automatycznie skalują się przy rozbudowie mapy.
 
   _addBoundaries() {
-    // Świat 4× większy. Granice przy ±660.
-    const E = 662, H = 5, W = 670;
+    const HALF      = WorldBuilder.WORLD_SIZE / 2;  // 640 przy WORLD_SIZE=1280
+    const EDGE      = HALF - 5;                     // 635 — 5m od krawędzi terenu
+    const WALL_HH   = 20;                           // halfHeight = 20m (ściana od y=-5 do y=35)
+    const WALL_CY   = WALL_HH - 5;                  // środek Y ściany = 15 (dolna krawędź y=-5)
+    const WALL_HW   = HALF + 10;                    // szerokość z 10m zakładką, by uszczelnić narożniki
+
+    // 4 ściany: N, S, W, E
     [
-      [   0, H, -E,  W, H,  1],
-      [   0, H,  E,  W, H,  1],
-      [ -E,  H,  0,  1, H,  W],
-      [  E,  H,  0,  1, H,  W],
+      [    0, WALL_CY, -EDGE, WALL_HW, WALL_HH, 0.5],  // N
+      [    0, WALL_CY,  EDGE, WALL_HW, WALL_HH, 0.5],  // S
+      [-EDGE, WALL_CY,     0,     0.5, WALL_HH, WALL_HW],  // W
+      [ EDGE, WALL_CY,     0,     0.5, WALL_HH, WALL_HW],  // E
     ].forEach(([x, y, z, hw, hh, hd]) => {
       this.physics.addStaticBox(x, y, z, hw, hh, hd);
-      this.vehiclePhysics.addStaticBox(x, y, z, hw, hh, hd);
     });
   }
 }

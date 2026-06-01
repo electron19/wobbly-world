@@ -3,9 +3,11 @@ import { Entity } from './Entity.js';
 import { toonMat, addOutline, C } from '../core/Materials.js';
 
 // ─── Stałe gracza ─────────────────────────────────────────────────────────────
-const SPEED    = 5.5;
-const JUMP_VEL = 9.5;
-const GRAVITY  = 22;
+// Grawitacja ręczna dla kinematic body gracza — dopasowana do PhysicsWorld g=20.
+// JUMP_VEL dobrane dla skoku na wysokość ≈ 2.05m: h = v²/(2g) = 9.0²/40 = 2.025m
+const SPEED    = 5.5;   // prędkość chodzenia [m/s]
+const JUMP_VEL = 9.0;   // prędkość skoku [m/s] (poprz. 9.5 przy GRAVITY=22)
+const GRAVITY  = 20;    // m/s² — identyczna z grawitacją świata Rapier (poprz. 22)
 
 // Kapsuła: halfH=0.4, radius=0.3 → środek kapsuły 0.7 nad dołem kapsuły.
 // Buty MM są w lokalnym y≈−0.23, więc root musi być 0.23 wyżej niż ziemia:

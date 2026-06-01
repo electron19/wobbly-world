@@ -25,15 +25,21 @@ export class PhysicsWorld {
   constructor() {
     if (!R) throw new Error('Najpierw wywołaj initRapier()');
 
+    // ── Grawitacja światowa ──────────────────────────────────────────────────
+    // g = -20 m/s²: 2× ziemska — daje snappier game feel przy zachowaniu
+    // realistycznych proporcji sił. Wszystkie dynamiczne ciała (samochód) podlegają tej wartości.
+    // Gracz używa własnej ręcznej grawitacji (Player.js GRAVITY=20) dla niezależnej kontroli.
     this.world = new R.World({ x: 0, y: -20, z: 0 });
 
-    // Character Controller — obsługuje kolizje, autostep, ślizganie po zboczach
-    this._cc = this.world.createCharacterController(0.01); // 0.01 = gap od koliderów
+    // ── Character Controller ─────────────────────────────────────────────────
+    // Steruje kapsułą gracza: detekcja kolizji, automatyczne wchodzenie na stopnie,
+    // ślizganie się po zboczach, przyciąganie do podłoża.
+    this._cc = this.world.createCharacterController(0.02); // 0.02 = gap od koliderów (poprz. 0.01 dawało utknięcia)
     this._cc.setSlideEnabled(true);
-    this._cc.setMaxSlopeClimbAngle(45 * Math.PI / 180);
-    this._cc.setMinSlopeSlideAngle(30 * Math.PI / 180);
-    this._cc.enableAutostep(0.5, 0.2, true);   // maxHeight, minWidth, includeDynamic
-    this._cc.enableSnapToGround(0.3);           // snapDistance
+    this._cc.setMaxSlopeClimbAngle(40 * Math.PI / 180);  // maks wspinaczka 40° (poprz. 45° — za strome)
+    this._cc.setMinSlopeSlideAngle(35 * Math.PI / 180);  // ślizganie od 35° (poprz. 30°)
+    this._cc.enableAutostep(0.35, 0.15, true);           // krawężnik max 0.35m (poprz. 0.5m było za wysokie)
+    this._cc.enableSnapToGround(0.4);                    // snapDistance 0.4m (poprz. 0.3m — rzadziej odpada od stopni)
     this._cc.setApplyImpulsesToDynamicBodies(true);
   }
 
