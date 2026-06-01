@@ -471,10 +471,10 @@ export class Car extends Entity {
     const suspAvg = (s0 + s1 + s2 + s3) / 4;
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
-    // Normal resting chassisY ≈ 0.547 — threshold below that to avoid false triggers.
-    // Only fire if chassis genuinely sank through the floor (near y=0).
+    // With k=38000, chassis rests at y≈0.65; only fire if it genuinely sank through floor.
     const sunkLow = pos.y < 0.10;
-    const lostWheelContact = suspAvg > 0.50;
+    // rest susp ≈ 0.25 m; > 0.44 = wheels in air (rest_length = 0.45)
+    const lostWheelContact = suspAvg > 0.44;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
       this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
@@ -895,20 +895,6 @@ export class Car extends Entity {
         this._vehicle.setWheelEngineForce(3, engineForce);
         for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, brakeForce);
 
-        // Direct chassis drive force. Rapier frictionSlip model needs normal wheel force
-        // to generate traction; with k=24 springs the normal force is ~10 N/wheel →
-        // frictionSlip × 10 N = 18 N traction vs ~2000 N linear damping at 100 km/h.
-        // Applying force directly to chassis bypasses the slip model and makes the car driveable.
-        if (!handBrake && Math.abs(engineForce) > 0) {
-          const q    = this._chassis.rotation();
-          const fwdX = 2 * (q.x * q.z + q.w * q.y);
-          const fwdZ = 1 - 2 * (q.x * q.x + q.y * q.y);
-          const suppF = engineForce * 2.0;
-          this._chassis.addForce({ x: fwdX * suppF, y: 0, z: fwdZ * suppF }, true);
-          this._suppF = suppF;
-        } else {
-          this._suppF = 0;
-        }
       }
 
       // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
@@ -956,15 +942,14 @@ export class Car extends Entity {
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      // > 0.48 = koło w powietrzu (rest length = 0.45, > rest = unosi się)
-      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.48).length;
+      // > 0.42 = koło w powietrzu (rest length = 0.45; at rest on ground susp ≈ 0.25)
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.42).length;
       const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 1200;   // roll + pitch — silniejsze w powietrzu
-      const DAMP_Y    = airborne ? 22000 :  600;   // yaw — w powietrzu mocne tłumienie przeciw bączkom
-      // RESTORE: w powietrzu silne, na ziemi słabe ale niezerowe.
-      // k=24 (miękkie sprężyny) nie wystarczają do stabilizacji — chassis bez RESTORE powoli się przechyla.
-      const RESTORE   = airborne ? 20000 : 8000;
+      const DAMP_XZ   = airborne ? 18000 : 600;    // roll + pitch — silniejsze w powietrzu
+      const DAMP_Y    = airborne ? 22000 : 400;    // yaw — w powietrzu mocne tłumienie przeciw bączkom
+      // RESTORE: w powietrzu silne, na ziemi małe — k=38000 sprężyny same stabilizują chassis.
+      const RESTORE   = airborne ? 20000 : 2000;
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({
@@ -1002,7 +987,7 @@ export class Car extends Entity {
       const dPos = this._chassis.translation();
       const dLv  = this._chassis.linvel();
       const dAv  = this._chassis.angvel();
-      const airCnt = [ds0, ds1, ds2, ds3].filter(v => v > 0.48).length;
+      const airCnt = [ds0, ds1, ds2, ds3].filter(v => v > 0.42).length;
       this.debugState = {
         chassisY: dPos.y.toFixed(3),
         suspAvg:  ((ds0 + ds1 + ds2 + ds3) / 4).toFixed(3),
@@ -1027,7 +1012,6 @@ export class Car extends Entity {
           air: airCnt,
           gas: gasIn.toFixed(2),
           engF: engineForce.toFixed(0),
-          suppF: (this._suppF ?? 0).toFixed(0),
           road: onRoad ? 1 : 0,
         });
         if (this._physLog.length > 32) this._physLog.shift();
@@ -1054,7 +1038,6 @@ export class Car extends Entity {
             spd:   absSpd.toFixed(1),
             gas:   forwAmount.toFixed(2),
             engF:  engineForce.toFixed(0),
-            suppF: (this._suppF ?? 0).toFixed(0),
             susp:  [ds0, ds1, ds2, ds3].map(v => v.toFixed(3)).join(' '),
             roll:  rollSin.toFixed(3),
             pitch: pitchSin.toFixed(3),
