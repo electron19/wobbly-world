@@ -13,10 +13,14 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
 const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
-const MAX_BRAKE_FORCE    = 175;   // Nm hamowania — grywalne, płynne hamowanie (GTA-feel)
-const BRAKE_GRASS_MULT   = 1.0;   // trawa: pełna siła hamowania (0.62 zbyt mocno hamowało samo z siebie)
-const HAND_BRAKE_FORCE   = 700;   // Nm hamulca ręcznego (tylne koła, drift)
-const IDLE_BRAKE         = 2;     // tarcie spoczynkowe (parking na stoku)
+// Siły hamulców skalowane do k=20000 (siła normalna ~7500 N/koło, wheel radius=0.40 m):
+//   max_traction = frictionSlip × normal = 2.0 × 7500 = 15000 N/koło
+//   max_brake_torque = 15000 × 0.40 = 6000 Nm — tyle potrzeba żeby zablokować koło
+const MAX_BRAKE_FORCE    = 1500;  // Nm — ~25% blokowania, płynne hamowanie (GTA-feel)
+const BRAKE_GRASS_MULT   = 1.0;
+const HAND_BRAKE_FORCE   = 8000;  // Nm — blokuje tylne koła (drift)
+const IDLE_BRAKE         = 100;   // Nm — zapobiega staczaniu się
+const PARK_BRAKE_FORCE   = 20000; // Nm — pełny hamulec parkingowy (idleStep)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
 const STEER_SPEED      = 3.2;    // szybkość rampy kierownicy (1/s)
 const MAX_SPEED_KMH    = 400;    // limit prędkości do przodu
@@ -389,8 +393,8 @@ export class Car extends Entity {
     this._vehicle = vehicle;
     this._chassis = chassis;
 
-    // Zaparkowane auto stoi w miejscu (hamulec)
-    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
+    // Zaparkowane auto stoi w miejscu (pełny hamulec parkingowy)
+    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, PARK_BRAKE_FORCE);
 
     this.root.position.set(x, y, z);
     this.root.rotation.y = this.facing;
@@ -1088,8 +1092,9 @@ export class Car extends Entity {
    */
   idleStep(dt) {
     if (!this._vehicle) return;
-    // Re-aplikuj hamulec co klatkę — bez tego zaparkowane auto może się stoczyć po zejściu gracza.
-    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, MAX_BRAKE_FORCE);
+    // PARK_BRAKE_FORCE > max_traction (20000 > 6000 Nm) — koła zawsze zablokowane.
+    // MAX_BRAKE_FORCE (1500 Nm) było za słabe przy k=20000 → auta wirowały w miejscu.
+    for (let i = 0; i < 4; i++) this._vehicle.setWheelBrake(i, PARK_BRAKE_FORCE);
     this._vehicle.updateVehicle(dt, 0, 0x0001FFFD, null);
   }
 

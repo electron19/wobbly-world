@@ -36,7 +36,7 @@ export class VehiclePhysics {
     const chassisDesc = R.RigidBodyDesc.dynamic()
       .setTranslation(x, CHASSIS_OFFSET_Y + 0.1, z)
       .setLinearDamping(0.03)
-      .setAngularDamping(0.55);  // wyższe — tłumi spontaniczne wirowanie chassis
+      .setAngularDamping(0.80);  // silne tłumienie rotacji chassis (zapobiega wirowaniu)
 
     const chassis = rapierWorld.createRigidBody(chassisDesc);
 
@@ -85,16 +85,17 @@ export class VehiclePhysics {
     }
 
     // Suspension & friction tuning
-    // k = 38 000 N/m: correctly supports 1500 kg at g=20 with ~0.20 m static deflection.
-    // Damping: c_crit = 2√(k·m_eff) = 2√(38000·375) ≈ 7550 N·s/m
-    // ζ_compression = 5500/7550 ≈ 0.73 — slightly underdamped (no visible bounce)
-    // ζ_relaxation  = 4000/7550 ≈ 0.53 — lighter rebound for natural feel
+    // k = 20 000 N/m: supports 1500 kg at g=20 with ~0.375 m static deflection.
+    //   F_eq = 20000 × 0.375 = 7500 N = weight/wheel ✓
+    // Damping: c_crit = 2√(k·m_eff) = 2√(20000·375) ≈ 5477 N·s/m
+    //   compression ζ = 6000/5477 ≈ 1.10 — slightly overdamped: zero bounce
+    //   relaxation  ζ = 5000/5477 ≈ 0.91 — near-critical rebound
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,  38000);
-      vehicle.setWheelSuspensionCompression(i, 5500);
-      vehicle.setWheelSuspensionRelaxation(i,  4000);
+      vehicle.setWheelSuspensionStiffness(i,  20000);
+      vehicle.setWheelSuspensionCompression(i, 6000);
+      vehicle.setWheelSuspensionRelaxation(i,  5000);
       vehicle.setWheelMaxSuspensionTravel(i,    0.45);
-      vehicle.setWheelMaxSuspensionForce(i,    42000);
+      vehicle.setWheelMaxSuspensionForce(i,    40000);
       vehicle.setWheelFrictionSlip(i,            2.0);
       vehicle.setWheelSideFrictionStiffness(i,   0.8);
     }
