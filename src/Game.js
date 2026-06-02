@@ -16,6 +16,7 @@ import { SkySystem }                from './world/SkySystem.js';
 import { WeatherSystem }            from './world/WeatherSystem.js';
 import { SeasonSystem }             from './world/SeasonSystem.js';
 import { Zombie }                   from './entities/Zombie.js';
+import { Siren }                    from './objects/Siren.js';
 import { DEFAULT_SETTINGS }        from './ui/MainMenu.js';
 
 // ── Render/quality presets ────────────────────────────────────────────────────
@@ -101,6 +102,8 @@ export class Game {
     this.zombies           = [];
     this._zombieSpawnTimer = 0;
     this._wasNight         = false;
+    this._sirens           = [];
+    this._sirenSound       = null;  // { stop() } — aktywny dźwięk syreny
     this._bloodDecals      = [];  // czerwone plamy krwi na ziemi
     this._interactCooldown = 0;   // blokada E po wejściu/wyjściu z auta
     this._actionCooldown   = 0;   // blokada wsiadania po akcji (fart/burp)
@@ -176,6 +179,19 @@ export class Game {
     this.soldiers      = wb.soldiers    ?? [];
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
+
+    // ── Syreny alarmowe — rozmieszczone przy głównych skrzyżowaniach miasta ──
+    const sirenSpots = [
+      [  0,   0], [ 65,   0], [-65,   0],   // centrum
+      [  0,  50], [  0, -50],               // N/S oś
+      [ 65,  50], [-65,  50],               // NE/NW
+      [ 65, -50], [-65, -50],               // SE/SW
+      [  0, 100], [  0,-100],               // dalej N/S
+      [130,   0], [-130,  0],               // CBD E/W
+    ];
+    for (const [sx, sz] of sirenSpots) {
+      this._sirens.push(new Siren(this.scene, sx, sz));
+    }
 
     // ─── 6. Gracz ──────────────────────────────────────────────────────────
     this.player = settings.avatar === 'classic'
@@ -583,11 +599,24 @@ export class Game {
       }
     }
 
-    // Gdy przejście dzień→noc: reset timer, pierwsze zombie zaraz
+    // Gdy przejście dzień→noc: odpal syreny i dźwięk
     if (isNight && !this._wasNight) {
       this._zombieSpawnTimer = 2;
+      for (const s of this._sirens) s.activate();
+      this._sirenSound = this.audio.startSiren?.();
+    }
+    // Gdy przejście noc→dzień: wyłącz syreny
+    if (!isNight && this._wasNight) {
+      for (const s of this._sirens) s.deactivate();
+      this._sirenSound?.stop();
+      this._sirenSound = null;
     }
     this._wasNight = !!isNight;
+
+    // Update wizualny syren (obrót, pulsowanie)
+    if (isNight) {
+      for (const s of this._sirens) s.update(dt);
+    }
 
     // Update każdego zombie (tylko blisko gracza ≤ 120 j.ś.)
     const pp = this.player.root.position;

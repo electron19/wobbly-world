@@ -1376,4 +1376,64 @@ export class AudioManager {
     crackSrc.start(now);
     crackSrc.stop(now + 0.06);
   }
+
+  // ─── Syrena nocna (zombie alarm) ──────────────────────────────────────────
+
+  /**
+   * Uruchamia ciągłą syrenę alarmową (wyjące "iiiiiAAA").
+   * Zwraca { stop } — wywołaj stop() gdy dzień nastaje.
+   */
+  startSiren() {
+    const ctx = this._ensureCtx();
+    if (!ctx) return { stop: () => {} };
+
+    // Oscylator główny — niska, wycia melodia
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sawtooth';
+    osc1.frequency.value = 440;
+
+    // Oscylator drugi — lekko zdestrojowany (chorus effect)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'sawtooth';
+    osc2.frequency.value = 443;
+
+    // LFO — wyjąca modulacja częstotliwości (200→800 Hz @ 0.5 Hz)
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 0.5;   // 0.5 Hz — jedno "wyjcie" co 2 sekundy
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 280;    // zakres modulacji ±280 Hz
+    lfo.connect(lfoGain);
+    lfoGain.connect(osc1.frequency);
+    lfoGain.connect(osc2.frequency);
+
+    // Filtr — ostre brzmienie syreny
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 600;
+    filter.Q.value = 1.2;
+
+    // Głośność — cicha syrena w tle
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    gain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 1.5);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(this._masterGain);
+
+    osc1.start(); osc2.start(); lfo.start();
+
+    return {
+      stop: () => {
+        const t = ctx.currentTime;
+        gain.gain.setValueAtTime(gain.gain.value, t);
+        gain.gain.linearRampToValueAtTime(0, t + 1.5);
+        osc1.stop(t + 1.6);
+        osc2.stop(t + 1.6);
+        lfo.stop(t + 1.6);
+      },
+    };
+  }
 }
