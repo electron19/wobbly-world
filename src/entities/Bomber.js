@@ -38,81 +38,133 @@ export class Bomber {
     const gearMat    = toonMat(0x444444);
     const turretMat  = toonMat(0x3A4A1A);
 
-    // ── Fuselage — long fat cylinder along Z ──────────────────────────────────
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 0.85, 9.0, 14), bodyMat);
+    // ── Fuselage — cylindrical body ──────────────────────────────────────────
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 8.0, 18), bodyMat);
     fuselage.rotation.x = Math.PI / 2;
     fuselage.castShadow = true;
     this.root.add(fuselage);
-    addOutline(fuselage, 0.09);
+    addOutline(fuselage, 0.08);
 
-    // Nose — rounded sphere flattened forward
-    const noseSphere = new THREE.Mesh(new THREE.SphereGeometry(1.05, 10, 8), glassMat);
-    noseSphere.scale.set(0.85, 0.85, 0.7);
-    noseSphere.position.z = 4.7;
-    this.root.add(noseSphere);
+    // ── Nose cone — tapers from fuselage to a small radius at front ─────────
+    // rotation.x = +PI/2 maps local +Y to world +Z, so radiusTop sits at +Z (front)
+    const noseCone = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 1.0, 1.8, 18), bodyMat);
+    noseCone.rotation.x = Math.PI / 2;
+    noseCone.position.z = 4.9;
+    noseCone.castShadow = true;
+    this.root.add(noseCone);
+    addOutline(noseCone, 0.07);
 
-    // Tail cone
-    const tailCone = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.80, 2.0, 10), bodyMat);
-    tailCone.rotation.x = -Math.PI / 2;
-    tailCone.position.z = -5.5;
-    this.root.add(tailCone);
-    addOutline(tailCone, 0.06);
+    // Glass dome at the very tip (B-29 plexiglas greenhouse)
+    const noseGlass = new THREE.Mesh(new THREE.SphereGeometry(0.50, 14, 10), glassMat);
+    noseGlass.scale.set(1.0, 1.0, 0.9);
+    noseGlass.position.z = 5.75;
+    this.root.add(noseGlass);
 
-    // Nose greenhouse windows (small boxes on the nose)
-    const winMat = new THREE.MeshToonMaterial({ color: 0xCCEEFF, transparent: true, opacity: 0.65 });
+    // Cockpit window strips on top of the nose cone
+    const winMat = new THREE.MeshToonMaterial({ color: 0xCCEEFF, transparent: true, opacity: 0.7 });
     for (let i = 0; i < 5; i++) {
-      const ang = (i / 5) * Math.PI * 2;
-      const win = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.18, 0.08), winMat);
-      win.position.set(Math.cos(ang) * 0.68, Math.sin(ang) * 0.65 - 0.1, 4.5);
+      const ang = -Math.PI / 2 + Math.PI * (i + 0.5) / 5;   // top semicircle only
+      const r = 0.7;
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.08), winMat);
+      win.position.set(Math.cos(ang) * r, Math.sin(ang) * r * 0.55 + 0.1, 4.65);
       this.root.add(win);
     }
 
-    // ── Large straight wings ──────────────────────────────────────────────────
-    // Total span ~44 units — each half = 22 units extending from root
+    // ── Tail cone — tapers from fuselage diameter down to a point ───────────
+    // rotation.x = -PI/2 maps local +Y to world -Z, so radiusTop sits at -Z (rear)
+    const tailCone = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 1.0, 3.2, 14), bodyMat);
+    tailCone.rotation.x = -Math.PI / 2;
+    tailCone.position.z = -5.6;
+    tailCone.castShadow = true;
+    this.root.add(tailCone);
+    addOutline(tailCone, 0.07);
+
+    // ── Tapered wings via Shape + ExtrudeGeometry ───────────────────────────
+    // Shape plane: X = spanwise (0 at root), Y = chord position (-Y = leading edge)
+    // After rotation.x = -PI/2: shape X -> world X, shape Y -> world -Z, extrusion -> world Y
+    const HALF_SPAN = 8.5;
+    const ROOT_LE_Y = -2.6;
+    const ROOT_TE_Y =  2.6;
+    const TIP_LE_Y  = -1.0;   // swept-back leading edge
+    const TIP_TE_Y  =  1.2;
+    const WING_THICK = 0.28;
+
+    // World Z of wing leading edge at spanwise distance x (helper for engines)
+    const wingLeZ = (x) => {
+      const t = Math.min(1, x / HALF_SPAN);
+      return -((1 - t) * ROOT_LE_Y + t * TIP_LE_Y);
+    };
+
     for (const sx of [-1, 1]) {
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(22, 0.25, 5), wingMat);
+      const shape = new THREE.Shape();
+      shape.moveTo(0, ROOT_LE_Y);
+      shape.lineTo(HALF_SPAN, TIP_LE_Y);
+      shape.lineTo(HALF_SPAN, TIP_TE_Y);
+      shape.lineTo(0, ROOT_TE_Y);
+      shape.closePath();
+
+      const wingGeo = new THREE.ExtrudeGeometry(shape, {
+        depth: WING_THICK, bevelEnabled: false, curveSegments: 1, steps: 1,
+      });
+      // Centre thickness around origin
+      wingGeo.translate(0, 0, -WING_THICK / 2);
+      // Mirror for left wing
+      if (sx < 0) wingGeo.scale(-1, 1, 1);
+
+      const wing = new THREE.Mesh(wingGeo, wingMat);
+      wing.rotation.x = -Math.PI / 2;
+      wing.position.set(0, -0.15, 0);
       wing.castShadow = true;
-      wing.position.set(sx * 11.5, -0.15, 0.2);
-      // Slight dihedral
-      wing.rotation.z = sx * 0.04;
       this.root.add(wing);
-      addOutline(wing, 0.06);
+      addOutline(wing, 0.05);
     }
 
-    // ── 4 engine nacelles + propellers ───────────────────────────────────────
-    // 2 per wing: inboard at ±5, outboard at ±12
+    // ── 4 engine nacelles + propellers ──────────────────────────────────────
+    // Engines hang under the wing with the prop disc clearly AHEAD of the leading edge.
     const enginePositions = [
-      { sx: -1, dist: 4.5 },
-      { sx: -1, dist: 10.5 },
-      { sx:  1, dist: 4.5 },
-      { sx:  1, dist: 10.5 },
+      { sx: -1, dist: 3.0 },
+      { sx: -1, dist: 5.8 },
+      { sx:  1, dist: 3.0 },
+      { sx:  1, dist: 5.8 },
     ];
+    const NAC_LEN = 2.6;
+    const NAC_R_FRONT = 0.42;
+    const NAC_R_REAR  = 0.34;
 
     for (const ep of enginePositions) {
       const nx = ep.sx * ep.dist;
-      const ny = -0.35;
-      const nz = 0.8;
+      const ny = -0.32;
+      // Nacelle straddles the wing, mostly forward; centre ~0.5 ahead of LE.
+      const leZ = wingLeZ(ep.dist);
+      const nacZ = leZ + 0.5;
 
-      // Nacelle
-      const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.32, 1.6, 10), nacelleMat);
-      nacelle.rotation.x = Math.PI / 2;
-      nacelle.position.set(nx, ny, nz);
+      const nacelle = new THREE.Mesh(
+        new THREE.CylinderGeometry(NAC_R_FRONT, NAC_R_REAR, NAC_LEN, 12),
+        nacelleMat,
+      );
+      nacelle.rotation.x = Math.PI / 2;   // long axis along Z, front (radiusTop) at +Z
+      nacelle.position.set(nx, ny, nacZ);
+      nacelle.castShadow = true;
       this.root.add(nacelle);
       addOutline(nacelle, 0.05);
 
-      // Prop hub
-      const hubGeo = new THREE.SphereGeometry(0.18, 7, 6);
-      const hub = new THREE.Mesh(hubGeo, nacelleMat);
-      hub.position.set(nx, ny, nz + 0.90);
+      const hubZ = nacZ + NAC_LEN / 2 + 0.12;
+      const hub = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), nacelleMat);
+      hub.position.set(nx, ny, hubZ);
       this.root.add(hub);
 
-      // Prop group
-      const propGroup = new THREE.Group();
-      propGroup.position.set(nx, ny, nz + 0.92);
+      // Spinner cone in front of the hub
+      const spinner = new THREE.Mesh(new THREE.ConeGeometry(0.20, 0.36, 10), nacelleMat);
+      spinner.rotation.x = Math.PI / 2;   // tip toward +Z
+      spinner.position.set(nx, ny, hubZ + 0.26);
+      this.root.add(spinner);
 
+      // Prop disc — sits just ahead of the hub, in clear air ahead of the wing
+      const propGroup = new THREE.Group();
+      propGroup.position.set(nx, ny, hubZ + 0.06);
       for (let i = 0; i < 4; i++) {
         const blade = new THREE.Mesh(
-          new THREE.BoxGeometry(0.10, 2.4, 0.28),
+          new THREE.BoxGeometry(0.10, 2.6, 0.28),
           propMat,
         );
         blade.rotation.z = (i / 4) * Math.PI * 2;
@@ -122,37 +174,82 @@ export class Bomber {
       this._propGroups.push(propGroup);
     }
 
-    // ── Tail surfaces ──────────────────────────────────────────────────────────
-    // Vertical fin
-    const vFin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 3.2, 2.4), bodyMat);
-    vFin.position.set(0, 1.7, -5.0);
-    this.root.add(vFin);
-    addOutline(vFin, 0.07);
+    // ── Tail surfaces ───────────────────────────────────────────────────────
+    // Vertical fin — tapered trapezoid built from a Shape
+    {
+      const finShape = new THREE.Shape();
+      finShape.moveTo(-1.4, 0);
+      finShape.lineTo( 1.2, 0);
+      finShape.lineTo( 0.4, 2.6);
+      finShape.lineTo(-0.6, 2.6);
+      finShape.closePath();
+      const finGeo = new THREE.ExtrudeGeometry(finShape, {
+        depth: 0.18, bevelEnabled: false, curveSegments: 1, steps: 1,
+      });
+      finGeo.translate(0, 0, -0.09);
+      const vFin = new THREE.Mesh(finGeo, bodyMat);
+      vFin.rotation.y = Math.PI / 2;   // place fin in YZ plane
+      vFin.position.set(0, 0.45, -5.0);
+      vFin.castShadow = true;
+      this.root.add(vFin);
+      addOutline(vFin, 0.06);
+    }
 
-    // Horizontal stabilisers
-    const hStab = new THREE.Mesh(new THREE.BoxGeometry(8.0, 0.18, 2.0), wingMat);
-    hStab.position.set(0, 0.4, -5.2);
-    this.root.add(hStab);
-    addOutline(hStab, 0.06);
+    // Horizontal stabilisers — tapered, mirrored
+    {
+      const hsShape = new THREE.Shape();
+      hsShape.moveTo(0, -0.9);
+      hsShape.lineTo(3.0, -0.35);
+      hsShape.lineTo(3.0,  0.55);
+      hsShape.lineTo(0,  1.0);
+      hsShape.closePath();
+      for (const sx of [-1, 1]) {
+        const hsGeo = new THREE.ExtrudeGeometry(hsShape, {
+          depth: 0.18, bevelEnabled: false, curveSegments: 1, steps: 1,
+        });
+        hsGeo.translate(0, 0, -0.09);
+        if (sx < 0) hsGeo.scale(-1, 1, 1);
+        const hs = new THREE.Mesh(hsGeo, wingMat);
+        hs.rotation.x = -Math.PI / 2;
+        hs.position.set(0, 0.55, -5.1);
+        hs.castShadow = true;
+        this.root.add(hs);
+        addOutline(hs, 0.05);
+      }
+    }
 
-    // ── Defensive gun turrets (decorative) ────────────────────────────────────
+    // ── Defensive gun turrets (decorative) ──────────────────────────────────
     const turretPositions = [
-      { x: 0,    y: 1.15, z:  1.5 },   // dorsal front
-      { x: 0,    y: 1.15, z: -2.0 },   // dorsal rear
-      { x: 0,    y: -0.9, z:  0.5 },   // ventral
+      { x: 0, y: 1.10, z:  1.5 },   // dorsal forward
+      { x: 0, y: 1.10, z: -1.8 },   // dorsal aft
+      { x: 0, y: -0.95, z:  0.5 },  // ventral
     ];
     for (const tp of turretPositions) {
-      const turret = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), turretMat);
+      const turret = new THREE.Mesh(new THREE.SphereGeometry(0.30, 10, 8), turretMat);
       turret.position.set(tp.x, tp.y, tp.z);
       this.root.add(turret);
-      // Gun barrel
-      const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.7, 5), toonMat(0x333333));
-      barrel.rotation.z = Math.PI / 2;
-      barrel.position.set(tp.x + 0.38, tp.y, tp.z);
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.045, 0.7, 6),
+        toonMat(0x333333),
+      );
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(tp.x, tp.y, tp.z + 0.45);
       this.root.add(barrel);
     }
 
-    // ── Landing gear ──────────────────────────────────────────────────────────
+    // Tail gunner station — small bubble at the very back
+    const tailGun = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), glassMat);
+    tailGun.position.set(0, 0.15, -6.9);
+    this.root.add(tailGun);
+    const tailBarrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.045, 0.045, 0.6, 6),
+      toonMat(0x333333),
+    );
+    tailBarrel.rotation.x = Math.PI / 2;
+    tailBarrel.position.set(0, 0.15, -7.35);
+    this.root.add(tailBarrel);
+
+    // ── Landing gear ────────────────────────────────────────────────────────
     const bigWheelGeo  = new THREE.CylinderGeometry(0.28, 0.28, 0.20, 10);
     const bigStrutGeo  = new THREE.BoxGeometry(0.14, 0.80, 0.14);
     const smallWheelGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.14, 8);
@@ -167,15 +264,15 @@ export class Bomber {
     nw.position.set(0, -1.4, 3.5);
     this.root.add(nw);
 
-    // Main gear (2 per side)
+    // Main gear retracts into the inboard nacelles — anchor under them
     for (const sx of [-1, 1]) {
       for (const dz of [0.2, -0.6]) {
         const ms = new THREE.Mesh(bigStrutGeo, gearMat);
-        ms.position.set(sx * 3.2, -1.0, dz);
+        ms.position.set(sx * 3.0, -1.0, dz);
         this.root.add(ms);
         const mw = new THREE.Mesh(bigWheelGeo, gearMat);
         mw.rotation.z = Math.PI / 2;
-        mw.position.set(sx * 3.2, -1.45, dz);
+        mw.position.set(sx * 3.0, -1.45, dz);
         this.root.add(mw);
       }
     }

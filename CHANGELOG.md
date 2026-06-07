@@ -1,5 +1,15 @@
 # Changelog — Wobbly World
 
+## [v0.14.14] — 2026-06-07
+### Fixed
+- `Bomber` (B-29 Enola Gay) — przeprojektowana sylwetka:
+  - Kadłub: cylindryczny korpus + stożkowy nos zakończony szklaną kopułą (B-29 plexiglas greenhouse) zamiast pojedynczej spłaszczonej kuli
+  - Skrzydła: tapered planform przez `THREE.Shape` + `ExtrudeGeometry` (root chord 5.2, tip chord ~2.2, lekko skośna krawędź natarcia, half-span 8.5 zamiast 22)
+  - Śmigła wyciągnięte do przodu PRZED krawędź natarcia skrzydeł — gondole silników wystają forward, prop disc + spinner cone widoczne w czystym powietrzu (wcześniej obracały się wewnątrz konturu skrzydła)
+  - Stery: pionowy + poziomy statecznik jako tapered trapezoids zamiast zwykłych pudełek; skorygowane pozycje Y tak, by stery przylegały do zwężającego się stożka ogona
+  - Dodana stanowisko strzelca ogonowego (sphere + barrel) na końcu kadłuba
+  - Stożek ogona wydłużony i lepiej połączony z kadłubem (radius 1.0 → 0.18)
+
 ## [v0.14.13] — 2026-06-07
 ### Added
 - `Motorcycle`: statyczna klasa zaparkowanego motocykla w `src/objects/Motorcycle.js` — koła z felgami, rama, kolorowy bak (z białym paskiem), siedzenie, tylny garb, widelec, reflektor, kierownica z manetkami, wydech, kolorowe błotniki, pochył w lewo (kickstand) + nóżka
