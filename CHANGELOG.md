@@ -1,5 +1,11 @@
 # Changelog — Wobbly World
 
+## [v0.14.13] — 2026-06-07
+### Added
+- `Motorcycle`: statyczna klasa zaparkowanego motocykla w `src/objects/Motorcycle.js` — koła z felgami, rama, kolorowy bak (z białym paskiem), siedzenie, tylny garb, widelec, reflektor, kierownica z manetkami, wydech, kolorowe błotniki, pochył w lewo (kickstand) + nóżka
+- `WorldBuilder._addMotorcycles()`: ~22 kolorowych motocykli zaparkowanych przy chodnikach (x/z = ±4.5j) w centrum, na przedmieściach N/S, w CBD E/W, dalekich osiedlach oraz pasie środkowym; każdy ma własny lakier (czerwony, turkusowy, żółty, limonkowy, pomarańczowy, fioletowy, róż, niebieski itd.)
+- Statyczne kolizje box dla motocykli — auta odbijają się od zaparkowanych pojazdów
+
 ## [v0.9.14] — 2026-04-28
 ### Added
 - `Ladder` i `UFO`: drabinki dachowe oraz 3 latające obiekty z promieniem wpływu podpięte do `WorldBuilder` i pętli `Game`

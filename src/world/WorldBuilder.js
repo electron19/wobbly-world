@@ -27,6 +27,7 @@ import { Ladder }                 from '../entities/Ladder.js';
 import { Hill }                   from '../objects/Hill.js';
 import { Tree }                   from '../objects/Tree.js';
 import { StreetLamp }             from '../objects/StreetLamp.js';
+import { Motorcycle }             from '../objects/Motorcycle.js';
 import { Helipad }               from '../objects/Helipad.js';
 import { Car }                    from '../entities/Car.js';
 import { NPC }                    from '../entities/NPC.js';
@@ -94,6 +95,7 @@ export class WorldBuilder {
     this._addTrees();
     this._addStreetLamps();
     this._addCars();
+    this._addMotorcycles();
     this._addUFOs();
     this._addAirplanes();
     this._addAirport();
@@ -1593,6 +1595,53 @@ export class WorldBuilder {
       car._isPolice = true;
       this.cars.push(car);
     }
+  }
+
+  // ─── Motocykle (zaparkowane, statyczne) ─────────────────────────────────────
+
+  _addMotorcycles() {
+    // Format: [x, z, rotY, kolor]
+    // Rozmieszczone na chodnikach (±4.5j od osi drogi) i przy domach.
+    // rotY: 0 = przód na +Z (S), Math.PI = na -Z (N), ±PI/2 = na E/W
+    const SWH = 0.10;  // wysokość chodnika
+    const moto = [
+      // ── Centrum, przy chodnikach przy głównym skrzyżowaniu ───────────────
+      [  4.5, -10,  0,        0xFF2244 ],  // czerwony
+      [ -4.5,  12,  Math.PI,  0x22BBFF ],  // turkusowy
+      [ -10,  -4.5, Math.PI / 2, 0xFFCC00 ],  // żółty
+      [  14,   4.5, -Math.PI / 2, 0x66DD22 ],  // limonkowy
+      // ── Przedmieścia N (z=-50..-90) ─────────────────────────────────────
+      [  4.5, -36,  0,        0xFF6622 ],  // pomarańczowy
+      [ -4.5, -54,  Math.PI,  0xCC22FF ],  // fioletowy
+      [  4.5, -78,  0,        0x00DDDD ],  // cyjan
+      [ -60,  -4.5, Math.PI / 2, 0xFF44AA ],  // róż
+      [  60,   4.5, -Math.PI / 2, 0x4477FF ],  // niebieski
+      // ── Przedmieścia S (z=+50..+90) ─────────────────────────────────────
+      [ -4.5,  36,  Math.PI,  0xFFAA00 ],  // bursztynowy
+      [  4.5,  54,  0,        0xEE2255 ],  // malinowy
+      [ -4.5,  78,  Math.PI,  0x88FF22 ],  // żółtozielony
+      // ── CBD E/W ─────────────────────────────────────────────────────────
+      [  72,  -4.5, -Math.PI / 2, 0xFF3366 ],
+      [ -72,   4.5,  Math.PI / 2, 0x33FFAA ],
+      // ── Daleki E/W ──────────────────────────────────────────────────────
+      [ 140,   4.5, -Math.PI / 2, 0xDD44FF ],
+      [-140,  -4.5,  Math.PI / 2, 0xFFEE22 ],
+      // ── Osiedla N/S — daleko ────────────────────────────────────────────
+      [  4.5,-130,  0,        0xFF77BB ],
+      [ -4.5, 130,  Math.PI,  0x22EEFF ],
+      [  4.5,-200,  0,        0xFF5544 ],
+      [ -4.5, 200,  Math.PI,  0x55AAFF ],
+      // ── Pas środkowy (kąty losowe — postojowa parking) ──────────────────
+      [  64, -60,   0.35,     0xCC6633 ],
+      [ -64,  60,   -0.40,    0x6633CC ],
+    ];
+
+    moto.forEach(([x, z, rotY, color]) => {
+      if (!this._isFreeForTree(x, z, 0.8)) return;
+      const m = new Motorcycle(this.scene, this.physics, color, this.vehiclePhysics)
+        .placeAt(x, SWH, z, rotY);
+      this._add(m);
+    });
   }
 
   /** Dodaje oznaczenia policyjne i lampę na dach samochodu. */
