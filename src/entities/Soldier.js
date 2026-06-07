@@ -224,7 +224,7 @@ export class Soldier {
    * @param {object} player  instancja Player (player.root.position)
    * @param {Function} onShootPlayer  callback(soldierPos) — trafiony gracz dostaje obrażenia
    */
-  update(dt, player, onShootPlayer) {
+  update(dt, player, zombies, onShootPlayer) {
     if (!this.root.visible) return;
 
     // ── Śmierć ───────────────────────────────────────────────────────────────
@@ -262,6 +262,27 @@ export class Soldier {
     const mp = this.root.position;
     const distToPlayer = Math.hypot(pp.x - mp.x, pp.z - mp.z);
     const playerInZone = Soldier.isInAirportZone(pp.x, pp.z);
+    // Gracz wysoko nad ziemią (latanie / w samolocie) — żołnierze go nie widzą.
+    const FLY_IMMUNE_Y = 5.0;
+    const playerFlying = pp.y > FLY_IMMUNE_Y;
+    const playerEngageable = playerInZone && !playerFlying && !(this._scaredTimer > 0);
+
+    // Najbliższy aktywny zombie w zasięgu — priorytet PRZED graczem
+    const HUNT_RANGE = 90;
+    const SHOOT_ZOMBIE_RANGE = 22;
+    let zombieTarget = null;
+    let zombieDist = Infinity;
+    if (zombies) {
+      for (const z of zombies) {
+        if (z._dead || !z.root.visible) continue;
+        const zp = z.root.position;
+        const d  = Math.hypot(zp.x - mp.x, zp.z - mp.z);
+        if (d < HUNT_RANGE && d < zombieDist) {
+          zombieDist = d;
+          zombieTarget = z;
+        }
+      }
+    }
 
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
     // Odliczanie strachu po pierdnięciu
@@ -270,8 +291,11 @@ export class Soldier {
     // ── Maszyna stanów AI ─────────────────────────────────────────────────────
     switch (this._state) {
       case 'patrol':
-        // Wykryj gracza — ale nie gdy przestraszony pierdnięciem
-        if ((playerInZone || distToPlayer < 25) && !(this._scaredTimer > 0)) {
+        // Priorytet: zombie > gracz
+        if (zombieTarget && !(this._scaredTimer > 0)) {
+          this._state = 'huntZombie';
+          this._zombieTarget = zombieTarget;
+        } else if (playerEngageable) {
           this._state = 'chase';
         } else {
           this._doPatrol(dt);
@@ -279,18 +303,39 @@ export class Soldier {
         break;
 
       case 'chase':
-        // Gracz wyszedł ze strefy, jest daleko, lub przestraszył żołnierza → patrol
-        if ((!playerInZone && distToPlayer > 60) || this._scaredTimer > 0) {
+        // Zombie pojawił się — porzuca gracza, leci do zombie
+        if (zombieTarget && !(this._scaredTimer > 0)) {
+          this._state = 'huntZombie';
+          this._zombieTarget = zombieTarget;
+          break;
+        }
+        // Gracz uciekł z lotniska, lata wysoko, lub przestraszył żołnierza → patrol
+        if (!playerEngageable) {
           this._state = 'patrol';
           this._pickNextPatrolPoint();
           break;
         }
         this._doChase(dt, pp);
-        // Gdy w zasięgu strzału → strzelaj
         if (distToPlayer < 40) {
           this._doShoot(dt, pp, onShootPlayer);
         }
         break;
+
+      case 'huntZombie': {
+        // Strach lub brak żywych zombie → wracaj na patrol (i na lotnisko, gdy poza nim)
+        if (!zombieTarget || (this._scaredTimer > 0)) {
+          this._state = 'patrol';
+          this._pickNextPatrolPoint();
+          break;
+        }
+        const zp = zombieTarget.root.position;
+        const zd = Math.hypot(zp.x - mp.x, zp.z - mp.z);
+        this._doChase(dt, zp);
+        if (zd < SHOOT_ZOMBIE_RANGE) {
+          this._doShootZombie(zombieTarget);
+        }
+        break;
+      }
     }
 
     // ── Animacja karabinu (lekkie kołysanie) ─────────────────────────────────
@@ -322,6 +367,13 @@ export class Soldier {
     if (dist < 1.0) return;  // za blisko — stój i strzelaj
 
     this._move(dt, dx / dist, dz / dist, this._chaseSpeed);
+  }
+
+  _doShootZombie(zombie) {
+    if (this._shootCooldown > 0) return;
+    this._shootCooldown = 0.9 + Math.random() * 0.6;
+    zombie.kill?.();
+    this._flashTimer = 0.08;
   }
 
   _doShoot(dt, pp, onShootPlayer) {

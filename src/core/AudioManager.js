@@ -86,6 +86,7 @@ export class AudioManager {
     // ── odrzutowce i bombowce (spatial) ──
     this._jetEngines    = new Map();  // FighterJet → { panner, masterGain, sawOsc, roarOsc, hiSrc }
     this._bomberEngines = new Map();  // Bomber → { panner, masterGain, osc1, osc2 }
+    this._motoEngines   = new Map();  // Motorcycle → { panner, masterGain, osc1, osc2, noiseSrc }
 
     // ── kroki ──
     this._lastFootFloor = 0;
@@ -562,6 +563,110 @@ export class AudioManager {
       try { noiseSrc.stop(); } catch (_) {}
     }, 1200);
     this._bomberEngines.delete(aircraft);
+  }
+
+  // ─── Silnik motocykla (spatial, looping) ──────────────────────────────────
+
+  /**
+   * Wywołaj co klatkę dla motocykla, którym gracz jeździ.
+   * throttle: 0..1, speed: 0..1 (frakcja maksymalnej prędkości)
+   */
+  updateMotorcycleEngine(moto, x, y, z, throttle, speedFrac) {
+    if (!this._ctx) return;
+    const now = this._ctx.currentTime;
+    let e = this._motoEngines.get(moto);
+    if (!e) {
+      e = this._startMotorcycleEngineFor(moto, x, y, z);
+      if (!e) return;
+    }
+    this._setPannerPos(e.panner, x, y, z);
+
+    // Wyższe RPM niż w aucie — motocyklowy charakter (~120 Hz idle → ~340 Hz pełne RPM)
+    const baseFreq = 120 + speedFrac * 220;
+    const beatFreq = baseFreq * 1.012;
+    const tgtVol   = 0.06 + (0.18 * throttle + 0.06 * speedFrac);
+
+    e.masterGain.gain.setTargetAtTime(tgtVol,  now, 0.20);
+    e.osc1.frequency.setTargetAtTime(baseFreq, now, 0.18);
+    e.osc2.frequency.setTargetAtTime(beatFreq, now, 0.18);
+    // Filtr otwiera się przy gazie — bardziej agresywny dźwięk
+    if (e.lp) {
+      const cutoff = 600 + throttle * 1600;
+      e.lp.frequency.setTargetAtTime(cutoff, now, 0.20);
+    }
+  }
+
+  _startMotorcycleEngineFor(moto, x, y, z) {
+    const ctx = this._ctx;
+    const now = ctx.currentTime;
+
+    const panner = this._makePanner(x, y, z, 10, 90, 1.6);
+    panner.connect(this._masterGain);
+
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.06;
+    masterGain.connect(panner);
+
+    // Wspólny lowpass — otwiera się przy gazie
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 700;
+    lp.Q.value = 0.9;
+    lp.connect(masterGain);
+
+    // Osc1 — fundament (single cylinder thump)
+    const osc1 = ctx.createOscillator();
+    osc1.type = 'sawtooth';
+    osc1.frequency.value = 120;
+    const g1 = ctx.createGain();
+    g1.gain.value = 0.55;
+    osc1.connect(g1);
+    g1.connect(lp);
+    osc1.start(now);
+
+    // Osc2 — lekko roztrojony (vibe)
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'square';
+    osc2.frequency.value = 121.4;
+    const g2 = ctx.createGain();
+    g2.gain.value = 0.30;
+    osc2.connect(g2);
+    g2.connect(lp);
+    osc2.start(now);
+
+    // Szum mechaniczny
+    const noiseBuf = this._makeNoise(1.6);
+    const noiseSrc = ctx.createBufferSource();
+    noiseSrc.buffer = noiseBuf;
+    noiseSrc.loop = true;
+    const noiseBP = ctx.createBiquadFilter();
+    noiseBP.type = 'bandpass';
+    noiseBP.frequency.value = 380;
+    noiseBP.Q.value = 1.2;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = 0.08;
+    noiseSrc.connect(noiseBP);
+    noiseBP.connect(noiseGain);
+    noiseGain.connect(masterGain);
+    noiseSrc.start(now);
+
+    const entry = { panner, masterGain, lp, osc1, osc2, noiseSrc };
+    this._motoEngines.set(moto, entry);
+    return entry;
+  }
+
+  stopMotorcycleEngine(moto) {
+    const e = this._motoEngines.get(moto);
+    if (!e || !this._ctx) return;
+    const now = this._ctx.currentTime;
+    e.masterGain.gain.setTargetAtTime(0.001, now, 0.25);
+    const { osc1, osc2, noiseSrc } = e;
+    setTimeout(() => {
+      try { osc1.stop();     } catch (_) {}
+      try { osc2.stop();     } catch (_) {}
+      try { noiseSrc.stop(); } catch (_) {}
+    }, 700);
+    this._motoEngines.delete(moto);
   }
 
   stopHeliEngine(heli) {

@@ -23,6 +23,7 @@ export class Motorcycle extends WorldObject {
     this.facing     = 0;
     this._speed     = 0;
     this._lean      = 0;
+    this._throttle  = 0;
     this._groundY   = 0;     // wysokość terenu pod motocyklem (ustawiana przy placeAt)
     this._wheels    = [];
     this._hbar      = null;
@@ -209,16 +210,26 @@ export class Motorcycle extends WorldObject {
     const TURN_RATE = 1.6;    // rad/s @ pełna prędkość
 
     // ── Gaz / hamulec ─────────────────────────────────────────────────────
-    const fwd = input.isDown('KeyW') || input.isDown('ArrowUp');
-    const rev = input.isDown('KeyS') || input.isDown('ArrowDown');
-    if (fwd) this._speed += ACCEL * dt;
-    if (rev) this._speed -= BRAKE * dt;
+    // Klawisze
+    const fwdK = (input.isDown('KeyW') || input.isDown('ArrowUp'))   ? 1 : 0;
+    const revK = (input.isDown('KeyS') || input.isDown('ArrowDown')) ? 1 : 0;
+    // Pad: R2 = gaz, L2 = hamulec/wsteczny (analog)
+    const PAD_DZ = 0.08;
+    const padFwd  = (input.pad?.r2 ?? 0) > PAD_DZ ? (input.pad.r2) : 0;
+    const padBack = (input.pad?.l2 ?? 0) > PAD_DZ ? (input.pad.l2) : 0;
+    const fwd  = Math.max(fwdK, padFwd);
+    const back = Math.max(revK, padBack);
+    this._throttle = fwd;
+    this._speed += ACCEL * fwd  * dt;
+    this._speed -= BRAKE * back * dt;
     this._speed -= this._speed * DRAG * dt;
     this._speed  = Math.max(-6, Math.min(MAX_SPEED, this._speed));
 
     // ── Skręt ─────────────────────────────────────────────────────────────
-    const turnIn = (input.isDown('KeyA') || input.isDown('ArrowLeft')  ?  1 : 0)
-                 - (input.isDown('KeyD') || input.isDown('ArrowRight') ?  1 : 0);
+    const steerKL  = (input.isDown('KeyA') || input.isDown('ArrowLeft'))  ? 1 : 0;
+    const steerKR  = (input.isDown('KeyD') || input.isDown('ArrowRight')) ? 1 : 0;
+    const padSteer = Math.abs(input.pad?.leftX ?? 0) > 0.12 ? -input.pad.leftX : 0;
+    const turnIn   = padSteer !== 0 ? padSteer : (steerKL - steerKR);
     // Skręt skaluje się prędkością — w spoczynku motocykl prawie się nie skręca
     const speedFactor = Math.min(1, Math.abs(this._speed) / 6 + 0.15);
     // Przy cofaniu skręt jest odwrócony (jak w aucie)

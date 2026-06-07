@@ -1,5 +1,20 @@
 # Changelog — Wobbly World
 
+## [v0.14.16] — 2026-06-07
+### Added
+- **Motocykl**: gracz teraz siedzi na motorze (nie znika) — pozycja gracza nadpisywana co klatkę na siedzeniu, dziedziczy lean i facing motocykla
+- **Motocykl**: dźwięk silnika — spatial loopowy oscylator (~120–340 Hz w zależności od prędkości i gazu) z lekkim roztrojeniem i pasmowym szumem mechanicznym
+- **Motocykl**: pełna obsługa pada — `R2` = gaz, `L2` = hamulec/wsteczny, `lewy analog X` = skręt (tak jak w aucie)
+- **Żołnierze** atakują zombie: nowy stan `huntZombie`, priorytet PRZED graczem, zasięg detekcji 90 j.ś., strzał z 22 j.ś. — gdy zombie wyjdą na ulicę, żołnierze wybiegają z lotniska i je likwidują
+
+### Changed
+- **Żołnierze** nie gonią gracza poza lotniskiem — chase wymaga `playerInZone` (do płotu, nie za płotem); chase się przerywa natychmiast gdy gracz przekroczy granicę
+- **Żołnierze** ignorują latającego gracza — `pp.y > 5.0` traktowane jako "wysoko, nie widzą"
+- **Syreny** przesunięte na rogi skrzyżowań (offset +6,+6 od centrum przecięcia dróg) — nie blokują jezdni
+
+### Fixed
+- `Soldier.update()` przyjmuje nowy argument `zombies` (zmiana sygnatury) — wywołanie z `Game.js` zaktualizowane
+
 ## [v0.14.15] — 2026-06-07
 ### Added
 - `Motorcycle` jest teraz pełnoprawnym pojazdem — można wsiadać klawiszem **E** i jeździć:

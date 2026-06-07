@@ -184,13 +184,15 @@ export class Game {
     this._knockableLamps = wb.knockableLamps;
 
     // ── Syreny alarmowe — rozmieszczone przy głównych skrzyżowaniach miasta ──
+    // Syreny na rogach skrzyżowań (off-road, NE corner: x+6, z+6),
+    // żeby nie blokowały przejazdu autem.
     const sirenSpots = [
-      [  0,   0], [ 65,   0], [-65,   0],   // centrum
-      [  0,  50], [  0, -50],               // N/S oś
-      [ 65,  50], [-65,  50],               // NE/NW
-      [ 65, -50], [-65, -50],               // SE/SW
-      [  0, 100], [  0,-100],               // dalej N/S
-      [130,   0], [-130,  0],               // CBD E/W
+      [   6,   6], [  71,   6], [ -59,   6],   // centrum
+      [   6,  56], [   6, -44],                // N/S oś
+      [  71,  56], [ -59,  56],                // NE/NW
+      [  71, -44], [ -59, -44],                // SE/SW
+      [   6, 106], [   6, -94],                // dalej N/S
+      [ 136,   6], [-124,   6],                // CBD E/W
     ];
     for (const [sx, sz] of sirenSpots) {
       this._sirens.push(new Siren(this.scene, sx, sz));
@@ -537,7 +539,7 @@ export class Game {
   _enterMotorcycle(moto) {
     this._drivingMotorcycle = moto;
     moto.isOccupied = true;
-    this.player.root.visible = false;
+    // Gracz pozostaje widoczny — siedzi na motorze (pozycja nadpisywana w lateUpdate loop)
     const mp = moto.root.position;
     // Park kapsuły gracza nad motocyklem — zapobiega kolizjom kinematycznym
     this.player._body.setTranslation({ x: mp.x, y: mp.y + 5, z: mp.z }, false);
@@ -546,7 +548,7 @@ export class Game {
     this._applyCameraMode();
     this._interactCooldown = 20;
     this._uiEl.innerHTML =
-      'W – gaz &nbsp;|&nbsp; S – hamulec / bieg wsteczny &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; E – wysiądź';
+      'W / R2 – gaz &nbsp;|&nbsp; S / L2 – hamulec &nbsp;|&nbsp; AD / lewy analog – skręt &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; E – wysiądź';
   }
 
   _exitMotorcycle() {
@@ -561,6 +563,7 @@ export class Game {
     this.player.root.visible = true;
     moto.resetDriveState?.();
     moto.isOccupied = false;
+    this.audio?.stopMotorcycleEngine?.(moto);
     this._drivingMotorcycle = null;
     this._interactCooldown = 25;
     this.camCtrl.dist = CAM_DIST_FOOT;
@@ -872,7 +875,8 @@ export class Game {
     // Widoczność gracza — synchronizuj co klatkę ze stanem gry.
     // Gracz niewidoczny gdy: w aucie LUB w budynku (FPP).
     // To eliminuje wszelkie race-conditions z `visible` ustawianym w callbackach.
-    this.player.root.visible = !this._drivingCar && !this._drivingAircraft && !this._drivingMotorcycle && !this._insideBuilding && !this._userFirstPerson;
+    // Na motocyklu gracz pozostaje widoczny — siedzi okrakiem.
+    this.player.root.visible = !this._drivingCar && !this._drivingAircraft && !this._insideBuilding && !this._userFirstPerson;
 
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
@@ -1016,6 +1020,29 @@ export class Game {
     for (const car of this.cars) car.lateUpdate();
     this.player.lateUpdate();
 
+    // ── Ustaw gracza na siedzeniu motocykla (override po lateUpdate) ───────
+    if (this._drivingMotorcycle) {
+      const moto = this._drivingMotorcycle;
+      const mp   = moto.root.position;
+      // Siedzenie w lokalnym układzie motocykla: ~(0, 0.95, -0.30) względem root
+      const SEAT_LOCAL_Y = 0.95;
+      const SEAT_LOCAL_Z = -0.30;
+      const sinF = Math.sin(moto.facing);
+      const cosF = Math.cos(moto.facing);
+      this.player.root.position.set(
+        mp.x + sinF * SEAT_LOCAL_Z,
+        mp.y + SEAT_LOCAL_Y,
+        mp.z + cosF * SEAT_LOCAL_Z,
+      );
+      this.player.root.rotation.set(0, moto.facing, moto._lean ?? 0, 'YXZ');
+      this.player.facing = moto.facing;
+      // Aktualizacja dźwięku silnika (loopowy spatial)
+      const speedFrac = Math.min(1, Math.abs(moto._speed ?? 0) / 22);
+      this.audio?.updateMotorcycleEngine?.(
+        moto, mp.x, mp.y, mp.z, moto._throttle ?? 0, speedFrac,
+      );
+    }
+
     // ── NPC + Animals — update tylko gdy blisko gracza (≤ 120 j.ś.) ──────
     const npcRef = this._drivingCar
       ? this._drivingCar.root.position
@@ -1030,7 +1057,7 @@ export class Game {
 
     // ── Żołnierze — zawsze aktywni w strefie lotniska ────────────────────
     for (const soldier of this.soldiers) {
-      soldier.update(dt, this.player, (soldierPos) => this._onShotByNPC(soldierPos));
+      soldier.update(dt, this.player, this.zombies, (soldierPos) => this._onShotByNPC(soldierPos));
     }
 
     // ── Zombie — nocne potwory ────────────────────────────────────────────
