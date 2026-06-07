@@ -64,6 +64,7 @@ export class WorldBuilder {
     this.helicopters    = [];  // helikoptery — do wsiadania
     this.jets           = [];  // myśliwce — do wsiadania
     this.bombers        = [];  // bombowce — do wsiadania
+    this.motorcycles    = [];  // motocykle — do wsiadania
     this._circles       = []; // exclusion circles (z marginem) — budynki, drzewa omijają je
     this._npcObstacles  = []; // fizyczne kontury budynków/drzew bez marginu — dla NPCów
     this.soldiers       = [];  // żołnierze pilnujący lotniska
@@ -1641,6 +1642,7 @@ export class WorldBuilder {
       const m = new Motorcycle(this.scene, this.physics, color, this.vehiclePhysics)
         .placeAt(x, SWH, z, rotY);
       this._add(m);
+      this.motorcycles.push(m);
     });
   }
 

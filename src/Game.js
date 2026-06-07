@@ -77,6 +77,8 @@ export class Game {
     this.audio          = new AudioManager();
     this._drivingCar    = null;
     this._drivingAircraft = null;   // Airplane or Helicopter instance
+    this._drivingMotorcycle = null; // Motorcycle instance
+    this.motorcycles    = [];
     this._insideBuilding = null;
     this._playerFlyMode  = false;   // tryb latania gracza (G toggle)
     this._userFirstPerson = false;  // ręczny toggle kamery C / Select
@@ -126,7 +128,7 @@ export class Game {
       this.camCtrl.pitch = 0;
     } else {
       this.camCtrl.pitch = this._savedCamPitch;
-      this.camCtrl.dist = this._drivingCar ? CAM_DIST_CAR : CAM_DIST_FOOT;
+      this.camCtrl.dist = (this._drivingCar || this._drivingMotorcycle) ? CAM_DIST_CAR : CAM_DIST_FOOT;
     }
     this._applyCameraMode();
   }
@@ -176,6 +178,7 @@ export class Game {
     this.helicopters   = wb.helicopters ?? [];
     this.jets          = wb.jets        ?? [];
     this.bombers       = wb.bombers     ?? [];
+    this.motorcycles   = wb.motorcycles ?? [];
     this.soldiers      = wb.soldiers    ?? [];
     this._worldObjects = wb.objects;
     this._knockableLamps = wb.knockableLamps;
@@ -283,7 +286,7 @@ export class Game {
 
   /** Znajdź najbliższy dom z otwartymi drzwiami w zasięgu BUILDING_DIST. */
   _nearestBuilding() {
-    if (this._drivingCar) return null;
+    if (this._drivingCar || this._drivingMotorcycle) return null;
     const pp = this.player.root.position;
     let best = null, bestD = BUILDING_DIST;
     for (const b of this.buildings) {
@@ -301,7 +304,7 @@ export class Game {
    * Zwraca { ladder, atTop } lub null.
    */
   _nearestLadder() {
-    if (this._drivingCar || this._insideBuilding) return null;
+    if (this._drivingCar || this._drivingMotorcycle || this._insideBuilding) return null;
     const pp = this.player.root.position;
     let bestResult = null, bestD = LADDER_DIST;
     for (const lad of this.ladders) {
@@ -373,7 +376,7 @@ export class Game {
 
   /** Znajdź najbliższy samolot lub helikopter w zasięgu AIRCRAFT_ENTER_DIST. */
   _nearestAircraft() {
-    if (this._drivingCar) return null;
+    if (this._drivingCar || this._drivingMotorcycle) return null;
     const pp = this.player.root.position;
     let best = null, bestD = AIRCRAFT_ENTER_DIST;
     for (const ac of [...this.airplanes, ...this.helicopters, ...this.jets, ...this.bombers]) {
@@ -507,6 +510,59 @@ export class Game {
     this._drivingCar      = null;
     this._exitCarThisFrame = true;
     this._interactCooldown = 25;  // ~0.4s blokady po wysiadaniu (żeby nie wsiadać natychmiast)
+    this.camCtrl.dist = CAM_DIST_FOOT;
+    this._applyCameraMode();
+    this._uiEl.innerHTML =
+      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
+  }
+
+  // ─── Interakcja z motocyklem ──────────────────────────────────────────────
+
+  _nearestMotorcycle() {
+    if (this._drivingCar || this._drivingAircraft) return null;
+    const pp = this.player.root.position;
+    const ENTER_R = 2.6;
+    let best = null, bestD = ENTER_R;
+    for (const moto of this.motorcycles) {
+      if (moto.isOccupied) continue;
+      const d = Math.hypot(
+        pp.x - moto.root.position.x,
+        pp.z - moto.root.position.z,
+      );
+      if (d < bestD) { bestD = d; best = moto; }
+    }
+    return best;
+  }
+
+  _enterMotorcycle(moto) {
+    this._drivingMotorcycle = moto;
+    moto.isOccupied = true;
+    this.player.root.visible = false;
+    const mp = moto.root.position;
+    // Park kapsuły gracza nad motocyklem — zapobiega kolizjom kinematycznym
+    this.player._body.setTranslation({ x: mp.x, y: mp.y + 5, z: mp.z }, false);
+    this.camCtrl.yaw  = moto.facing + Math.PI;
+    this.camCtrl.dist = CAM_DIST_CAR;
+    this._applyCameraMode();
+    this._interactCooldown = 20;
+    this._uiEl.innerHTML =
+      'W – gaz &nbsp;|&nbsp; S – hamulec / bieg wsteczny &nbsp;|&nbsp; AD – skręt &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; E – wysiądź';
+  }
+
+  _exitMotorcycle() {
+    const moto = this._drivingMotorcycle;
+    const pos  = moto.root.position;
+    // Wysiądź z boku (lewo względem kierunku jazdy)
+    const sideX = pos.x + Math.cos(moto.facing) * 1.8;
+    const sideZ = pos.z - Math.sin(moto.facing) * 1.8;
+    this.player._body.setNextKinematicTranslation({
+      x: sideX, y: pos.y + 0.5, z: sideZ,
+    });
+    this.player.root.visible = true;
+    moto.resetDriveState?.();
+    moto.isOccupied = false;
+    this._drivingMotorcycle = null;
+    this._interactCooldown = 25;
     this.camCtrl.dist = CAM_DIST_FOOT;
     this._applyCameraMode();
     this._uiEl.innerHTML =
@@ -701,7 +757,7 @@ export class Game {
     if (this._actionCooldown   > 0) { this._actionCooldown   -= 1; return; }
 
     // G — tryb latania gracza (toggle) — zablokowany w pojeździe
-    if (this.input.isJustPressed('KeyG') && !this._drivingCar && !this._drivingAircraft) {
+    if (this.input.isJustPressed('KeyG') && !this._drivingCar && !this._drivingAircraft && !this._drivingMotorcycle) {
       this._playerFlyMode = !this._playerFlyMode;
       this.player.setFlyMode?.(this._playerFlyMode);
     }
@@ -720,17 +776,22 @@ export class Game {
         this._exitAircraft();
       } else if (this._drivingCar) {
         this._exitCar();
+      } else if (this._drivingMotorcycle) {
+        this._exitMotorcycle();
       } else if (this._insideBuilding) {
         this._exitBuilding();
       } else {
         const nearAC   = this._nearestAircraft();
         const nearCar  = this._nearestCar();
+        const nearMoto = this._nearestMotorcycle();
         const nearBldg = this._nearestBuilding();
         const nearLad  = this._nearestLadder();
         if (nearAC) {
           this._enterAircraft(nearAC);
         } else if (nearCar) {
           this._enterCar(nearCar);
+        } else if (nearMoto) {
+          this._enterMotorcycle(nearMoto);
         } else if (nearBldg) {
           this._enterBuilding(nearBldg);
         } else if (nearLad) {
@@ -751,7 +812,7 @@ export class Game {
       if (this._drivingAircraft) {
         this._interactEl.textContent = 'E — wysiądź';
         this._interactEl.style.display = 'block';
-      } else if (this._drivingCar) {
+      } else if (this._drivingCar || this._drivingMotorcycle) {
         this._interactEl.textContent = 'E — wysiądź';
         this._interactEl.style.display = 'block';
       } else if (this._insideBuilding) {
@@ -760,6 +821,7 @@ export class Game {
       } else {
         const nearAC   = this._nearestAircraft();
         const nearCar  = this._nearestCar();
+        const nearMoto = this._nearestMotorcycle();
         const nearBldg = this._nearestBuilding();
         const nearLad  = this._nearestLadder();
         if (nearAC) {
@@ -771,6 +833,9 @@ export class Game {
           this._interactEl.style.display = 'block';
         } else if (nearCar) {
           this._interactEl.textContent = 'E — wsiądź';
+          this._interactEl.style.display = 'block';
+        } else if (nearMoto) {
+          this._interactEl.textContent = 'E — wsiądź na motocykl';
           this._interactEl.style.display = 'block';
         } else if (nearBldg) {
           this._interactEl.textContent = 'E — wejdź';
@@ -807,7 +872,7 @@ export class Game {
     // Widoczność gracza — synchronizuj co klatkę ze stanem gry.
     // Gracz niewidoczny gdy: w aucie LUB w budynku (FPP).
     // To eliminuje wszelkie race-conditions z `visible` ustawianym w callbackach.
-    this.player.root.visible = !this._drivingCar && !this._drivingAircraft && !this._insideBuilding && !this._userFirstPerson;
+    this.player.root.visible = !this._drivingCar && !this._drivingAircraft && !this._drivingMotorcycle && !this._insideBuilding && !this._userFirstPerson;
 
     const exitedThisFrame = this._exitCarThisFrame;
     this._exitCarThisFrame = false;
@@ -818,6 +883,10 @@ export class Game {
     for (const ac of this.airplanes)   ac.update(dt, this.input, this.camCtrl);
     for (const ac of this.jets)        ac.update(dt, this.input, this.camCtrl, this.audio);
     for (const ac of this.bombers)     ac.update(dt, this.input, this.camCtrl, this.audio);
+    // Motocykle — aktywne (jeżdżący) lub parkowane (utrzymanie kickstand lean)
+    for (const moto of this.motorcycles) {
+      if (moto !== this._drivingMotorcycle) moto.update(dt, this.input);
+    }
     for (const ac of this.helicopters) {
       const bulletPositions = ac.update(dt, this.input, this.audio);
       // Sprawdź trafienia pocisków w NPC (promień 1.4 j.ś.)
@@ -846,6 +915,8 @@ export class Game {
         this._drivingCar.isOccupied = false;
         this._drivingCar = null;
       }
+    } else if (this._drivingMotorcycle) {
+      this._drivingMotorcycle.update(dt, this.input);
     }
     // Zaparkowane auta też muszą dostać updateVehicle — inaczej zawieszenie nie działa
     for (const car of this.cars) {
@@ -858,6 +929,11 @@ export class Game {
     // ── 3. Krok Rapier — auto + gracz + świat w jednym symulatorze ───────
     if (this._drivingAircraft) {
       // player capsule already teleported above aircraft in block above — nothing more to do
+    } else if (this._drivingMotorcycle) {
+      const mp = this._drivingMotorcycle.root.position;
+      this.player._body.setNextKinematicTranslation({
+        x: mp.x, y: mp.y + 5, z: mp.z,
+      });
     } else if (this._drivingCar) {
       // Gracz niewidoczny — ustaw capsule NAD autem (nie w środku chassis),
       // żeby kinematic body nie generowało sił na dynamic chassis i auto nie latało.
@@ -941,7 +1017,11 @@ export class Game {
     this.player.lateUpdate();
 
     // ── NPC + Animals — update tylko gdy blisko gracza (≤ 120 j.ś.) ──────
-    const npcRef = this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+    const npcRef = this._drivingCar
+      ? this._drivingCar.root.position
+      : this._drivingMotorcycle
+        ? this._drivingMotorcycle.root.position
+        : this.player.root.position;
     for (const npc of this.npcs) {
       const dx = npc.root.position.x - npcRef.x;
       const dz = npc.root.position.z - npcRef.z;
@@ -974,7 +1054,9 @@ export class Game {
     // ── Sky / Weather / Season ───────────────────────────────────────────
     const worldRef = this._drivingAircraft
       ? this._drivingAircraft.root.position
-      : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+      : this._drivingCar ? this._drivingCar.root.position
+      : this._drivingMotorcycle ? this._drivingMotorcycle.root.position
+      : this.player.root.position;
     this._seasons.update(dt);
     this._sky.update(dt, worldRef, this._seasons);
     this._weather.update(dt, worldRef, this._sky, this._seasons.isWinter);
@@ -982,10 +1064,14 @@ export class Game {
     // ── 5. Kamera + render ────────────────────────────────────────────────
     const followPos = this._drivingAircraft
       ? this._drivingAircraft.root.position
-      : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+      : this._drivingCar ? this._drivingCar.root.position
+      : this._drivingMotorcycle ? this._drivingMotorcycle.root.position
+      : this.player.root.position;
     const autoFacing = this._drivingAircraft
       ? this._drivingAircraft.facing
-      : this._drivingCar ? this._drivingCar.facing : this.player.facing;
+      : this._drivingCar ? this._drivingCar.facing
+      : this._drivingMotorcycle ? this._drivingMotorcycle.facing
+      : this.player.facing;
 
     // Camera shake — przy uderzeniu pojazdu
     if (this._drivingCar) {
@@ -1031,6 +1117,12 @@ export class Game {
       const targetFov = 72 + sf * 26;   // 72 (spoczynek) → 98 (≈140 km/h)
       this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 4.2));
       this.camera3.updateProjectionMatrix();
+    } else if (this._drivingMotorcycle) {
+      const spd = Math.abs(this._drivingMotorcycle._speed ?? 0);
+      const sf = Math.min(1, spd / 22);
+      const targetFov = 72 + sf * 18;
+      this.camera3.fov += (targetFov - this.camera3.fov) * (1 - Math.exp(-dt * 4));
+      this.camera3.updateProjectionMatrix();
     } else if (Math.abs(this.camera3.fov - 72) > 0.1) {
       // Wróć do bazowego FOV gdy pieszo
       this.camera3.fov += (72 - this.camera3.fov) * (1 - Math.exp(-dt * 4));
@@ -1043,10 +1135,14 @@ export class Game {
     if (this._minimap && !this._insideBuilding) {
       const mapPos    = this._drivingAircraft
         ? this._drivingAircraft.root.position
-        : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+        : this._drivingCar ? this._drivingCar.root.position
+        : this._drivingMotorcycle ? this._drivingMotorcycle.root.position
+        : this.player.root.position;
       const mapFacing = this._drivingAircraft
         ? this._drivingAircraft.facing
-        : this._drivingCar ? this._drivingCar.facing : this.player.facing;
+        : this._drivingCar ? this._drivingCar.facing
+        : this._drivingMotorcycle ? this._drivingMotorcycle.facing
+        : this.player.facing;
       this._minimap.update(mapPos, mapFacing, this.cars, this._drivingCar, this.buildings);
     }
 
@@ -1055,6 +1151,7 @@ export class Game {
       const lp = this._drivingAircraft
         ? this._drivingAircraft.root.position
         : this._drivingCar ? this._drivingCar.root.position
+        : this._drivingMotorcycle ? this._drivingMotorcycle.root.position
         : this.player.root.position;
       this.audio.setListenerPos(lp.x, lp.y, lp.z);
     }
@@ -1110,12 +1207,16 @@ export class Game {
       }
       const pos = this._drivingAircraft
         ? this._drivingAircraft.root.position
-        : this._drivingCar ? this._drivingCar.root.position : this.player.root.position;
+        : this._drivingCar ? this._drivingCar.root.position
+        : this._drivingMotorcycle ? this._drivingMotorcycle.root.position
+        : this.player.root.position;
       const spd = this._drivingCar
         ? `${Math.abs(Math.round(this._drivingCar.speedKmh ?? 0))} km/h`
-        : (this._drivingAircraft?.type === 'airplane' || this._drivingAircraft?.type === 'jet' || this._drivingAircraft?.type === 'bomber')
-          ? `${Math.abs(Math.round((this._drivingAircraft._speed ?? 0) * 3.6))} km/h`
-          : '';
+        : this._drivingMotorcycle
+          ? `${Math.abs(Math.round((this._drivingMotorcycle._speed ?? 0) * 3.6))} km/h`
+          : (this._drivingAircraft?.type === 'airplane' || this._drivingAircraft?.type === 'jet' || this._drivingAircraft?.type === 'bomber')
+            ? `${Math.abs(Math.round((this._drivingAircraft._speed ?? 0) * 3.6))} km/h`
+            : '';
       const ds = this._drivingCar?.debugState;
       this._debugEl.innerHTML =
         `FPS: ${this._fpsDisplay}<br>` +

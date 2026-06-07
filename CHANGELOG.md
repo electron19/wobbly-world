@@ -1,5 +1,25 @@
 # Changelog — Wobbly World
 
+## [v0.14.15] — 2026-06-07
+### Added
+- `Motorcycle` jest teraz pełnoprawnym pojazdem — można wsiadać klawiszem **E** i jeździć:
+  - WASD: gaz / hamulec+wsteczny / skręt (skręt skaluje się prędkością)
+  - Lean w skrętach, animowane obroty kół, kierownica obraca się przy skręcie
+  - Schowana nóżka podczas jazdy, parkowy przechył wraca po wysiadaniu
+  - Prędkość max ~80 km/h (22 m/s), prędkościomierz w HUD
+  - Kamera trzecioosobowa + dynamiczny FOV (jak w aucie)
+  - Hint: *"E — wsiądź na motocykl"* gdy gracz blisko (≤ 2.6 j.ś.)
+- `Game._drivingMotorcycle` + `_nearestMotorcycle / _enterMotorcycle / _exitMotorcycle`
+- `WorldBuilder.motorcycles[]` — wszystkie ~22 zaparkowanych motocykli są jeżdżalne
+
+### Changed
+- **Day/night cycle:** dzień 30 min → **5 min**, noc 15 min → **5 min** (pełny cykl 10 min zamiast 45)
+- Start gry: 1 min w dzień (zamiast 5 min) — gracz szybciej zobaczy noc i zombie
+- Motocykle straciły statyczny collider — dzięki temu da się nimi jeździć; auta przechodzą przez zaparkowane motocykle (kompromis)
+
+### Removed
+- `Motorcycle.placeAt()` nie tworzy już Rapier static box
+
 ## [v0.14.14] — 2026-06-07
 ### Fixed
 - `Bomber` (B-29 Enola Gay) — przeprojektowana sylwetka:

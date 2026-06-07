@@ -1,9 +1,9 @@
 /**
  * SkySystem — dynamic day/night cycle.
  *
- * Day   = 30 min real time (1800 s)
- * Night = 15 min real time (900 s)
- * Cycle = 45 min
+ * Day   = 5 min real time (300 s)
+ * Night = 5 min real time (300 s)
+ * Cycle = 10 min
  *
  * Manages:
  *  - directional sun light (moves in arc, casts shadows)
@@ -16,12 +16,12 @@
 
 import * as THREE from 'three';
 
-export const DAY_S   = 30 * 60;   // 1800 s
-export const NIGHT_S = 15 * 60;   // 900 s
-export const CYCLE_S = DAY_S + NIGHT_S;  // 2700 s
+export const DAY_S   = 5 * 60;   // 300 s
+export const NIGHT_S = 5 * 60;   // 300 s
+export const CYCLE_S = DAY_S + NIGHT_S;  // 600 s
 
-// Start partway into the day so the first thing the player sees is daylight.
-const START_OFFSET = 300;   // begin 5 min into the day cycle
+// Start near the beginning of the day so the player first sees morning light.
+const START_OFFSET = 60;   // begin 1 min into the day cycle
 
 export class SkySystem {
   constructor(scene) {

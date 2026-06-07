@@ -10,15 +10,23 @@ const SEAT_Y    = 0.85;
 const TANK_Y    = 0.78;
 const HBAR_Y    = 1.18;
 
-/**
- * Statyczny zaparkowany motocykl — kolorowy lakier baku/błotników.
- * Skierowany lokalnie wzdłuż osi +Z. Obrót rotY przy placeAt() ustawia kierunek.
- * Kolizja: statyczny box Rapier (auta się odbijają).
- */
+// Lokalny układ: przód na +Z. Kierunek jazdy w świecie = facing (rotation.y).
+// Sterowanie: WASD + obrót root.rotation.y, lekki lean w skrętach.
+
 export class Motorcycle extends WorldObject {
   constructor(scene, physics, color = 0xFF3344, vehiclePhysics = null) {
     super(scene, physics, vehiclePhysics);
     this.color = color;
+    this.type = 'motorcycle';
+    this.isDrivable = true;
+    this.isOccupied = false;
+    this.facing     = 0;
+    this._speed     = 0;
+    this._lean      = 0;
+    this._groundY   = 0;     // wysokość terenu pod motocyklem (ustawiana przy placeAt)
+    this._wheels    = [];
+    this._hbar      = null;
+    this._stand     = null;
   }
 
   _build() {
@@ -38,6 +46,7 @@ export class Motorcycle extends WorldObject {
       wheel.position.set(0, WHEEL_R, z);
       addOutline(wheel, 0.04);
       this.root.add(wheel);
+      this._wheels.push(wheel);
 
       const rim = new THREE.Mesh(
         new THREE.CylinderGeometry(WHEEL_R * 0.55, WHEEL_R * 0.55, WHEEL_W + 0.02, 8),
@@ -46,6 +55,8 @@ export class Motorcycle extends WorldObject {
       rim.rotation.z = Math.PI / 2;
       rim.position.set(0, WHEEL_R, z);
       this.root.add(rim);
+      // Felgi obracają się razem z oponą
+      wheel.userData.rim = rim;
     });
 
     // Rama
@@ -111,13 +122,17 @@ export class Motorcycle extends WorldObject {
     headRim.position.set(0, 1.00, WHEELBASE / 2 + 0.12);
     this.root.add(headRim);
 
-    // Kierownica
+    // Kierownica — w grupie, żeby móc obracać przy skręcie
+    const hbarGroup = new THREE.Group();
+    hbarGroup.position.set(0, HBAR_Y, WHEELBASE / 2 + 0.08);
+    this.root.add(hbarGroup);
+    this._hbar = hbarGroup;
+
     const hbar = new THREE.Mesh(
       new THREE.BoxGeometry(0.70, 0.05, 0.05), metalMat,
     );
-    hbar.position.set(0, HBAR_Y, WHEELBASE / 2 + 0.08);
     addOutline(hbar, 0.04);
-    this.root.add(hbar);
+    hbarGroup.add(hbar);
 
     // Manetki
     [-0.32, +0.32].forEach((sx) => {
@@ -125,8 +140,8 @@ export class Motorcycle extends WorldObject {
         new THREE.CylinderGeometry(0.05, 0.05, 0.14, 6), blackMat,
       );
       grip.rotation.z = Math.PI / 2;
-      grip.position.set(sx, HBAR_Y, WHEELBASE / 2 + 0.08);
-      this.root.add(grip);
+      grip.position.set(sx, 0, 0);
+      hbarGroup.add(grip);
     });
 
     // Wydech
@@ -153,34 +168,102 @@ export class Motorcycle extends WorldObject {
     fenderR.rotation.x = 0.10;
     this.root.add(fenderR);
 
-    // Przechył motocykla (kickstand) — pochył w lewo ~7°
-    this.root.rotation.z = 0.12;
-
-    // Nóżka
+    // Nóżka (chowana podczas jazdy)
     const stand = new THREE.Mesh(
       new THREE.CylinderGeometry(0.025, 0.025, 0.45, 6), blackMat,
     );
     stand.position.set(-0.22, 0.20, -0.05);
     stand.rotation.z = 0.20;
     this.root.add(stand);
+    this._stand = stand;
+
+    // Domyślny przechył parkingowy (kickstand) — usuwany podczas jazdy
+    this.root.rotation.z = 0.12;
   }
 
   placeAt(x, y, z, rotY = 0) {
     super.placeAt(x, y, z);
     this.root.rotation.y = rotY;
+    this.facing = rotY;
+    this._groundY = y;
     this._build();
-
-    // Statyczny box — AABB po rotacji
-    const halfL = WHEELBASE / 2 + 0.25;
-    const halfW = 0.40;
-    const halfH = 0.55;
-    const cosA = Math.abs(Math.cos(rotY));
-    const sinA = Math.abs(Math.sin(rotY));
-    const bx = halfW * cosA + halfL * sinA;
-    const bz = halfW * sinA + halfL * cosA;
-    this._bodies.push(
-      this.physics.addStaticBox(x, y + halfH, z, bx, halfH, bz),
-    );
+    // Brak statycznego ciała kolizyjnego — motocykl porusza się kinematycznie.
+    // Auta mogą przeniknąć przez zaparkowane motocykle, ale dzięki temu da się nimi jeździć.
     return this;
+  }
+
+  // ── Sterowanie i symulacja ────────────────────────────────────────────────
+
+  /** Wywołane przez Game.update() co klatkę gdy isOccupied=true. */
+  update(dt, input) {
+    if (!this.isOccupied) {
+      // Parkowane — lekkie wygładzanie do przechyłu kickstanda
+      this.root.rotation.z += (0.12 - this.root.rotation.z) * Math.min(1, dt * 8);
+      return;
+    }
+
+    const MAX_SPEED = 22;     // m/s ≈ 80 km/h
+    const ACCEL     = 14;
+    const BRAKE     = 22;
+    const DRAG      = 0.55;
+    const TURN_RATE = 1.6;    // rad/s @ pełna prędkość
+
+    // ── Gaz / hamulec ─────────────────────────────────────────────────────
+    const fwd = input.isDown('KeyW') || input.isDown('ArrowUp');
+    const rev = input.isDown('KeyS') || input.isDown('ArrowDown');
+    if (fwd) this._speed += ACCEL * dt;
+    if (rev) this._speed -= BRAKE * dt;
+    this._speed -= this._speed * DRAG * dt;
+    this._speed  = Math.max(-6, Math.min(MAX_SPEED, this._speed));
+
+    // ── Skręt ─────────────────────────────────────────────────────────────
+    const turnIn = (input.isDown('KeyA') || input.isDown('ArrowLeft')  ?  1 : 0)
+                 - (input.isDown('KeyD') || input.isDown('ArrowRight') ?  1 : 0);
+    // Skręt skaluje się prędkością — w spoczynku motocykl prawie się nie skręca
+    const speedFactor = Math.min(1, Math.abs(this._speed) / 6 + 0.15);
+    // Przy cofaniu skręt jest odwrócony (jak w aucie)
+    const dirSign = this._speed >= 0 ? 1 : -1;
+    this.facing += turnIn * TURN_RATE * speedFactor * dt * dirSign;
+
+    // ── Pozycja ───────────────────────────────────────────────────────────
+    const sinF = Math.sin(this.facing);
+    const cosF = Math.cos(this.facing);
+    this.root.position.x += sinF * this._speed * dt;
+    this.root.position.z += cosF * this._speed * dt;
+    // Stała wysokość — wheel-grounded
+    this.root.position.y = this._groundY;
+
+    // ── Lean w skręcie (visual) ───────────────────────────────────────────
+    const leanTarget = -turnIn * Math.min(1, Math.abs(this._speed) / 10) * 0.40 * dirSign;
+    this._lean += (leanTarget - this._lean) * (1 - Math.exp(-dt * 6));
+
+    // ── Aplikacja rotacji ─────────────────────────────────────────────────
+    this.root.rotation.y = this.facing;
+    this.root.rotation.z = this._lean;
+
+    // ── Kierownica obraca się przy skręcie ────────────────────────────────
+    if (this._hbar) {
+      const target = turnIn * 0.35;
+      this._hbar.rotation.y += (target - this._hbar.rotation.y) * (1 - Math.exp(-dt * 10));
+    }
+
+    // ── Obrót kół (animacja prędkości jazdy) ──────────────────────────────
+    // Lokalne X koła to oś obrotu (po rotation.z = π/2 lokalna Y staje się X-świata).
+    const wheelOmega = this._speed / WHEEL_R;
+    for (const w of this._wheels) {
+      w.rotation.x += wheelOmega * dt;
+      if (w.userData.rim) w.userData.rim.rotation.x = w.rotation.x;
+    }
+
+    // Chowa nóżkę podczas jazdy
+    if (this._stand) this._stand.visible = false;
+  }
+
+  /** Reset stanu jazdy gdy gracz wysiada. */
+  resetDriveState() {
+    this._speed = 0;
+    this._lean = 0;
+    if (this._stand) this._stand.visible = true;
+    if (this._hbar) this._hbar.rotation.y = 0;
   }
 }
