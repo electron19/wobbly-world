@@ -469,15 +469,19 @@ export class Helicopter {
       });
     }
 
-    // ── Visual tilt (nose pitch + banking) ───────────────────────────────────
-    const fwdSpeed  = this._velX * sinF + this._velZ * cosF;
-    const sideSpeed = this._velX * cosF - this._velZ * sinF;
+    // ── Visual tilt — TYLKO w kierunku wychylenia steru (cyclic stick) ────────
+    // Realistic helicopter: cyclic (drążek) bezpośrednio sterują rolą i pitchem.
+    // Pitch: nos w dół gdy W (do przodu), w górę gdy S (do tyłu)
+    // Roll: przechył w lewo gdy strafe-left lub yaw-left, w prawo gdy strafe-right/yaw-right
+    // Bez wkładu kierownicy chopper wraca do poziomu — żadnego "przeciągania" inercją prędkości.
+    const tiltPitch = -fwdIn * 0.22;                       // ~12.6°
+    const tiltRoll  = (strafe * -0.28) + (yawIn * -0.16);  // ~16° strafe, ~9° yaw
     this.root.rotation.y = this.facing;
     this.root.rotation.x = THREE.MathUtils.lerp(
-      this.root.rotation.x, -fwdSpeed * 0.048, 1 - Math.exp(-dt * 4),
+      this.root.rotation.x, tiltPitch, 1 - Math.exp(-dt * 4.5),
     );
     this.root.rotation.z = THREE.MathUtils.lerp(
-      this.root.rotation.z, yawIn * -0.09 + sideSpeed * -0.035, 1 - Math.exp(-dt * 4),
+      this.root.rotation.z, tiltRoll, 1 - Math.exp(-dt * 4.5),
     );
 
     return hitPositions;

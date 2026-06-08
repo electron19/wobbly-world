@@ -1,5 +1,12 @@
 # Changelog — Wobbly World
 
+## [v0.14.23] — 2026-06-08
+### Fixed
+- **Helikopter pochył tylko w kierunku wychylenia steru** (cyclic stick) — wcześniej heli pochylał się wg PRĘDKOŚCI (zostawał pochylony nawet po puszczeniu sterów):
+  - Pitch (rotation.x): −fwdIn × 0.22 (nos w dół przy W, w górę przy S)
+  - Roll (rotation.z): strafe × −0.28 + yaw × −0.16 (przechył w stronę drążka i skrętu)
+  - Bez wkładu — heli wraca do poziomu (lerp 4.5)
+
 ## [v0.14.22] — 2026-06-08
 ### Added
 - **Enola Gay zrzuca bomby**: klawisz **B** (klawiatura) lub przycisk **0/A/Cross** (pad) — osobne triggery, cooldown 0.45s między zrzutami
