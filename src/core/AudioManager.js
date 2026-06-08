@@ -1566,4 +1566,57 @@ export class AudioManager {
       },
     };
   }
+
+  // ─── Bomby (zrzut + wybuch) ───────────────────────────────────────────────
+
+  /** Krótki świst opadającej bomby. */
+  playBombDrop() {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 1.2);
+    const f = ctx.createBiquadFilter();
+    f.type = 'bandpass'; f.frequency.value = 800; f.Q.value = 1.2;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.001, now);
+    g.gain.linearRampToValueAtTime(0.12, now + 0.1);
+    g.gain.linearRampToValueAtTime(0.001, now + 1.3);
+    osc.connect(f); f.connect(g); g.connect(this._masterGain);
+    osc.start(now); osc.stop(now + 1.35);
+  }
+
+  /** Wybuch bomby — spatial przy pozycji uderzenia. */
+  playBombExplosion(wx, wz) {
+    const ctx = this._ensureCtx();
+    const now = ctx.currentTime;
+
+    const panner = this._makePanner(wx, 1, wz, 20, 380, 1.5);
+    panner.connect(this._masterGain);
+
+    // Głęboki boom — low sin sweep
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.9);
+    const og = ctx.createGain();
+    og.gain.setValueAtTime(0.6, now);
+    og.gain.exponentialRampToValueAtTime(0.001, now + 1.4);
+    osc.connect(og); og.connect(panner);
+    osc.start(now); osc.stop(now + 1.45);
+
+    // Wybuch — szum biały filtrowany
+    const buf = this._makeNoise(1.6);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    const nf = ctx.createBiquadFilter();
+    nf.type = 'lowpass';
+    nf.frequency.setValueAtTime(2200, now);
+    nf.frequency.exponentialRampToValueAtTime(200, now + 1.2);
+    const ng = ctx.createGain();
+    ng.gain.setValueAtTime(0.55, now);
+    ng.gain.exponentialRampToValueAtTime(0.001, now + 1.6);
+    src.connect(nf); nf.connect(ng); ng.connect(panner);
+    src.start(now); src.stop(now + 1.65);
+  }
 }

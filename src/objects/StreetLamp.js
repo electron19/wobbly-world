@@ -26,7 +26,9 @@ export class StreetLamp extends WorldObject {
 
   _build() {
     const metalMat = toonMat(C.metal);
-    const headMat  = new THREE.MeshBasicMaterial({ color: C.lamp });
+    this._headMat  = new THREE.MeshBasicMaterial({ color: 0x554420 });   // dim w dzień
+    this._dayColor   = 0x554420;
+    this._nightColor = 0xFFE7A0;   // ciepły żółty świecący
 
     // Słup
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.10, POLE_H, 6), metalMat);
@@ -39,9 +41,21 @@ export class StreetLamp extends WorldObject {
     this.root.add(arm);
 
     // Głowica
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), headMat);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.28, 0.5), this._headMat);
     head.position.set(1.2, 4.32, 0);
     this.root.add(head);
+
+    // Punkt świetlny — wyłączony w dzień, włączony w nocy (intensity przez setLit)
+    this._light = new THREE.PointLight(0xFFE7A0, 0, 9, 1.8);
+    this._light.position.set(1.2, 4.0, 0);
+    this.root.add(this._light);
+  }
+
+  /** Włącz/wyłącz światło lampy (noc/dzień). */
+  setLit(on) {
+    if (!this._light || !this._headMat) return;
+    this._light.intensity = on ? 1.4 : 0;
+    this._headMat.color.setHex(on ? this._nightColor : this._dayColor);
   }
 
   placeAt(x, y, z, rotY = 0) {

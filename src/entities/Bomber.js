@@ -5,9 +5,15 @@ import { toonMat, addOutline } from '../core/Materials.js';
 //
 // Controls: same as Airplane / FighterJet.
 // Physics: heavy, slow, 4 radial engines with spinning propellers.
+// Bombs: KeyB (klawiatura) lub pad button 0 (A/Cross) — zrzuca bombę.
+
+const BOMB_GRAVITY = 18;        // m/s² — bombka swobodnie spada
+const BOMB_COOLDOWN = 0.45;     // s między zrzutami
+const BOMB_EXPLOSION_R = 9;     // promień wybuchu (visual)
 
 export class Bomber {
   constructor(scene, x = 0, y = 2, z = 0) {
+    this.scene      = scene;
     this.root       = new THREE.Group();
     this.isOccupied = false;
     this.isDrivable = true;
@@ -21,6 +27,9 @@ export class Bomber {
     this._throttle  = 0;
 
     this._propGroups = [];   // 4 prop groups
+    this._bombs        = [];  // active falling bombs
+    this._explosions   = [];  // active explosion meshes
+    this._bombCooldown = 0;
 
     this._build();
     this.root.position.set(x, y, z);
@@ -280,10 +289,124 @@ export class Bomber {
 
   // ── Update ─────────────────────────────────────────────────────────────────
 
+  // ── Bombs ──────────────────────────────────────────────────────────────────
+
+  _dropBomb(audio) {
+    const f = this.facing;
+    const sinF = Math.sin(f), cosF = Math.cos(f);
+    // Spawn pod kadłubem (lokalne y=-0.9), z dziedziczeniem prędkości bombera
+    const sx = this.root.position.x;
+    const sy = this.root.position.y - 0.9;
+    const sz = this.root.position.z;
+
+    const geo = new THREE.CapsuleGeometry(0.22, 0.7, 4, 8);
+    const mat = toonMat(0x3A3A3A);
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(sx, sy, sz);
+    mesh.rotation.x = Math.PI / 2;   // bombka leży poziomo zgodnie z lotem
+    mesh.rotation.y = f;
+    mesh.castShadow = true;
+    this.scene.add(mesh);
+    addOutline(mesh, 0.05);
+
+    // Mały statecznik (fin) — krzyż z 2 boxów
+    const finMat = toonMat(0x222222);
+    const fin1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.30, 0.20), finMat);
+    fin1.position.set(0, 0, -0.4);
+    mesh.add(fin1);
+    const fin2 = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.04, 0.20), finMat);
+    fin2.position.set(0, 0, -0.4);
+    mesh.add(fin2);
+
+    this._bombs.push({
+      mesh,
+      vx: sinF * this._speed,
+      vy: this._velY,
+      vz: cosF * this._speed,
+    });
+
+    audio?.playBombDrop?.();
+  }
+
+  _updateBombs(dt, audio) {
+    for (let i = this._bombs.length - 1; i >= 0; i--) {
+      const b = this._bombs[i];
+      b.vy -= BOMB_GRAVITY * dt;
+      b.mesh.position.x += b.vx * dt;
+      b.mesh.position.y += b.vy * dt;
+      b.mesh.position.z += b.vz * dt;
+      // Bombka "wskazuje" kierunek upadku — pitch w stronę vy/horiz
+      const horiz = Math.hypot(b.vx, b.vz);
+      const pitch = Math.atan2(-b.vy, horiz);   // 0=poziomo, π/2=pionowo w dół
+      b.mesh.rotation.x = Math.PI / 2 - pitch;
+
+      if (b.mesh.position.y <= 0.2) {
+        // Eksplozja
+        b.mesh.position.y = 0.2;
+        this.scene.remove(b.mesh);
+        b.mesh.geometry.dispose();
+        b.mesh.material.dispose();
+        this._spawnExplosion(b.mesh.position.x, b.mesh.position.z);
+        audio?.playBombExplosion?.(b.mesh.position.x, b.mesh.position.z);
+        this._bombs.splice(i, 1);
+      }
+    }
+  }
+
+  _spawnExplosion(wx, wz) {
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xFFAA22, transparent: true, opacity: 0.85, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 10), mat);
+    mesh.position.set(wx, 0.5, wz);
+    mesh.renderOrder = 3;
+    this.scene.add(mesh);
+    this._explosions.push({ mesh, life: 0, ttl: 0.9 });
+  }
+
+  _updateExplosions(dt) {
+    for (let i = this._explosions.length - 1; i >= 0; i--) {
+      const e = this._explosions[i];
+      e.life += dt;
+      const t = e.life / e.ttl;
+      if (t >= 1) {
+        this.scene.remove(e.mesh);
+        e.mesh.geometry.dispose();
+        e.mesh.material.dispose();
+        this._explosions.splice(i, 1);
+        continue;
+      }
+      // Rozszerzanie się + zanikanie + przejście koloru pomarańcz→czarny dym
+      const scale = 1 + t * (BOMB_EXPLOSION_R - 1);
+      e.mesh.scale.setScalar(scale);
+      e.mesh.position.y = 0.5 + t * 2.5;
+      e.mesh.material.opacity = (1 - t) * 0.85;
+      const r = 1.0 - t * 0.4;
+      const g = 0.66 - t * 0.55;
+      const bl = 0.13 - t * 0.13;
+      e.mesh.material.color.setRGB(Math.max(0, r), Math.max(0, g), Math.max(0, bl));
+    }
+  }
+
   update(dt, input, camera, audio = null) {
     // Spatial engine sound
     const { x, y, z } = this.root.position;
     audio?.updateBomberEngine?.(this, x, y, z, this._throttle);
+
+    // Bomby — aktualizuj nawet gdy gracz nie pilotuje (mogą jeszcze spadać)
+    this._updateBombs(dt, audio);
+    this._updateExplosions(dt);
+    this._bombCooldown = Math.max(0, this._bombCooldown - dt);
+
+    // Zrzut: klawiatura B lub pad button 0 (A/Cross) — każdy niezależnie
+    if (this.isOccupied && this._bombCooldown <= 0) {
+      const keyDrop = input?.isJustPressed?.('KeyB');
+      const padDrop = input?.isPadButtonPressed?.(0);
+      if (keyDrop || padDrop) {
+        this._dropBomb(audio);
+        this._bombCooldown = BOMB_COOLDOWN;
+      }
+    }
 
     const propIdle  = 1.8;
     const propFull  = 12;

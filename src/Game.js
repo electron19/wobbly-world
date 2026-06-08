@@ -658,18 +658,22 @@ export class Game {
       }
     }
 
-    // Gdy przejście dzień→noc: odpal syreny i dźwięk
+    // Gdy przejście dzień→noc: odpal syreny + zapal lampy + reflektory aut
     if (isNight && !this._wasNight) {
       this._zombieSpawnTimer = 2;
       for (const s of this._sirens) s.activate();
       this._sirenSound = this.audio.startSiren?.();
+      for (const lamp of this._knockableLamps) lamp.setLit?.(true);
+      for (const car of this.cars) car.setHeadlights?.(true);
     }
-    // Gdy przejście noc→dzień: wyłącz syreny + spal wszystkie zombie w słońcu
+    // Gdy przejście noc→dzień: wyłącz syreny + spal zombie + zgaś lampy + reflektory
     if (!isNight && this._wasNight) {
       for (const s of this._sirens) s.deactivate();
       this._sirenSound?.stop();
       this._sirenSound = null;
       for (const z of this.zombies) z.burn?.();
+      for (const lamp of this._knockableLamps) lamp.setLit?.(false);
+      for (const car of this.cars) car.setHeadlights?.(false);
     }
     this._wasNight = !!isNight;
 

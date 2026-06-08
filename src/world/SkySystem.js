@@ -108,7 +108,8 @@ export class SkySystem {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     const mat = new THREE.PointsMaterial({
-      color: 0xFFFFFF, size: 0.55, fog: false, transparent: true, opacity: 0,
+      color: 0xFFFFFF, size: 2.5, fog: false, transparent: true, opacity: 0,
+      sizeAttenuation: false,   // stała wielkość w pikselach — gwiazdy daleko ale widoczne
     });
     const mesh = new THREE.Points(geo, mat);
     mesh.renderOrder = -1;
@@ -127,7 +128,8 @@ export class SkySystem {
 
     const px = playerPos ? playerPos.x : 0;
     const pz = playerPos ? playerPos.z : 0;
-    const R  = 95;   // sky sphere radius (within far-plane 110)
+    const R  = 300;   // sky sphere radius — poza widocznym terenem (medium far=350)
+    const Y_FLOOR = 35;   // minimalna wysokość słońca/księżyca — nie zachodzą w ziemię
 
     if (isDay) {
       // Sun arc: a=0 (sunrise east) → π/2 (noon top) → π (sunset west)
@@ -138,7 +140,7 @@ export class SkySystem {
       const sunDirZ    = -0.28;                     // slight south bias (northern hemisphere feel)
 
       const sx = px + sunDirX * R;
-      const sy = sunDirY * R;
+      const sy = Math.max(Y_FLOOR, sunDirY * R);   // nigdy poniżej Y_FLOOR (nad horyzontem)
       const sz = pz + sunDirZ * R;
 
       // Sun light
@@ -200,7 +202,7 @@ export class SkySystem {
       const moonDirY      = moonElevation;
 
       const mx = px + moonDirX * R;
-      const my = moonElevation * R * 0.85;
+      const my = Math.max(Y_FLOOR, moonElevation * R * 0.85);
       const mz = pz + 0.28 * R;
 
       // Moon disc
@@ -249,9 +251,9 @@ export class SkySystem {
     const baseDensity = isDay ? 0.0070 : 0.0110;
     this._scene.fog.density = baseDensity;
 
-    // Position star field relative to player (always fills the sky above player)
+    // Star field — daleko nad graczem (R=700), bez wpływu fog na renderowanie punktów.
     this._starsMesh.position.set(px, 0, pz);
-    this._starsMesh.scale.setScalar(98);
+    this._starsMesh.scale.setScalar(300);
   }
 
   // Accessors for other systems

@@ -1,5 +1,24 @@
 # Changelog — Wobbly World
 
+## [v0.14.22] — 2026-06-08
+### Added
+- **Enola Gay zrzuca bomby**: klawisz **B** (klawiatura) lub przycisk **0/A/Cross** (pad) — osobne triggery, cooldown 0.45s między zrzutami
+  - Bomba dziedziczy prędkość bombera (vx, vy, vz), spada z grawitacją 18 m/s², visualnie obraca się w kierunku ruchu
+  - Wybuch po uderzeniu w ziemię: rozszerzająca się kula pomarańczowa→czarny dym (0.9s, promień 9 j.ś.)
+  - Dźwięki: `playBombDrop()` świst + `playBombExplosion(x,z)` spatial boom (słyszalne do 380 j.ś.)
+- **Lampy uliczne świecą w nocy** — `StreetLamp.setLit(on)`: PointLight 9 j.ś. promień, intensity 1.4 (0xFFE7A0). Głowica dim 0x554420 → 0xFFE7A0
+- **Reflektory aut świecą w nocy** — `Car.setHeadlights(on)`: 2× SpotLight (Math.PI/6 cone, dist 30, intensity 1.6), target 8m do przodu lekko w dół. Soczewki: dim 0x8A8060 → bright 0xFFFDE0
+- **Sky** — słońce/księżyc nie zachodzą w ziemię:
+  - R 95 → 300 (poza widocznym terenem przy medium far=350)
+  - Y_FLOOR=35: minimalna wysokość słońca/księżyca — sin(a) clampowane do ≥35m
+  - Gwiazdy: sizeAttenuation:false (stałe pixele) + skala 300 — daleko, ale widoczne
+
+### Notes — odłożone do v0.14.23
+- Helikopter: pochylenie tylko w kierunku roll/przechyłu steru (nie w pitch)
+- House-safe: zombie nie wchodzi do domu
+- Collision avoidance: ludzie + gracz omijają się, zwierzęta omijają budynki
+
+
 ## [v0.14.21] — 2026-06-08
 ### Changed
 - **Hamowanie realistyczne** — droga hamowania ∝ v²·m / (2·F_brake):

@@ -255,11 +255,13 @@ export class Car extends Entity {
     B(0, BODY_BOT + 0.03, BODY_ZR - 0.08, 1.88, 0.14, 0.12, blackMat, 0, false);
 
     // ── 9. REFLEKTORY PRZEDNIE ───────────────────────────────────────────────
+    this._headLensMats = [null, null];
     [-0.73, 0.73].forEach((x, i) => {
       // Obudowa
       B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.05, 0.56, 0.30, 0.10, darkMat, 0.025);
-      // Soczewka główna — indywidualny materiał żeby móc ją wyłączyć niezależnie
-      const hMat = new THREE.MeshBasicMaterial({ color: 0xFFFDE0 });
+      // Soczewka główna — indywidualny materiał (dim w dzień, jasny w nocy)
+      const hMat = new THREE.MeshBasicMaterial({ color: 0x8A8060 });   // przyciemniony w dzień
+      this._headLensMats[i] = hMat;
       const lens = B(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10, 0.42, 0.22, 0.06, hMat, 0, false);
       this._headMeshes[i] = lens;
       // Pasek DRL (nad reflektorem)
@@ -377,6 +379,31 @@ export class Car extends Entity {
     antenna.position.set(0.52, ROOF_BOT + 0.20, CAB_ZOff - 0.55);
     this._bodyPivot.add(antenna);
 
+    // ── Reflektory funkcjonalne (SpotLight × 2) — wyłączone w dzień ──────────
+    this._headLightSpots = [null, null];
+    [-0.73, 0.73].forEach((x, i) => {
+      const spot = new THREE.SpotLight(0xFFE7A0, 0, 30, Math.PI / 6, 0.45, 1.4);
+      spot.position.set(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10);
+      const target = new THREE.Object3D();
+      target.position.set(x, -0.3, BODY_ZF + 8);   // 8m do przodu, lekko w dół
+      this.root.add(target);
+      spot.target = target;
+      this.root.add(spot);
+      this._headLightSpots[i] = spot;
+    });
+  }
+
+  /** Włącz/wyłącz reflektory (noc/dzień). */
+  setHeadlights(on) {
+    if (!this._headLightSpots) return;
+    for (const spot of this._headLightSpots) {
+      if (spot) spot.intensity = on ? 1.6 : 0;
+    }
+    if (this._headLensMats) {
+      for (const mat of this._headLensMats) {
+        if (mat) mat.color.setHex(on ? 0xFFFDE0 : 0x8A8060);
+      }
+    }
   }
 
   // ─── Fizyka ───────────────────────────────────────────────────────────────
