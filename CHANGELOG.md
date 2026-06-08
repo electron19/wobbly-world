@@ -1,5 +1,10 @@
 # Changelog — Wobbly World
 
+## [v0.14.17] — 2026-06-08
+### Changed
+- **Syrena nocna**: LFO wycia spowolniony do 1/6 Hz (sinus: 3s narastanie + 3s opadanie = pełny okres 6s) zamiast 0.5 Hz — bardziej dramatyczne, alarmowe brzmienie
+- **Motocykl**: dodany rev LFO modulujący pitch (±18–50 Hz) i cutoff filtra (±220–600 Hz) — efekt "wrrr…mmm wrrr…mmm" z częstotliwością 0.9–2.9 Hz rosnącą wraz z gazem i prędkością
+
 ## [v0.14.16] — 2026-06-07
 ### Added
 - **Motocykl**: gracz teraz siedzi na motorze (nie znika) — pozycja gracza nadpisywana co klatkę na siedzeniu, dziedziczy lean i facing motocykla

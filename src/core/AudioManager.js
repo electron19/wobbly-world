@@ -594,6 +594,15 @@ export class AudioManager {
       const cutoff = 600 + throttle * 1600;
       e.lp.frequency.setTargetAtTime(cutoff, now, 0.20);
     }
+    // Rev LFO — "wrrr...mmm" przyspiesza i pogłębia przy gazie/prędkości
+    if (e.revLfo && e.revPitchAmp && e.revFilterAmp) {
+      const revHz    = 0.9 + throttle * 1.4 + speedFrac * 0.6;   // 0.9 → ~2.9 Hz
+      const pitchDep = 18 + speedFrac * 32;                       // ±18..50 Hz
+      const filtDep  = 220 + throttle * 380;                      // ±220..600 Hz
+      e.revLfo.frequency.setTargetAtTime(revHz,        now, 0.25);
+      e.revPitchAmp.gain.setTargetAtTime(pitchDep,     now, 0.25);
+      e.revFilterAmp.gain.setTargetAtTime(filtDep,     now, 0.25);
+    }
   }
 
   _startMotorcycleEngineFor(moto, x, y, z) {
@@ -650,7 +659,22 @@ export class AudioManager {
     noiseGain.connect(masterGain);
     noiseSrc.start(now);
 
-    const entry = { panner, masterGain, lp, osc1, osc2, noiseSrc };
+    // Rev LFO — "wrrr...mmm" — sinus modulujący pitch obu osc + cutoff filtra
+    const revLfo = ctx.createOscillator();
+    revLfo.type = 'sine';
+    revLfo.frequency.value = 0.9;
+    const revPitchAmp = ctx.createGain();
+    revPitchAmp.gain.value = 18;
+    revLfo.connect(revPitchAmp);
+    revPitchAmp.connect(osc1.frequency);
+    revPitchAmp.connect(osc2.frequency);
+    const revFilterAmp = ctx.createGain();
+    revFilterAmp.gain.value = 220;
+    revLfo.connect(revFilterAmp);
+    revFilterAmp.connect(lp.frequency);
+    revLfo.start(now);
+
+    const entry = { panner, masterGain, lp, osc1, osc2, noiseSrc, revLfo, revPitchAmp, revFilterAmp };
     this._motoEngines.set(moto, entry);
     return entry;
   }
@@ -660,11 +684,12 @@ export class AudioManager {
     if (!e || !this._ctx) return;
     const now = this._ctx.currentTime;
     e.masterGain.gain.setTargetAtTime(0.001, now, 0.25);
-    const { osc1, osc2, noiseSrc } = e;
+    const { osc1, osc2, noiseSrc, revLfo } = e;
     setTimeout(() => {
       try { osc1.stop();     } catch (_) {}
       try { osc2.stop();     } catch (_) {}
       try { noiseSrc.stop(); } catch (_) {}
+      try { revLfo?.stop();  } catch (_) {}
     }, 700);
     this._motoEngines.delete(moto);
   }
@@ -1502,10 +1527,10 @@ export class AudioManager {
     osc2.type = 'sawtooth';
     osc2.frequency.value = 443;
 
-    // LFO — wyjąca modulacja częstotliwości (200→800 Hz @ 0.5 Hz)
+    // LFO — wyjąca modulacja częstotliwości (sinus: 3s w górę + 3s w dół = okres 6s)
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
-    lfo.frequency.value = 0.5;   // 0.5 Hz — jedno "wyjcie" co 2 sekundy
+    lfo.frequency.value = 1 / 6;  // 0.1667 Hz — narastanie 3s, opadanie 3s
     const lfoGain = ctx.createGain();
     lfoGain.gain.value = 280;    // zakres modulacji ±280 Hz
     lfo.connect(lfoGain);
