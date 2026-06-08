@@ -1,5 +1,28 @@
 # Changelog — Wobbly World
 
+## [v0.14.20] — 2026-06-08
+### Changed
+- **Syrena nocna**: obniżony ton — osc 250/252 Hz (było 440/443), LFO ±160 Hz (było ±280), filtr 340 Hz (było 600). Sweep ~90..410 Hz, bardziej alarmowy/niski
+- **Fizyka pojazdów — review wg żądania**:
+  - Suspension stiffness 24 → 30 (mniej "wobble", krótsza kompresja)
+  - MaxSuspensionTravel 0.55 → 0.45 (mniej zapadania się chassis)
+  - Compression/relaxation 3.0 → 3.5 (szybsze tłumienie)
+  - Spawn Y 0.65 → 0.68 (zgodnie z nowym równaniem sprężyny: c_eq=g/(4k)=0.167m)
+  - FrictionSlip trawa: 2.0 → 1.2 (48% asfaltu zamiast 80% — drift, mniej "magicznej przyczepności")
+  - Rear grip floor trawa: 1.55 → 0.85
+  - Restoring torque na ziemi: 0 → 900 (likwiduje akumulujący się tilt poza miastem)
+  - DAMP_XZ ground: 1200 → 1800 (mniej "wobbly" jazdy)
+  - Cars (regular + police) używają tej samej `VehiclePhysics.createVehicle` — fizyka identyczna; police flag tylko dla świateł
+- **Player**: dodana buzia (uśmiech z 5 boxów) + oczy przesunięte z z=0.44 na z=0.53 (poza kulę body o promieniu 0.55 — wcześniej były wewnątrz, niewidoczne)
+- **Gaz usypiający** (NPC + Soldier + Zombie): upadek losowy w czasie (rate 0.20–0.90s zamiast stałe 0.35s) i kierunku (kąt 0..2π — mix rotacji X i Z, nie tylko na bok); długość snu 4–14s (było 6–10s)
+- **Zombie** ścigają najbliższy cel — gracza LUB NPC (znajdują najbliższego)
+- **NPC** uciekają od zombie — detekcja w promieniu 18 j.ś., wywołują `scare()` (panic run + krzyk)
+- **Wojsko na lotnisku** strzela do każdego intruza — dodany stan `huntNPC`, priorytet: zombie > gracz > NPC; każdy NPC na strefie lotniska zostanie zabity z 22 j.ś.
+
+### Notes
+- Cmentarz poza miastem + nocna ciężarówka wojska polująca na zombie — odłożone na v0.14.21 (większy scope)
+- Specyficzne miejsca gdzie auta zapadają/kręcą bączki — wymaga wskazania konkretnych współrzędnych przez użytkownika
+
 ## [v0.14.19] — 2026-06-08
 ### Fixed
 - **Lotnisko**: hangar B-29 nie zachodzi już na pas startowy — body zmniejszone z 54×14×28 na 30×14×24, przesunięty na localX=-32 (x=258), z=78 → x=243..273 (runway zaczyna się na x=283, zachowany margines)

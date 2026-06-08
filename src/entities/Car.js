@@ -476,8 +476,8 @@ export class Car extends Entity {
     const wantsToMove = driveInput > 0.18;
     const nearlyStopped = Math.abs(this._horizSpeedKmh ?? 0) < 2.0;
     const sunkLow = pos.y < 0.10;
-    // k=24, maxTravel=0.55: susp≈0.24m na ziemi. > 0.50 = koła w powietrzu.
-    const lostWheelContact = suspAvg > 0.50;
+    // k=30, maxTravel=0.45: susp≈0.17m na ziemi. > 0.42 = koła w powietrzu.
+    const lostWheelContact = suspAvg > 0.42;
 
     if (wantsToMove && nearlyStopped && (sunkLow || lostWheelContact)) {
       this._groundStallTimer = (this._groundStallTimer ?? 0) + dt;
@@ -900,8 +900,9 @@ export class Car extends Entity {
 
       }
 
-      // FrictionSlip: trawa 2.0 (było 1.8) — więcej trakcji poza miastem
-      const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 2.0);
+      // FrictionSlip: trawa znacznie niższa (1.2 vs droga 2.5 = 48%) — wcześniej 2.0
+      // była nieprawdopodobnie wysoka dla off-road. Realnie trawa to ~40-50% przyczepności asfaltu.
+      const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 1.2);
       const effBase = BASE_F * (1.0 - backAmount * 0.55);
       const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
       this._cornerT = cornerT;
@@ -909,7 +910,9 @@ export class Car extends Entity {
       // frictionSlip niemal do zera przy pełnym gazie od miejsca.
       const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.55;
       const cornerSlip = cornerT * 1.5;
-      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 1.55);
+      // Floor tylnej osi: trawa zdecydowanie niższa (0.85) niż asfalt/chodnik —
+      // pozwala na drift/poślizg poza miastem zamiast magicznego trzymania.
+      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 0.85);
       const fR = Math.max(rearGripFloor, effBase - launchGripLoss - cornerSlip);
 
       this._vehicle.setWheelFrictionSlip(0, effBase);
@@ -941,17 +944,21 @@ export class Car extends Entity {
       const pitchSin = 2 * (qS.w * qS.z - qS.x * qS.y);   // był błąd: + zamiast −
 
       // Wykryj oderwanie od ziemi.
-      // k=24, maxTravel=0.55: susp ≈ 0.24 m na ziemi; > 0.48 = koło w powietrzu.
+      // k=30, maxTravel=0.45: susp ≈ 0.17 m na ziemi; > 0.40 = koło w powietrzu.
       const s0 = this._vehicle.wheelSuspensionLength(0);
       const s1 = this._vehicle.wheelSuspensionLength(1);
       const s2 = this._vehicle.wheelSuspensionLength(2);
       const s3 = this._vehicle.wheelSuspensionLength(3);
-      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.48).length;
+      const airborneWheels = [s0, s1, s2, s3].filter(v => v > 0.40).length;
       const airborne = airborneWheels >= 3;
 
-      const DAMP_XZ   = airborne ? 18000 : 1200;
+      // Na ziemi: lekki restoring torque (900) zapobiega akumulującemu się
+      // tilten chassis przy długiej jeździe po nierównościach (głównie poza miastem,
+      // gdzie nie ma chodników stabilizujących pozycję) — wcześniej RESTORE=0 powodowało
+      // dryfowanie kąta chassis. DAMP_XZ podniesione 1200→1800 dla mniej "wobbly" jazdy.
+      const DAMP_XZ   = airborne ? 18000 : 1800;
       const DAMP_Y    = airborne ? 22000 :  600;
-      const RESTORE   = airborne ? 20000 :    0;
+      const RESTORE   = airborne ? 20000 :  900;
       const yawQuadDamp = airborne ? av.y * Math.abs(av.y) * 2600 : 0;
 
       this._chassis.addTorque({
@@ -989,7 +996,7 @@ export class Car extends Entity {
       const dPos = this._chassis.translation();
       const dLv  = this._chassis.linvel();
       const dAv  = this._chassis.angvel();
-      const airCnt = [ds0, ds1, ds2, ds3].filter(v => v > 0.42).length;
+      const airCnt = [ds0, ds1, ds2, ds3].filter(v => v > 0.40).length;
       this.debugState = {
         chassisY: dPos.y.toFixed(3),
         suspAvg:  ((ds0 + ds1 + ds2 + ds3) / 4).toFixed(3),

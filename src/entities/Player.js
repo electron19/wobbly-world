@@ -80,9 +80,25 @@ export class Player extends Entity {
       const gleam = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), sMat);
       gleam.position.set(0.04, 0.04, 0.10);
       g.add(gleam);
-      g.position.set(side * 0.22, 0.72, 0.44);
+      // Pchnięte do przodu (z=0.53) — wcześniej z=0.44 chowało oczy w kuli body (r=0.55).
+      g.position.set(side * 0.22, 0.74, 0.53);
       this.root.add(g);
     });
+
+    // ── Buzia: uśmiech (mały łuk z drobnych boxów) ──────────────────────────
+    const mouthMat = new THREE.MeshBasicMaterial({ color: 0x331111 });
+    const SEGMENTS = 5;
+    for (let i = 0; i < SEGMENTS; i++) {
+      const t = i / (SEGMENTS - 1);          // 0..1
+      const u = t * 2 - 1;                   // -1..1
+      const dot = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.045, 0.04), mouthMat);
+      dot.position.set(
+        u * 0.16,
+        0.50 - Math.abs(u) * 0.04,           // delikatnie zakrzywione (uśmiech)
+        0.55 - Math.abs(u) * 0.02,
+      );
+      this.root.add(dot);
+    }
   }
 
   _buildLimbs() {

@@ -118,11 +118,13 @@ export class Zombie {
     return new THREE.Mesh(new THREE.CapsuleGeometry(r, h, 3, 6), mat);
   }
 
-  /** Beknięcie gracza — zombie pada i śpi */
+  /** Beknięcie gracza — zombie pada losowo (czas + kierunek). */
   sleep() {
     if (this._dead || this._rising) return;
-    this._sleepTimer = 7.0 + Math.random() * 5;
+    this._sleepTimer = 4.0 + Math.random() * 10;   // 4-14s
     this._sleepFall  = 0;
+    this._sleepFallAngle = Math.random() * Math.PI * 2;
+    this._sleepFallRate  = 0.20 + Math.random() * 0.70;
   }
 
   /** Zabij zombie */
@@ -143,7 +145,7 @@ export class Zombie {
    * @param {number} dt
    * @param {{ root: { position: THREE.Vector3 } }} player
    */
-  update(dt, player) {
+  update(dt, player, npcs = null) {
     if (!this.root.visible) return;
 
     // ── Spalenie w słońcu (kremacja zombie o świcie) ─────────────────────────
@@ -220,30 +222,46 @@ export class Zombie {
       return;
     }
 
-    // ── Sen ───────────────────────────────────────────────────────────────────
+    // ── Sen (gaz usypiający — losowy kierunek/czas upadku) ──────────────────
     if (this._sleepTimer > 0) {
       this._sleepTimer -= dt;
-      this._sleepFall = Math.min(1, this._sleepFall + dt / 0.35);
+      const rate = this._sleepFallRate ?? 0.35;
+      this._sleepFall = Math.min(1, this._sleepFall + dt / rate);
       const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
-      this.root.rotation.z = p * (Math.PI / 2);
+      const a = this._sleepFallAngle ?? 0;
+      this.root.rotation.z = p * Math.sin(a) * (Math.PI / 2);
+      this.root.rotation.x = p * Math.cos(a) * (Math.PI / 2);
       this.root.position.y = p * 0.45;
       if (this._sleepTimer <= 0) {
         this._sleepFall = 0;
         this.root.rotation.z = 0;
+        this.root.rotation.x = 0;
         this.root.position.y = 0;
       }
       return;
     }
     this.root.rotation.z = 0;
+    this.root.rotation.x = 0;
 
-    // ── Chód w stronę gracza ──────────────────────────────────────────────────
-    const pp = player.root.position;
+    // ── Wybór celu: najbliższy ZNALEZIONY z graczem i NPC ────────────────────
     const mp = this.root.position;
+    let targetPos = player.root.position;
+    let bestDist = Math.hypot(targetPos.x - mp.x, targetPos.z - mp.z);
+    if (npcs) {
+      for (const n of npcs) {
+        if (n._dead || !n.root || !n.root.visible) continue;
+        const np = n.root.position;
+        const d = Math.hypot(np.x - mp.x, np.z - mp.z);
+        if (d < bestDist) { bestDist = d; targetPos = np; }
+      }
+    }
+
+    const pp = targetPos;
     const dx = pp.x - mp.x;
     const dz = pp.z - mp.z;
-    const dist = Math.hypot(dx, dz);
+    const dist = bestDist;
 
-    if (dist < 0.8) return;  // tuż przy graczu — stój
+    if (dist < 0.8) return;  // tuż przy ofierze — stój
 
     const dirX = dx / dist;
     const dirZ = dz / dist;

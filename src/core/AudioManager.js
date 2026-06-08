@@ -1520,19 +1520,19 @@ export class AudioManager {
     // Oscylator główny — niska, wycia melodia
     const osc1 = ctx.createOscillator();
     osc1.type = 'sawtooth';
-    osc1.frequency.value = 440;
+    osc1.frequency.value = 250;
 
     // Oscylator drugi — lekko zdestrojowany (chorus effect)
     const osc2 = ctx.createOscillator();
     osc2.type = 'sawtooth';
-    osc2.frequency.value = 443;
+    osc2.frequency.value = 252;
 
     // LFO — wyjąca modulacja częstotliwości (sinus: 3s w górę + 3s w dół = okres 6s)
     const lfo = ctx.createOscillator();
     lfo.type = 'sine';
     lfo.frequency.value = 1 / 6;  // 0.1667 Hz — narastanie 3s, opadanie 3s
     const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 280;    // zakres modulacji ±280 Hz
+    lfoGain.gain.value = 160;    // zakres modulacji ±160 Hz → sweep ~90..410 Hz
     lfo.connect(lfoGain);
     lfoGain.connect(osc1.frequency);
     lfoGain.connect(osc2.frequency);
@@ -1540,7 +1540,7 @@ export class AudioManager {
     // Filtr — ostre brzmienie syreny
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.value = 600;
+    filter.frequency.value = 340;
     filter.Q.value = 1.2;
 
     // Głośność — cicha syrena w tle

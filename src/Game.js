@@ -684,7 +684,7 @@ export class Game {
       const z = this.zombies[i];
       const dx = z.root.position.x - pp.x;
       const dz = z.root.position.z - pp.z;
-      if (dx * dx + dz * dz < 14400 || z._burning) z.update(dt, this.player);
+      if (dx * dx + dz * dz < 14400 || z._burning) z.update(dt, this.player, this.npcs);
 
       // Usuń całkowicie znikniętych
       if (!z.root.visible) {
@@ -1053,12 +1053,12 @@ export class Game {
     for (const npc of this.npcs) {
       const dx = npc.root.position.x - npcRef.x;
       const dz = npc.root.position.z - npcRef.z;
-      if (dx * dx + dz * dz < 14400) npc.update(dt);
+      if (dx * dx + dz * dz < 14400) npc.update(dt, this.zombies, this.audio);
     }
 
     // ── Żołnierze — zawsze aktywni w strefie lotniska ────────────────────
     for (const soldier of this.soldiers) {
-      soldier.update(dt, this.player, this.zombies, (soldierPos) => this._onShotByNPC(soldierPos));
+      soldier.update(dt, this.player, this.zombies, (soldierPos) => this._onShotByNPC(soldierPos), this.npcs);
     }
 
     // ── Zombie — nocne potwory ────────────────────────────────────────────

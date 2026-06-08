@@ -28,12 +28,12 @@ export class VehiclePhysics {
   createVehicle(rapierWorld, x, y, z, facing = 0) {
     const R = getRapier();
 
-    // Spawn at 0.65 m = spring equilibrium.
-    // Formula: F = k·compression·M_chassis → equilibrium c_eq = g/(4·k) = 20/(4·24) = 0.208 m
-    // chassis_Y = wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.208 = 0.642 m ≈ 0.65 m
+    // Spawn at 0.68 m = spring equilibrium.
+    // Formula: F = k·compression·M_chassis → equilibrium c_eq = g/(4·k) = 20/(4·30) = 0.167 m
+    // chassis_Y = wheel_radius + rest_length − c_eq = 0.40 + 0.45 − 0.167 = 0.683 m
     // Spawning here means zero net force on frame 1 → no settling, no bounce.
     const chassisDesc = R.RigidBodyDesc.dynamic()
-      .setTranslation(x, 0.65, z)
+      .setTranslation(x, 0.68, z)
       .setLinearDamping(0.04)
       .setAngularDamping(0.20);
 
@@ -83,14 +83,18 @@ export class VehiclePhysics {
       );
     }
 
-    // k=24 (soft) — avoids resonance oscillations at 60 Hz.
-    // MaxSuspensionForce=18000 N/wheel is the real load-bearing limit
-    // (18000 > weight/wheel=7500 → car supported; 4×18000=72000 > total weight=30000 ✓).
+    // k=30 (medium-stiff) — ograniczona kompresja przy nierównościach terenu,
+    // mniej "wobble" i akumulującego się tiltu na trawie/wzgórzach.
+    // c_eq = g/(4·k) = 20/(4·30) = 0.167 m (równowaga sprężyny przy mass=1500, g=20).
+    // chassis_Y spawn = 0.40 + 0.45 − 0.167 = 0.683 m → spawn 0.68 m.
+    // MaxSuspensionForce=18000 N/wheel zachowane (4×18000=72000 > weight=30000 ✓).
+    // maxTravel zmniejszony z 0.55 → 0.45: chassis nie zapada się tak głęboko
+    // przy gwałtownych zmianach pochyłości (np. wjazd na trawę/zbocze).
     for (let i = 0; i < 4; i++) {
-      vehicle.setWheelSuspensionStiffness(i,   24);
-      vehicle.setWheelSuspensionCompression(i,  3.0);
-      vehicle.setWheelSuspensionRelaxation(i,   3.0);
-      vehicle.setWheelMaxSuspensionTravel(i,    0.55);
+      vehicle.setWheelSuspensionStiffness(i,   30);
+      vehicle.setWheelSuspensionCompression(i,  3.5);
+      vehicle.setWheelSuspensionRelaxation(i,   3.5);
+      vehicle.setWheelMaxSuspensionTravel(i,    0.45);
       vehicle.setWheelMaxSuspensionForce(i,    18000);
       vehicle.setWheelFrictionSlip(i,           1.8);
       vehicle.setWheelSideFrictionStiffness(i,  1.0);

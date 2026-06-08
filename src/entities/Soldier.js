@@ -209,11 +209,13 @@ export class Soldier {
     this._dyingTimer = 0;
   }
 
-  /** Beknięcie gracza — żołnierz pada i śpi jak cywil */
+  /** Beknięcie gracza — żołnierz pada losowo (czas + kierunek). */
   sleep() {
     if (this._dead) return;
-    this._sleepTimer = 6.0 + Math.random() * 4;
+    this._sleepTimer = 4.0 + Math.random() * 8;
     this._sleepFall  = 0;
+    this._sleepFallAngle = Math.random() * Math.PI * 2;
+    this._sleepFallRate  = 0.20 + Math.random() * 0.70;
     this._state      = 'patrol';
     this._waiting    = true;
   }
@@ -224,7 +226,7 @@ export class Soldier {
    * @param {object} player  instancja Player (player.root.position)
    * @param {Function} onShootPlayer  callback(soldierPos) — trafiony gracz dostaje obrażenia
    */
-  update(dt, player, zombies, onShootPlayer) {
+  update(dt, player, zombies, onShootPlayer, npcs = null) {
     if (!this.root.visible) return;
 
     // ── Śmierć ───────────────────────────────────────────────────────────────
@@ -241,17 +243,21 @@ export class Soldier {
       return;
     }
 
-    // ── Sen (beknięcie gracza) ────────────────────────────────────────────────
+    // ── Sen (gaz usypiający — upadek losowy w czasie i kierunku) ──────────────
     if (this._sleepTimer > 0) {
       this._sleepTimer -= dt;
-      this._sleepFall = Math.min(1, (this._sleepFall ?? 0) + dt / 0.35);
+      const rate = this._sleepFallRate ?? 0.35;
+      this._sleepFall = Math.min(1, (this._sleepFall ?? 0) + dt / rate);
       const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
-      this.root.rotation.z = p * (Math.PI / 2);
+      const a = this._sleepFallAngle ?? 0;
+      this.root.rotation.z = p * Math.sin(a) * (Math.PI / 2);
+      this.root.rotation.x = p * Math.cos(a) * (Math.PI / 2);
       this.root.position.y = p * 0.45;
       if (this._sleepTimer <= 0) {
         this._sleepFall  = 0;
         this._sleepTimer = 0;
         this.root.rotation.z = 0;
+        this.root.rotation.x = 0;
         this.root.position.y = 0;
         this._waiting = true;
       }
@@ -284,19 +290,38 @@ export class Soldier {
       }
     }
 
+    // Najbliższy NPC na terenie lotniska — wojsko zabija intruzów
+    let npcTarget = null;
+    let npcDist = Infinity;
+    if (npcs && !(this._scaredTimer > 0)) {
+      for (const n of npcs) {
+        if (n._dead || !n.root || !n.root.visible) continue;
+        const np = n.root.position;
+        if (!Soldier.isInAirportZone(np.x, np.z)) continue;
+        const d = Math.hypot(np.x - mp.x, np.z - mp.z);
+        if (d < HUNT_RANGE && d < npcDist) {
+          npcDist = d;
+          npcTarget = n;
+        }
+      }
+    }
+
     this._shootCooldown = Math.max(0, this._shootCooldown - dt);
     // Odliczanie strachu po pierdnięciu
     if (this._scaredTimer > 0) this._scaredTimer -= dt;
 
     // ── Maszyna stanów AI ─────────────────────────────────────────────────────
+    // Priorytet celów: zombie > gracz (na lotnisku) > NPC (na lotnisku)
     switch (this._state) {
       case 'patrol':
-        // Priorytet: zombie > gracz
         if (zombieTarget && !(this._scaredTimer > 0)) {
           this._state = 'huntZombie';
           this._zombieTarget = zombieTarget;
         } else if (playerEngageable) {
           this._state = 'chase';
+        } else if (npcTarget) {
+          this._state = 'huntNPC';
+          this._npcTarget = npcTarget;
         } else {
           this._doPatrol(dt);
         }
@@ -333,6 +358,33 @@ export class Soldier {
         this._doChase(dt, zp);
         if (zd < SHOOT_ZOMBIE_RANGE) {
           this._doShootZombie(zombieTarget);
+        }
+        break;
+      }
+
+      case 'huntNPC': {
+        // Zombie/gracz mają priorytet — przerywaj polowanie na NPC
+        if (zombieTarget && !(this._scaredTimer > 0)) {
+          this._state = 'huntZombie';
+          this._zombieTarget = zombieTarget;
+          break;
+        }
+        if (playerEngageable) {
+          this._state = 'chase';
+          break;
+        }
+        const t = this._npcTarget;
+        if (!t || t._dead || !t.root || !t.root.visible
+            || !Soldier.isInAirportZone(t.root.position.x, t.root.position.z)) {
+          this._state = 'patrol';
+          this._pickNextPatrolPoint();
+          break;
+        }
+        const np = t.root.position;
+        const nd = Math.hypot(np.x - mp.x, np.z - mp.z);
+        this._doChase(dt, np);
+        if (nd < SHOOT_ZOMBIE_RANGE) {
+          this._doShootNPC(t);
         }
         break;
       }
@@ -373,6 +425,13 @@ export class Soldier {
     if (this._shootCooldown > 0) return;
     this._shootCooldown = 0.9 + Math.random() * 0.6;
     zombie.kill?.();
+    this._flashTimer = 0.08;
+  }
+
+  _doShootNPC(npc) {
+    if (this._shootCooldown > 0) return;
+    this._shootCooldown = 1.0 + Math.random() * 0.7;
+    npc.kill?.();
     this._flashTimer = 0.08;
   }
 

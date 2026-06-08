@@ -66,12 +66,14 @@ export class NPC {
     scene.add(this.root);
   }
 
-  /** Czerwony dym z gęby gracza — NPC pada na bok i śpi. */
+  /** Czerwony dym z gęby gracza — NPC pada losowo w czasie i kierunku. */
   sleep() {
     const alreadySleeping = this._sleepTimer > 0;
-    this._sleepTimer = 6.0 + Math.random() * 4;
+    this._sleepTimer = 4.0 + Math.random() * 8;   // 4-12s (było 6-10s)
     if (!alreadySleeping) {
       this._sleepFall = 0;
+      this._sleepFallAngle = Math.random() * Math.PI * 2;   // dowolny kierunek upadku
+      this._sleepFallRate  = 0.20 + Math.random() * 0.70;   // tempo upadku 0.20–0.90s
       this._waiting   = true;
       this._speed     = 0;
     }
@@ -245,7 +247,22 @@ export class NPC {
     return { avoidX, avoidZ, blocked };
   }
 
-  update(dt) {
+  update(dt, zombies = null, audio = null) {
+    // Detekcja zombie w pobliżu — uciekaj w panice
+    if (zombies && !this._dead && !this._abduction && this._sleepTimer <= 0) {
+      const mp = this.root.position;
+      let nearest = null, nearestD = 18;   // zasięg detekcji 18 j.ś.
+      for (const z of zombies) {
+        if (z._dead || !z.root.visible) continue;
+        const zp = z.root.position;
+        const d = Math.hypot(zp.x - mp.x, zp.z - mp.z);
+        if (d < nearestD) { nearestD = d; nearest = z; }
+      }
+      if (nearest && this._scareTimer <= 0) {
+        this.scare(nearest.root.position.x, nearest.root.position.z, audio);
+      }
+    }
+
     if (this._abductedGone) return;
 
     // ── Śmierć — pada i zapada się ───────────────────────────────────────────
@@ -278,13 +295,14 @@ export class NPC {
       return;
     }
 
-    // ── Sen + wstawanie ────────────────────────────────────────────────────────
+    // ── Sen + wstawanie (upadek losowy w czasie i kierunku) ───────────────────
     if (this._sleepTimer > 0 || this._sleepFall > 0) {
       if (this._sleepTimer > 0) {
         this._sleepTimer -= dt;
-        this._sleepFall = Math.min(1, this._sleepFall + dt / 0.35);
+        const rate = this._sleepFallRate ?? 0.35;
+        this._sleepFall = Math.min(1, this._sleepFall + dt / rate);
         if (this._sleepTimer <= 0) {
-          this._sleepFall = 0;   // natychmiastowe wstanie
+          this._sleepFall = 0;
           this._speed     = this._baseSpeed;
           this._waiting   = true;
           this._waitT     = 0.5;
@@ -292,12 +310,16 @@ export class NPC {
       }
       if (this._sleepFall > 0) {
         const p = this._sleepFall * this._sleepFall * (3 - 2 * this._sleepFall);
-        this.root.rotation.z = p * (Math.PI / 2);   // pada na bok
-        this.root.position.y = p * 0.45;            // wystarczy żeby nie wpadał pod ziemię
+        const a = this._sleepFallAngle ?? 0;
+        // pada w losowym kierunku — mix rotacji X i Z
+        this.root.rotation.z = p * Math.sin(a) * (Math.PI / 2);
+        this.root.rotation.x = p * Math.cos(a) * (Math.PI / 2);
+        this.root.position.y = p * 0.45;
         return;
       }
     }
     this.root.rotation.z = 0;
+    this.root.rotation.x = 0;
     this.root.position.y = 0;
 
     if (this._scareTimer > 0) {
