@@ -485,6 +485,9 @@ export class Game {
     car._audio = this.audio;
     this.audio.playEngineStart();
     this.audio.startTires();
+    // Reflektory funkcjonalne TYLKO dla auta którym jeździ gracz (perf!).
+    // Inne auta dostają tylko emissive zmianę przy noc/dzień.
+    if (this._sky && !this._sky.isDay) car.setDriverHeadlights?.(true);
     this._interactCooldown = 20;  // ~0.33s blokady na E po wsiadaniu
     // Kamera ustawia się za autem od razu
     this.camCtrl.yaw  = car.facing + Math.PI;
@@ -506,6 +509,7 @@ export class Game {
     this.player.root.visible = true;
     car._audio    = null;
     car.resetDriveState?.({ parked: true });
+    car.setDriverHeadlights?.(false);   // usuń SpotLights — kierowca wysiada
     this.audio.stopEngine();
     this.audio.stopTires();
     car.isOccupied        = false;
@@ -658,13 +662,15 @@ export class Game {
       }
     }
 
-    // Gdy przejście dzień→noc: odpal syreny + zapal lampy + reflektory aut
+    // Gdy przejście dzień→noc: odpal syreny + zapal lampy + emissive reflektorów
     if (isNight && !this._wasNight) {
       this._zombieSpawnTimer = 2;
       for (const s of this._sirens) s.activate();
       this._sirenSound = this.audio.startSiren?.();
       for (const lamp of this._knockableLamps) lamp.setLit?.(true);
+      // Tylko emissive — actual SpotLight jedynie na aucie gracza (poniżej)
       for (const car of this.cars) car.setHeadlights?.(true);
+      if (this._drivingCar) this._drivingCar.setDriverHeadlights?.(true);
     }
     // Gdy przejście noc→dzień: wyłącz syreny + spal zombie + zgaś lampy + reflektory
     if (!isNight && this._wasNight) {
@@ -674,6 +680,7 @@ export class Game {
       for (const z of this.zombies) z.burn?.();
       for (const lamp of this._knockableLamps) lamp.setLit?.(false);
       for (const car of this.cars) car.setHeadlights?.(false);
+      if (this._drivingCar) this._drivingCar.setDriverHeadlights?.(false);
     }
     this._wasNight = !!isNight;
 

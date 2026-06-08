@@ -1,5 +1,19 @@
 # Changelog — Wobbly World
 
+## [v0.14.24] — 2026-06-08
+### Reverted
+- **Fizyka aut wycofana do stanu v0.14.20** (po reporcie: "jeżdżą gorzej"):
+  - `MAX_BRAKE_FORCE` 700 → **1500 Nm**, `HAND_BRAKE_FORCE` 3500 → **8000**, `BRAKE_GRASS_MULT` 0.7 → **1.0**
+  - `BASE_F`: road 1.6 → **2.5**, sidewalk 1.45 → **2.3**, grass 0.7 → **1.2**
+  - `rearGripFloor`: road 1.1 → **1.75**, sidewalk 1.0 → **1.55**, grass 0.5 → **0.85**
+  - `launchGripLoss` 0.40 → **0.55**, `cornerSlip` 1.2 → **1.5**
+
+### Performance
+- **Lampy uliczne**: usunięty `PointLight` per lamp (50+ lamp × shader cost). Świecenie nocą realizowane przez zmianę `_headMat.color` (MeshBasicMaterial "glowing")
+- **Reflektory aut**: `SpotLight` × 2 NIE są już tworzone dla każdego auta przy buildzie (38 światał × shader cost). Tworzone dynamicznie w `setDriverHeadlights(on)` TYLKO dla auta którym jeździ gracz (max 2 SpotLight w grze)
+- `Game._enterCar()` / `_exitCar()` zarządzają `setDriverHeadlights` + przejście dzień↔noc obsługuje aktualne `_drivingCar`
+- Pozostałe auta zachowują efekt nocy przez emissive zmianę soczewki (`_headLensMats`) — wizualnie świecą bez actual lights
+
 ## [v0.14.23] — 2026-06-08
 ### Fixed
 - **Helikopter pochył tylko w kierunku wychylenia steru** (cyclic stick) — wcześniej heli pochylał się wg PRĘDKOŚCI (zostawał pochylony nawet po puszczeniu sterów):

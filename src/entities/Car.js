@@ -13,12 +13,12 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
 const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
-// Hamowanie: droga ∝ v²·m / (2·F_total).
-// MAX_BRAKE_FORCE=700 Nm → F_total = 4×(700/0.40) = 7000 N → decel ≈ 4.67 m/s² (0.48g).
-// Przy 50 km/h droga ≈ 20 m, przy 100 km/h ≈ 83 m — realistycznie, nie "stop w miejscu".
-const MAX_BRAKE_FORCE    = 700;   // Nm — łagodne hamowanie, wymaga dystansu
-const BRAKE_GRASS_MULT   = 0.7;   // trawa: jeszcze 30% słabsze (mokra/luźna nawierzchnia)
-const HAND_BRAKE_FORCE   = 3500;  // Nm — blokuje tylne koła ale nie ekstremalnie
+// Siły hamulców skalowane do k=20000 (siła normalna ~7500 N/koło, wheel radius=0.40 m):
+//   max_traction = frictionSlip × normal = 2.0 × 7500 = 15000 N/koło
+//   max_brake_torque = 15000 × 0.40 = 6000 Nm — tyle potrzeba żeby zablokować koło
+const MAX_BRAKE_FORCE    = 1500;  // Nm — ~25% blokowania, płynne hamowanie (GTA-feel)
+const BRAKE_GRASS_MULT   = 1.0;
+const HAND_BRAKE_FORCE   = 8000;  // Nm — blokuje tylne koła (drift)
 const IDLE_BRAKE         = 100;   // Nm — zapobiega staczaniu się
 const PARK_BRAKE_FORCE   = 20000; // Nm — pełny hamulec parkingowy (idleStep)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -379,30 +379,49 @@ export class Car extends Entity {
     antenna.position.set(0.52, ROOF_BOT + 0.20, CAB_ZOff - 0.55);
     this._bodyPivot.add(antenna);
 
-    // ── Reflektory funkcjonalne (SpotLight × 2) — wyłączone w dzień ──────────
-    this._headLightSpots = [null, null];
-    [-0.73, 0.73].forEach((x, i) => {
-      const spot = new THREE.SpotLight(0xFFE7A0, 0, 30, Math.PI / 6, 0.45, 1.4);
-      spot.position.set(x, BODY_BOT + BODY_H * 0.73, BODY_ZF + 0.10);
-      const target = new THREE.Object3D();
-      target.position.set(x, -0.3, BODY_ZF + 8);   // 8m do przodu, lekko w dół
-      this.root.add(target);
-      spot.target = target;
-      this.root.add(spot);
-      this._headLightSpots[i] = spot;
-    });
+    // Reflektory: tylko emissive zmiana koloru dla wszystkich aut.
+    // SpotLights dodawane DYNAMICZNIE tylko do auta którym jeździ gracz
+    // (przez setDriverHeadlights) — zapobiega 38 lights × shader cost przy ~19 autach.
+    this._headLightSpots = null;
+    // Pozycje docelowe dla późniejszego attachHeadlightSpots()
+    this._headLightLocs = {
+      lx: 0.73,
+      ly: BODY_BOT + BODY_H * 0.73,
+      lz: BODY_ZF + 0.10,
+    };
   }
 
-  /** Włącz/wyłącz reflektory (noc/dzień). */
+  /** Włącz/wyłącz reflektory (tylko emissive — wszystkie auta, tanio). */
   setHeadlights(on) {
-    if (!this._headLightSpots) return;
-    for (const spot of this._headLightSpots) {
-      if (spot) spot.intensity = on ? 1.6 : 0;
-    }
     if (this._headLensMats) {
       for (const mat of this._headLensMats) {
         if (mat) mat.color.setHex(on ? 0xFFFDE0 : 0x8A8060);
       }
+    }
+  }
+
+  /** Stwórz lub usuń funkcjonalne reflektory (SpotLight × 2) — TYLKO dla driving car. */
+  setDriverHeadlights(on) {
+    if (on && !this._headLightSpots) {
+      const { lx, ly, lz } = this._headLightLocs;
+      this._headLightSpots = [];
+      for (const sx of [-lx, lx]) {
+        const spot = new THREE.SpotLight(0xFFE7A0, 1.6, 30, Math.PI / 6, 0.45, 1.4);
+        spot.position.set(sx, ly, lz);
+        const target = new THREE.Object3D();
+        target.position.set(sx, -0.3, lz + 8);
+        this.root.add(target);
+        spot.target = target;
+        this.root.add(spot);
+        this._headLightSpots.push({ spot, target });
+      }
+    } else if (!on && this._headLightSpots) {
+      for (const { spot, target } of this._headLightSpots) {
+        this.root.remove(spot);
+        this.root.remove(target);
+        spot.dispose?.();
+      }
+      this._headLightSpots = null;
     }
   }
 
@@ -927,16 +946,19 @@ export class Car extends Entity {
 
       }
 
-      // FrictionSlip: realistyczne — droga 1.6, trawa 0.7 (44% drogi).
-      // Wcześniej 2.5/1.2 dawało zbyt szybki stop w miejscu — auto jakby na rzepie.
-      const BASE_F = onRoad ? 1.6 : (onSidewalk ? 1.45 : 0.7);
+      // FrictionSlip: trawa znacznie niższa (1.2 vs droga 2.5 = 48%) — wcześniej 2.0
+      // była nieprawdopodobnie wysoka dla off-road. Realnie trawa to ~40-50% przyczepności asfaltu.
+      const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 1.2);
       const effBase = BASE_F * (1.0 - backAmount * 0.55);
       const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
       this._cornerT = cornerT;
-      const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.40;
-      const cornerSlip = cornerT * 1.2;
-      // Floor tylnej osi: droga 1.1, trawa 0.5 — dopuszczamy drift przy szybkich skrętach
-      const rearGripFloor = onRoad ? 1.1 : (onSidewalk ? 1.0 : 0.5);
+      // Przy ruszaniu trzymaj wysoki grip tylnej osi. Poprzednie 2.5 zbijało
+      // frictionSlip niemal do zera przy pełnym gazie od miejsca.
+      const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.55;
+      const cornerSlip = cornerT * 1.5;
+      // Floor tylnej osi: trawa zdecydowanie niższa (0.85) niż asfalt/chodnik —
+      // pozwala na drift/poślizg poza miastem zamiast magicznego trzymania.
+      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 0.85);
       const fR = Math.max(rearGripFloor, effBase - launchGripLoss - cornerSlip);
 
       this._vehicle.setWheelFrictionSlip(0, effBase);

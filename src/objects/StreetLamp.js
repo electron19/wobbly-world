@@ -45,16 +45,13 @@ export class StreetLamp extends WorldObject {
     head.position.set(1.2, 4.32, 0);
     this.root.add(head);
 
-    // Punkt świetlny — wyłączony w dzień, włączony w nocy (intensity przez setLit)
-    this._light = new THREE.PointLight(0xFFE7A0, 0, 9, 1.8);
-    this._light.position.set(1.2, 4.0, 0);
-    this.root.add(this._light);
+    // Brak PointLight — 50+ lamp × PointLight rujnowało wydajność (shader cost).
+    // Świecenie nocą realizowane przez emissive change głowicy (MeshBasicMaterial = "glowing").
   }
 
-  /** Włącz/wyłącz światło lampy (noc/dzień). */
+  /** Włącz/wyłącz świecenie głowicy lampy (noc/dzień). */
   setLit(on) {
-    if (!this._light || !this._headMat) return;
-    this._light.intensity = on ? 1.4 : 0;
+    if (!this._headMat) return;
     this._headMat.color.setHex(on ? this._nightColor : this._dayColor);
   }
 
