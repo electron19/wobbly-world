@@ -1,5 +1,11 @@
 # Changelog — Wobbly World
 
+## [v0.14.18] — 2026-06-08
+### Added
+- **Zombie palą się w słońcu**: gdy zaczyna się dzień, wszystkie żywe zombie zapalają się — 2s animacja: rozpalanie (emissive pomarańczowy), czernienie materiałów, drżenie i zapadanie się w popiół (scale.y → 0.05), na końcu znikają i są usuwane
+- `Zombie.burn()` — nowa metoda + obsługa w `update()` (faza palenia ma priorytet przed `_dead`); cache materiałów + oryginalnych kolorów dla lerpu do czerni
+- Spalające się zombie są update'owane niezależnie od dystansu do gracza (pomijają gate 120 j.ś.)
+
 ## [v0.14.17] — 2026-06-08
 ### Changed
 - **Syrena nocna**: LFO wycia spowolniony do 1/6 Hz (sinus: 3s narastanie + 3s opadanie = pełny okres 6s) zamiast 0.5 Hz — bardziej dramatyczne, alarmowe brzmienie

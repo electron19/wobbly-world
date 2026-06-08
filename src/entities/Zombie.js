@@ -29,6 +29,9 @@ export class Zombie {
     this._dyingTimer = 0;
     this._sleepTimer = 0;
     this._sleepFall  = 0;
+    this._burning    = false;
+    this._burnTimer  = 0;
+    this._materialsCache = null;
 
     // Zombie wschodzi z ziemi na początku
     this._rising     = true;
@@ -129,12 +132,62 @@ export class Zombie {
     this._dyingTimer = 0;
   }
 
+  /** Spalenie w słońcu — wstaje słońce, zombie palą się na węgiel i znikają. */
+  burn() {
+    if (this._burning || this._dead) return;
+    this._burning = true;
+    this._burnTimer = 0;
+  }
+
   /**
    * @param {number} dt
    * @param {{ root: { position: THREE.Vector3 } }} player
    */
   update(dt, player) {
     if (!this.root.visible) return;
+
+    // ── Spalenie w słońcu (kremacja zombie o świcie) ─────────────────────────
+    if (this._burning) {
+      this._burnTimer += dt;
+      const t = this._burnTimer;
+      const total = 2.0;
+
+      // Cache materiałów + oryginalnych kolorów (jednorazowo)
+      if (!this._materialsCache) {
+        this._materialsCache = [];
+        this.root.traverse(o => {
+          if (!o.material) return;
+          const m = o.material;
+          if (m._burnOrig === undefined && m.color) {
+            m._burnOrig = { r: m.color.r, g: m.color.g, b: m.color.b };
+          }
+          this._materialsCache.push(m);
+        });
+      }
+
+      // Płomień (emissive): rośnie do 0.3s, gaśnie do 1.2s
+      const heat = t < 0.3 ? t / 0.3 : Math.max(0, 1 - (t - 0.3) / 0.9);
+      // Charring: 0→1 do 1.2s — materiały ciemnieją prawie do czerni
+      const char = Math.min(1, t / 1.2);
+      // Zapadanie się: zaczyna o 1.0s, kończy o 2.0s
+      const collapse = Math.max(0, Math.min(1, (t - 1.0) / 1.0));
+
+      for (const m of this._materialsCache) {
+        if (m.color && m._burnOrig) {
+          const k = 1 - char * 0.95;
+          m.color.setRGB(m._burnOrig.r * k, m._burnOrig.g * k, m._burnOrig.b * k);
+        }
+        if (m.emissive) m.emissive.setRGB(heat, heat * 0.35, 0);
+      }
+
+      // Drżenie i osuwanie się w popiół
+      this.root.rotation.z = Math.sin(t * 28) * 0.04 * heat;
+      this.root.scale.y    = 1.55 * (1 - collapse * 0.95);
+      this.root.position.y = -collapse * 0.4;
+
+      if (t >= total) this.root.visible = false;
+      return;
+    }
 
     // ── Śmierć ───────────────────────────────────────────────────────────────
     if (this._dead) {

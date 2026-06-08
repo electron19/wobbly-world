@@ -664,11 +664,12 @@ export class Game {
       for (const s of this._sirens) s.activate();
       this._sirenSound = this.audio.startSiren?.();
     }
-    // Gdy przejście noc→dzień: wyłącz syreny
+    // Gdy przejście noc→dzień: wyłącz syreny + spal wszystkie zombie w słońcu
     if (!isNight && this._wasNight) {
       for (const s of this._sirens) s.deactivate();
       this._sirenSound?.stop();
       this._sirenSound = null;
+      for (const z of this.zombies) z.burn?.();
     }
     this._wasNight = !!isNight;
 
@@ -683,7 +684,7 @@ export class Game {
       const z = this.zombies[i];
       const dx = z.root.position.x - pp.x;
       const dz = z.root.position.z - pp.z;
-      if (dx * dx + dz * dz < 14400) z.update(dt, this.player);
+      if (dx * dx + dz * dz < 14400 || z._burning) z.update(dt, this.player);
 
       // Usuń całkowicie znikniętych
       if (!z.root.visible) {
