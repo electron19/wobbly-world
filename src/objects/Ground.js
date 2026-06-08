@@ -112,15 +112,14 @@ export class Ground extends WorldObject {
     const roadCanvas  = this._makeRoadCanvas();
     const swCanvas    = this._makeSidewalkCanvas();
 
-    // ─── Trawa ───────────────────────────────────────────────────────────────
-    const grass = new THREE.Mesh(
-      new THREE.PlaneGeometry(s, s),
-      new THREE.MeshToonMaterial({
-        map: this._texFor(grassCanvas, s, s, 10),
-        gradientMap: toonGrad,
-      }),
-    );
-    grass.rotation.x = -Math.PI / 2;
+    // ─── Trawa ─────────────────────────────────────────────────────────────
+    // Box 0.01 grubości — zapobiega z-fightingowi z drogami/chodnikami (zero-thickness planes).
+    const grassMat = new THREE.MeshToonMaterial({
+      map: this._texFor(grassCanvas, s, s, 10),
+      gradientMap: toonGrad,
+    });
+    const grass = new THREE.Mesh(new THREE.BoxGeometry(s, 0.01, s), grassMat);
+    grass.position.y = -0.005;   // top dokładnie na y=0
     grass.receiveShadow = true;
     this.root.add(grass);
 
@@ -131,15 +130,15 @@ export class Ground extends WorldObject {
     const EX   = 4.5;    // krawędź głównego skrzyżowania
 
     const addSW = (cx, cz, w, d) => {
+      // Box 0.01 grub. — zapobiega z-fightingowi (zero-thickness plane był ryzykiem)
       const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(w, d),
+        new THREE.BoxGeometry(w, 0.01, d),
         new THREE.MeshToonMaterial({
           map: this._texFor(swCanvas, w, d, SW),
           gradientMap: toonGrad,
         }),
       );
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(cx, SW_H, cz);
+      m.position.set(cx, SW_H - 0.005, cz);   // top na SW_H = 0.06
       m.receiveShadow = true;
       this.root.add(m);
       // Sidewalk physics: nominally 1 mm thick so wheels roll over edge without resistance.
@@ -199,29 +198,27 @@ export class Ground extends WorldObject {
       for (const [s0, s1] of splitSegs(-swLimitEW, -EX, nsCuts)) addSW((s0+s1)/2, cz, s1-s0, SW);
     });
 
-    // ─── Drogi ───────────────────────────────────────────────────────────────
+    // ─── Drogi (Box 0.012 grub. — top y=0.012, czysto powyżej trawy y=0) ────
     [[0, 0, s, 6], [0, 0, 6, s]].forEach(([x, z, w, d]) => {
       const m = new THREE.Mesh(
-        new THREE.PlaneGeometry(w, d),
+        new THREE.BoxGeometry(w, 0.012, d),
         new THREE.MeshToonMaterial({
           map: this._texFor(roadCanvas, w, d, 3),
           gradientMap: toonGrad,
         }),
       );
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(x, 0.01, z);
+      m.position.set(x, 0.006, z);   // top 0.012
       m.receiveShadow = true;
       this.root.add(m);
     });
 
-    // ─── Przerywana linia środkowa ─────────────────────────────────────────
+    // ─── Przerywana linia środkowa (Box 0.008 grub. — top y=0.024) ─────────
     const lineMat = toonMat(0xFFFFCC);
     for (let i = -4; i <= 4; i++) {
       if (Math.abs(i) < 0.5) continue;
       [[i * 10, 0, 0.25, 5], [0, i * 10, 5, 0.25]].forEach(([x, z, w, d]) => {
-        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), lineMat);
-        m.rotation.x = -Math.PI / 2;
-        m.position.set(x, 0.012, z);
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.008, d), lineMat);
+        m.position.set(x, 0.020, z);   // top 0.024, czysto nad drogą 0.012
         this.root.add(m);
       });
     }

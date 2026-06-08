@@ -1344,13 +1344,13 @@ export class AudioManager {
 
     const bp = ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 160 + Math.random() * 120;  // 160–280 Hz — niski "prr"
-    bp.Q.value = 7;
+    bp.frequency.value = 80 + Math.random() * 60;   // 80–140 Hz — głębokie "prrr"
+    bp.Q.value = 8;
 
-    // ── LFO ~45–80 Hz — wibrowanie warg (charakter "prr") ────────────────────
+    // ── LFO ~25–45 Hz — wolniejsze wibracje warg (głębsze) ───────────────────
     const lfo = ctx.createOscillator();
     lfo.type = 'square';
-    lfo.frequency.value = 45 + Math.random() * 35;
+    lfo.frequency.value = 25 + Math.random() * 20;
     const lfoGain = ctx.createGain();
     lfoGain.gain.value = 0.8;
     lfo.connect(lfoGain);
@@ -1364,8 +1364,8 @@ export class AudioManager {
     // ── Krótki "prrk" — trzask na końcu ──────────────────────────────────────
     const click = ctx.createOscillator();
     click.type = 'sawtooth';
-    click.frequency.setValueAtTime(120, now + dur * 0.8);
-    click.frequency.exponentialRampToValueAtTime(40, now + dur + 0.04);
+    click.frequency.setValueAtTime(70, now + dur * 0.8);   // niżej
+    click.frequency.exponentialRampToValueAtTime(28, now + dur + 0.04);
     const cg = ctx.createGain();
     cg.gain.setValueAtTime(1.2, now + dur * 0.8);
     cg.gain.exponentialRampToValueAtTime(0.001, now + dur + 0.05);
@@ -1380,19 +1380,19 @@ export class AudioManager {
   playBurp() {
     const ctx = this._ensureCtx();
     const now = ctx.currentTime;
-    const dur = 0.32 + Math.random() * 0.35;  // 0.32–0.67 s
+    const dur = 0.40 + Math.random() * 0.40;  // 0.40–0.80 s (dłuższe, głębsze)
 
-    // Piła — gardłowe, bekawe brzmienie
+    // Piła — głębokie, gardłowe (znacznie niższe niż dotąd)
     const osc = ctx.createOscillator();
     osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(360 + Math.random() * 120, now);
-    osc.frequency.exponentialRampToValueAtTime(80 + Math.random() * 40, now + dur);
+    osc.frequency.setValueAtTime(110 + Math.random() * 50, now);   // 110–160 Hz start
+    osc.frequency.exponentialRampToValueAtTime(38 + Math.random() * 18, now + dur); // 38–56 Hz koniec
 
-    // Rezonansowy lowpass — gardłowa barwa
+    // Niski lowpass — pogłębia bas, tnie wyższe
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
-    lp.frequency.value = 900;
-    lp.Q.value = 4;
+    lp.frequency.value = 320;
+    lp.Q.value = 5;
 
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0.45, now);

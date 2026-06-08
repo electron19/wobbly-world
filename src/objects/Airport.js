@@ -61,7 +61,7 @@ export class Airport {
     const dashMat = toonMat(0xFFFFFF);
     for (let i = -6; i <= 6; i++) {
       const dash = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 6), dashMat);
-      dash.position.set(this._cx, 0.09, this._cz + i * 18);
+      dash.position.set(this._cx, 0.13, this._cz + i * 18);   // top 0.18 > runway top 0.08
       this._scene.add(dash);
     }
 
@@ -71,7 +71,7 @@ export class Airport {
       const baseZ = this._cz + side * 118;
       for (let s = -3; s <= 3; s++) {
         const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.1, 7), threshMat);
-        stripe.position.set(this._cx + s * 2.0, 0.09, baseZ);
+        stripe.position.set(this._cx + s * 2.0, 0.13, baseZ);   // top 0.18 > runway top 0.08
         this._scene.add(stripe);
       }
     }
@@ -86,8 +86,8 @@ export class Airport {
 
     // Yellow centre line on taxiway
     const ylMat = toonMat(0xDDAA00);
-    const yl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 218), ylMat);
-    yl.position.set(this._cx - 16, 0.05, this._cz);
+    const yl = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.02, 218), ylMat);
+    yl.position.set(this._cx - 16, 0.10, this._cz);   // top 0.11 > taxiway top 0.08
     this._scene.add(yl);
   }
 
@@ -102,8 +102,8 @@ export class Airport {
     // Parking lines on apron
     const lineMat = toonMat(0xFFFFFF);
     for (let i = -3; i <= 3; i++) {
-      const line = new THREE.Mesh(new THREE.BoxGeometry(17, 0.09, 0.2), lineMat);
-      line.position.set(this._cx - 21, 0.05, this._cz + i * 22);
+      const line = new THREE.Mesh(new THREE.BoxGeometry(17, 0.02, 0.2), lineMat);
+      line.position.set(this._cx - 21, 0.10, this._cz + i * 22);   // top 0.11 > apron top 0.08
       this._scene.add(line);
     }
   }

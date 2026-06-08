@@ -1,5 +1,18 @@
 # Changelog — Wobbly World
 
+## [v0.14.25] — 2026-06-08
+### Fixed
+- **Z-fighting na terenie**: wszystkie podłoża mają teraz wyraźną grubość >0 i czysto rozłożone Y:
+  - Ground.js: trawa, drogi, linie środkowe, chodniki — `PlaneGeometry` → `BoxGeometry`
+  - Stack Y (rosnący od dołu): trawa top y=0 → droga top y=0.012 → linia środkowa top y=0.024 → chodnik top y=0.06
+  - Każda warstwa ma 0.008–0.012 m grubości, gap między warstwami ≥4 mm — brak nakładania się płaszczyzn
+- **Z-fighting na lotnisku**: oznaczenia (dashed lines, threshold stripes, taxi/apron lines) wcześniej przebijały przez nawierzchnię:
+  - Runway top na y=0.08, markings przeniesione z y=0.09 → **y=0.13** (gap 5 mm zamiast 1 mm)
+  - Taxi/apron line: grubość 0.09 → 0.02 m, Y z 0.05 → 0.10 (top 0.11 > nawierzchnia 0.08)
+- **Bekanie i pierdzenie — niska częstotliwość**:
+  - `playBurp()`: osc 360→110 Hz → 80→38 Hz, lowpass 900→320 Hz, dur 0.32–0.67s → 0.40–0.80s (głębsze, dłuższe)
+  - `playFart()`: bandpass 160–280 Hz → 80–140 Hz, LFO 45–80 Hz → 25–45 Hz, click 120→70 Hz
+
 ## [v0.14.24] — 2026-06-08
 ### Reverted
 - **Fizyka aut wycofana do stanu v0.14.20** (po reporcie: "jeżdżą gorzej"):
