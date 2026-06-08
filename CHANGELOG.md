@@ -1,5 +1,17 @@
 # Changelog — Wobbly World
 
+## [v0.14.21] — 2026-06-08
+### Changed
+- **Hamowanie realistyczne** — droga hamowania ∝ v²·m / (2·F_brake):
+  - `MAX_BRAKE_FORCE` 1500 → 700 Nm → decel ~4.67 m/s² (0.48g zamiast 1g) → przy 50 km/h droga ~20 m, przy 100 km/h ~83 m
+  - `HAND_BRAKE_FORCE` 8000 → 3500 Nm (drift możliwy, ale nie ekstremalne blokowanie)
+  - `BRAKE_GRASS_MULT` 1.0 → 0.7 (trawa: hamulec o 30% słabszy)
+- **Ogólna przyczepność znacznie obniżona** — wcześniej auta "klejone" do drogi:
+  - `BASE_F` road 2.5 → 1.6, sidewalk 2.3 → 1.45, grass 1.2 → 0.7
+  - `rearGripFloor` road 1.75 → 1.1, sidewalk 1.55 → 1.0, grass 0.85 → 0.5
+  - `launchGripLoss` 0.55 → 0.40 (mniejszy spadek przy ruszaniu)
+  - `cornerSlip` 1.5 → 1.2
+
 ## [v0.14.20] — 2026-06-08
 ### Changed
 - **Syrena nocna**: obniżony ton — osc 250/252 Hz (było 440/443), LFO ±160 Hz (było ±280), filtr 340 Hz (było 600). Sweep ~90..410 Hz, bardziej alarmowy/niski

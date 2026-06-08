@@ -13,12 +13,12 @@ const AXLE_ZR  = -1.52;  // Z osi tylnej
 
 // ─── Stałe jazdy (Rapier DynamicRayCastVehicleController) ────────────────────
 const MAX_ENGINE_FORCE   = 4500;  // N na koło tylne (~0-100 w 7s)
-// Siły hamulców skalowane do k=20000 (siła normalna ~7500 N/koło, wheel radius=0.40 m):
-//   max_traction = frictionSlip × normal = 2.0 × 7500 = 15000 N/koło
-//   max_brake_torque = 15000 × 0.40 = 6000 Nm — tyle potrzeba żeby zablokować koło
-const MAX_BRAKE_FORCE    = 1500;  // Nm — ~25% blokowania, płynne hamowanie (GTA-feel)
-const BRAKE_GRASS_MULT   = 1.0;
-const HAND_BRAKE_FORCE   = 8000;  // Nm — blokuje tylne koła (drift)
+// Hamowanie: droga ∝ v²·m / (2·F_total).
+// MAX_BRAKE_FORCE=700 Nm → F_total = 4×(700/0.40) = 7000 N → decel ≈ 4.67 m/s² (0.48g).
+// Przy 50 km/h droga ≈ 20 m, przy 100 km/h ≈ 83 m — realistycznie, nie "stop w miejscu".
+const MAX_BRAKE_FORCE    = 700;   // Nm — łagodne hamowanie, wymaga dystansu
+const BRAKE_GRASS_MULT   = 0.7;   // trawa: jeszcze 30% słabsze (mokra/luźna nawierzchnia)
+const HAND_BRAKE_FORCE   = 3500;  // Nm — blokuje tylne koła ale nie ekstremalnie
 const IDLE_BRAKE         = 100;   // Nm — zapobiega staczaniu się
 const PARK_BRAKE_FORCE   = 20000; // Nm — pełny hamulec parkingowy (idleStep)
 const MAX_STEER_ANGLE  = 0.78;   // rad (≈45°)
@@ -900,19 +900,16 @@ export class Car extends Entity {
 
       }
 
-      // FrictionSlip: trawa znacznie niższa (1.2 vs droga 2.5 = 48%) — wcześniej 2.0
-      // była nieprawdopodobnie wysoka dla off-road. Realnie trawa to ~40-50% przyczepności asfaltu.
-      const BASE_F = onRoad ? 2.5 : (onSidewalk ? 2.3 : 1.2);
+      // FrictionSlip: realistyczne — droga 1.6, trawa 0.7 (44% drogi).
+      // Wcześniej 2.5/1.2 dawało zbyt szybki stop w miejscu — auto jakby na rzepie.
+      const BASE_F = onRoad ? 1.6 : (onSidewalk ? 1.45 : 0.7);
       const effBase = BASE_F * (1.0 - backAmount * 0.55);
       const cornerT = Math.abs(this._steer) * Math.min(1, absSpd / 70);
       this._cornerT = cornerT;
-      // Przy ruszaniu trzymaj wysoki grip tylnej osi. Poprzednie 2.5 zbijało
-      // frictionSlip niemal do zera przy pełnym gazie od miejsca.
-      const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.55;
-      const cornerSlip = cornerT * 1.5;
-      // Floor tylnej osi: trawa zdecydowanie niższa (0.85) niż asfalt/chodnik —
-      // pozwala na drift/poślizg poza miastem zamiast magicznego trzymania.
-      const rearGripFloor = onRoad ? 1.75 : (onSidewalk ? 1.55 : 0.85);
+      const launchGripLoss = forwAmount * Math.max(0, 1 - absSpd / 35) * 0.40;
+      const cornerSlip = cornerT * 1.2;
+      // Floor tylnej osi: droga 1.1, trawa 0.5 — dopuszczamy drift przy szybkich skrętach
+      const rearGripFloor = onRoad ? 1.1 : (onSidewalk ? 1.0 : 0.5);
       const fR = Math.max(rearGripFloor, effBase - launchGripLoss - cornerSlip);
 
       this._vehicle.setWheelFrictionSlip(0, effBase);
