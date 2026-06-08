@@ -1,5 +1,12 @@
 # Changelog — Wobbly World
 
+## [v0.14.19] — 2026-06-08
+### Fixed
+- **Lotnisko**: hangar B-29 nie zachodzi już na pas startowy — body zmniejszone z 54×14×28 na 30×14×24, przesunięty na localX=-32 (x=258), z=78 → x=243..273 (runway zaczyna się na x=283, zachowany margines)
+- **Lotnisko**: dach hangaru poprawiony — base radius pyramidy + skala dobrane tak, by po rotacji π/4 idealnie pokrywały podstawę kadłuba (była 73% pokrycia, stąd "krzywo")
+- **Lotnisko**: mniejszy hangar (Fighter) też naprawiony — body 22×8×14 na localX=-30, dach przeskalowany
+- **Lotnisko**: wieża kontroli lotów przeniesiona na skraj — z localX=-27,z=-5 (środek terenu) na localX=-32,z=-125 (SW corner przy fence), z widokiem na cały runway
+
 ## [v0.14.18] — 2026-06-08
 ### Added
 - **Zombie palą się w słońcu**: gdy zaczyna się dzień, wszystkie żywe zombie zapalają się — 2s animacja: rozpalanie (emissive pomarańczowy), czernienie materiałów, drżenie i zapadanie się w popiół (scale.y → 0.05), na końcu znikają i są usuwane

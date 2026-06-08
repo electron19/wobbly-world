@@ -5,12 +5,12 @@ import { toonMat, addOutline } from '../core/Materials.js';
  * Airport — military airfield complex.
  *
  * Layout (centre x=290, z=0):
- *   Runway        : 260×14 along Z  (x=290, z=-130..+130)
+ *   Runway        : 260×14 along Z  (x=290, z=-130..+130) — chronione, nic na nim nie stoi
  *   Taxiway       : parallel x=274, z=-110..+110, width 8
  *   Apron         : x=260..278, z=-80..+80
- *   Control tower : x=263, z=-5
- *   Hangar B-29   : centre x=262, z=75
- *   Fighter hangar: centre x=264, z=-70
+ *   Control tower : NW corner — x=258, z=-125 (na skraju lotniska, widok na cały pas)
+ *   Hangar B-29   : centre x=258, z=78 — body 30×14×24 (clear of runway 283..297)
+ *   Fighter hangar: centre x=260, z=-70 — body 22×8×14 (clear of runway)
  *   Perimeter fence, runway lights, wind sock
  */
 export class Airport {
@@ -113,112 +113,125 @@ export class Airport {
     const glassMat = new THREE.MeshToonMaterial({ color: 0x99CCEE, transparent: true, opacity: 0.75 });
     const darkMat  = toonMat(0x444444);
 
+    // Na skraju lotniska — SW corner, daleko od pasa i hangarów,
+    // dobry widok na cały runway (z=-130..+130)
+    const tx = this._cx - 32;    // x=258 (fence west=252)
+    const tz = this._cz - 125;   // z=-125 (fence south=-145)
+
     // Base building 8×8×4
     const base = new THREE.Mesh(new THREE.BoxGeometry(8, 4, 8), concMat);
-    base.position.set(this._cx - 27, 2, this._cz - 5);
+    base.position.set(tx, 2, tz);
     base.castShadow = true;
     this._scene.add(base);
     addOutline(base, 0.08);
 
     // Tower shaft 3×3×8
     const shaft = new THREE.Mesh(new THREE.BoxGeometry(3, 8, 3), concMat);
-    shaft.position.set(this._cx - 27, 8, this._cz - 5);
+    shaft.position.set(tx, 8, tz);
     shaft.castShadow = true;
     this._scene.add(shaft);
     addOutline(shaft, 0.07);
 
     // Glass cab 5×3×5
     const cab = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 5), glassMat);
-    cab.position.set(this._cx - 27, 13.5, this._cz - 5);
+    cab.position.set(tx, 13.5, tz);
     this._scene.add(cab);
     addOutline(cab, 0.06);
 
     // Roof slab
     const roof = new THREE.Mesh(new THREE.BoxGeometry(5.5, 0.3, 5.5), concMat);
-    roof.position.set(this._cx - 27, 15.2, this._cz - 5);
+    roof.position.set(tx, 15.2, tz);
     this._scene.add(roof);
 
     // Antenna masts
     for (const ox of [-1.2, 0, 1.2]) {
       const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3, 4), darkMat);
-      ant.position.set(this._cx - 27 + ox, 17, this._cz - 5);
+      ant.position.set(tx + ox, 17, tz);
       this._scene.add(ant);
     }
   }
 
   _addHangarB29() {
-    // Big hangar: 54×28×14, centre localX=-28, localZ=+75
-    const hMat  = toonMat(0x999FAA);
-    const dMat  = toonMat(0x4A4A55);
+    // Body 30×14×24 (był 54×14×28 — wystawał na pas startowy!).
+    // Centre localX=-32 (x=258) → body x=243..273 (czyste, runway zaczyna się na 283).
+    const hMat   = toonMat(0x999FAA);
+    const dMat   = toonMat(0x4A4A55);
     const roofMat = toonMat(0x777E88);
 
-    const bx = this._cx - 28;
-    const bz = this._cz + 75;
+    const bx = this._cx - 32;
+    const bz = this._cz + 78;
+    const W = 30, H = 14, D = 24;
 
     // Main body
-    const body = new THREE.Mesh(new THREE.BoxGeometry(54, 14, 28), hMat);
-    body.position.set(bx, 7, bz);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), hMat);
+    body.position.set(bx, H / 2, bz);
     body.castShadow = true;
     this._scene.add(body);
     addOutline(body, 0.1);
 
-    // Arched roof (cylinder cap)
-    const roofGeo = new THREE.CylinderGeometry(0, 28, 4, 4, 1);
+    // Pyramidal roof — base radius dobrany tak, by po rotacji π/4 i skalowaniu
+    // idealnie pokrywał prostokątną podstawę kadłuba (W × D).
+    const R = 16;
+    const baseSide = R * Math.SQRT2;          // bok kwadratu pyramidy po Y rot π/4
+    const roofGeo = new THREE.CylinderGeometry(0, R, 4, 4, 1);
     const roofMesh = new THREE.Mesh(roofGeo, roofMat);
     roofMesh.rotation.y = Math.PI / 4;
-    roofMesh.scale.set(1, 1, 28 / 54);
-    roofMesh.position.set(bx, 16, bz);
+    roofMesh.scale.set(W / baseSide, 1, D / baseSide);
+    roofMesh.position.set(bx, H + 2, bz);
     this._scene.add(roofMesh);
 
-    // 2 large hangar doors on front face (south side = +Z face)
-    for (const dx of [-13, 13]) {
-      const door = new THREE.Mesh(new THREE.BoxGeometry(24, 12, 0.4), dMat);
-      door.position.set(bx + dx, 6, bz + 14.2);
+    // 2 doors on +Z face (front face)
+    for (const dx of [-7.5, 7.5]) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(13, 12, 0.4), dMat);
+      door.position.set(bx + dx, 6, bz + D / 2 + 0.2);
       this._scene.add(door);
       addOutline(door, 0.07);
-      // door frame
-      const frame = new THREE.Mesh(new THREE.BoxGeometry(25, 0.5, 0.5), toonMat(0xCCCCCC));
-      frame.position.set(bx + dx, 12.3, bz + 14.2);
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(14, 0.5, 0.5), toonMat(0xCCCCCC));
+      frame.position.set(bx + dx, 12.3, bz + D / 2 + 0.2);
       this._scene.add(frame);
     }
 
-    // Vertical ribbing
+    // Vertical ribbing on front face
     const ribMat = toonMat(0xBBBBCC);
-    for (let i = -5; i <= 5; i++) {
-      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.4, 14.5, 0.2), ribMat);
-      rib.position.set(bx + i * 5, 7, bz + 14.1);
+    for (let i = -4; i <= 4; i++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.4, H + 0.5, 0.2), ribMat);
+      rib.position.set(bx + i * 3.5, H / 2, bz + D / 2 + 0.1);
       this._scene.add(rib);
     }
   }
 
   _addHangarFighter() {
-    // Small hangar: 28×16×8, centre localX=-26, localZ=-70
+    // Body 22×8×14 (był 28×8×16). Centre localX=-30 (x=260) → body x=249..271,
+    // z=-77..-63 — całkowicie poza runwayem.
     const hMat = toonMat(0x888E99);
     const dMat = toonMat(0x3D3D47);
 
-    const bx = this._cx - 26;
+    const bx = this._cx - 30;
     const bz = this._cz - 70;
+    const W = 22, H = 8, D = 14;
 
-    const body = new THREE.Mesh(new THREE.BoxGeometry(28, 8, 16), hMat);
-    body.position.set(bx, 4, bz);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), hMat);
+    body.position.set(bx, H / 2, bz);
     body.castShadow = true;
     this._scene.add(body);
     addOutline(body, 0.09);
 
-    // 2 bays / doors on front face
-    for (const dx of [-6, 6]) {
-      const door = new THREE.Mesh(new THREE.BoxGeometry(11, 6.5, 0.4), dMat);
-      door.position.set(bx + dx, 3.5, bz + 8.2);
+    // 2 doors on +Z face
+    for (const dx of [-5, 5]) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(9, 6.5, 0.4), dMat);
+      door.position.set(bx + dx, 3.5, bz + D / 2 + 0.2);
       this._scene.add(door);
       addOutline(door, 0.06);
     }
 
-    // Simple shed roof
-    const roofGeo = new THREE.CylinderGeometry(0, 15, 3, 4, 1);
+    // Pyramidal roof — base skalowana do W × D
+    const R = 12;
+    const baseSide = R * Math.SQRT2;
+    const roofGeo = new THREE.CylinderGeometry(0, R, 3, 4, 1);
     const roofMesh = new THREE.Mesh(roofGeo, toonMat(0x777777));
     roofMesh.rotation.y = Math.PI / 4;
-    roofMesh.scale.set(1, 1, 16 / 28);
-    roofMesh.position.set(bx, 9.5, bz);
+    roofMesh.scale.set(W / baseSide, 1, D / baseSide);
+    roofMesh.position.set(bx, H + 1.5, bz);
     this._scene.add(roofMesh);
   }
 
