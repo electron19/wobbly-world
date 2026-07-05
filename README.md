@@ -4,7 +4,7 @@ Przeglądarkowa gra 3D w klimacie sandboxowego miasta. Gracz porusza się pieszo
 
 ## Demo
 
-Produkcja: https://wobbly-world.vercel.app/
+Produkcja: https://wobbly-world-three.vercel.app/
 
 ## Aktualny stan projektu
 
