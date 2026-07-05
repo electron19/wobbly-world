@@ -20,18 +20,3 @@ const _rng = seedrandom(SEED);
 export function rand() {
   return _rng();
 }
-
-/** Losowa liczba zmiennoprzecinkowa w przedziale [min, max) */
-export function randFloat(min, max) {
-  return min + _rng() * (max - min);
-}
-
-/** Losowa liczba całkowita w przedziale [min, max] włącznie */
-export function randInt(min, max) {
-  return Math.floor(min + _rng() * (max - min + 1));
-}
-
-/** Losowy element tablicy */
-export function randChoice(arr) {
-  return arr[Math.floor(_rng() * arr.length)];
-}

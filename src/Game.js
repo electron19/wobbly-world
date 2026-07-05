@@ -114,6 +114,10 @@ export class Game {
     this._sky              = null;
     this._weather          = null;
     this._seasons          = null;
+    this._onResize         = null;
+    this._onWheel          = null;
+    this._rafId            = null;
+    this._disposed         = false;
   }
 
   _applyCameraMode() {
@@ -208,17 +212,19 @@ export class Game {
     this.player.setPhysicsBody(body, collider);
 
     // ─── 7. Resize ─────────────────────────────────────────────────────────
-    window.addEventListener('resize', () => {
+    this._onResize = () => {
       this.camera3.aspect = innerWidth / innerHeight;
       this.camera3.updateProjectionMatrix();
       this.renderer.setSize(innerWidth, innerHeight);
-    });
+    };
+    window.addEventListener('resize', this._onResize);
 
     // ─── 8a. Zoom kamery scrollem ──────────────────────────────────────────
-    window.addEventListener('wheel', (e) => {
+    this._onWheel = (e) => {
       e.preventDefault();
       this.camCtrl.dist = Math.max(3, Math.min(25, this.camCtrl.dist + e.deltaY * 0.02));
-    }, { passive: false });
+    };
+    window.addEventListener('wheel', this._onWheel, { passive: false });
 
     // ─── 9. UI ─────────────────────────────────────────────────────────────
     const loading = document.getElementById('loading');
@@ -344,32 +350,6 @@ export class Game {
     this.camCtrl.pitch       = this._savedCamPitch;
     this.camCtrl.dist        = CAM_DIST_FOOT;
     this._applyCameraMode();
-    this._uiEl.innerHTML =
-      'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
-  }
-
-  // ─── Wspinaczka po drabince ───────────────────────────────────────────────
-
-  _startClimbing(ladder, atTop) {
-    this._climbingLadder = ladder;
-    // Zaczynamy tuż przy końcu drabinki (0.3 j od krawędzi) żeby od razu ruszyć
-    this._climbT = atTop ? ladder.height - 0.4 : 0.4;
-    this._interactCooldown = 10;
-    this.player.velocityY = 0;
-    this._uiEl.innerHTML = 'W – w górę &nbsp;|&nbsp; S – w dół &nbsp;|&nbsp; E – odpuść drabinkę';
-  }
-
-  _stopClimbing(landTop = false, landBottom = false) {
-    const lad = this._climbingLadder;
-    this._climbingLadder = null;
-    this.player.velocityY = 0;   // zero gravity accumulation po wspinaczce
-    if (landTop) {
-      this.player._body.setNextKinematicTranslation(lad.getTopLandPos());
-    } else if (landBottom) {
-      this.player._body.setNextKinematicTranslation(lad.getBaseLandPos());
-    }
-    // else: odpuszczenie w połowie — gracz spada z bieżącej pozycji (wolna fizyka)
-    this._interactCooldown = 15;
     this._uiEl.innerHTML =
       'WASD – ruch &nbsp;|&nbsp; SPACJA – skok &nbsp;|&nbsp; C – widok &nbsp;|&nbsp; G – LOT &nbsp;|&nbsp; F – pierdzenie &nbsp;|&nbsp; B – beknięcie &nbsp;|&nbsp; K – usypiaj &nbsp;|&nbsp; E – wsiądź';
   }
@@ -868,13 +848,15 @@ export class Game {
   // ─── Game loop ────────────────────────────────────────────────────────────
 
   start() {
+    if (this._disposed) return;
     this._paused = false;
     this.applySettings(this._initSettings ?? {});
-    requestAnimationFrame(ts => this._loop(ts));
+    this._rafId = requestAnimationFrame(ts => this._loop(ts));
   }
 
   _loop(ts) {
-    requestAnimationFrame(t => this._loop(t));
+    if (this._disposed) return;
+    this._rafId = requestAnimationFrame(t => this._loop(t));
     if (this._paused) return;
     if (ts - this._lastTs < this._frameMs - 0.5) return;  // cap 60 FPS
     const dt = Math.min((ts - this._lastTs) / 1000, 0.05);
@@ -1267,5 +1249,26 @@ export class Game {
               `airborne: ${ds.airborne}/4 &nbsp; road: ${ds.onRoad}` : '');
     }
 
+  }
+
+  dispose() {
+    this._disposed = true;
+    if (this._rafId !== null) cancelAnimationFrame(this._rafId);
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
+    if (this._onWheel) window.removeEventListener('wheel', this._onWheel);
+    this.input?.dispose?.();
+    this.audio?.stopEngine?.();
+    this.audio?.stopTires?.();
+    this._sirenSound?.stop?.();
+    this._heliHUD?.hide?.();
+    this._jetHUD?.hide?.();
+    this._minimap?.dispose?.();
+    this._seasons?.dispose?.();
+    this._weather?.dispose?.();
+    this._sky?.dispose?.();
+    if (this.renderer) {
+      this.renderer.domElement?.remove();
+      this.renderer.dispose();
+    }
   }
 }

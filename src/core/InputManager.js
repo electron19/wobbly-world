@@ -37,7 +37,7 @@ export class InputManager {
       _curr: {},
     };
 
-    window.addEventListener('keydown', e => {
+    this._onKeyDown = e => {
       if (!this.keys[e.code]) {
         // Pierwsze wciśnięcie (nie autorepeat) → wrzuć do kolejki
         this._jpQueue.add(e.code);
@@ -46,35 +46,41 @@ export class InputManager {
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
-    });
-    window.addEventListener('keyup', e => { this.keys[e.code] = false; });
+    };
+    this._onKeyUp = e => { this.keys[e.code] = false; };
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
 
-    document.addEventListener('mousemove', e => {
+    this._onMouseMove = e => {
       if (!this._locked) return;
       this._pdx += e.movementX;
       this._pdy += e.movementY;
-    });
+    };
+    document.addEventListener('mousemove', this._onMouseMove);
 
-    document.addEventListener('pointerlockchange', () => {
+    this._onPointerLockChange = () => {
       this._locked = !!document.pointerLockElement;
-    });
+    };
+    document.addEventListener('pointerlockchange', this._onPointerLockChange);
 
     // Request pointer lock immediately on first user gesture (keydown works too)
-    const _tryLock = () => {
+    this._tryLock = () => {
       if (!this._locked) document.body.requestPointerLock();
     };
-    document.addEventListener('click',   _tryLock, { once: false });
-    document.addEventListener('keydown',  _tryLock, { once: true  });
-    document.addEventListener('mousedown', _tryLock, { once: true  });
+    document.addEventListener('click',   this._tryLock, { once: false });
+    document.addEventListener('keydown',  this._tryLock, { once: true  });
+    document.addEventListener('mousedown', this._tryLock, { once: true  });
 
-    document.addEventListener('mousedown', e => {
+    this._onMouseDown = e => {
       if (!this._locked) return;
       if (!this._mouseButtons[e.button]) this._mbQueue.add(e.button);
       this._mouseButtons[e.button] = true;
-    });
-    document.addEventListener('mouseup', e => {
+    };
+    this._onMouseUp = e => {
       this._mouseButtons[e.button] = false;
-    });
+    };
+    document.addEventListener('mousedown', this._onMouseDown);
+    document.addEventListener('mouseup', this._onMouseUp);
   }
 
   isDown(code)              { return !!this.keys[code]; }
@@ -146,5 +152,17 @@ export class InputManager {
     this.mouse.padRightY = this.pad.rightY;
     this._pdx = 0;
     this._pdy = 0;
+  }
+
+  dispose() {
+    window.removeEventListener('keydown', this._onKeyDown);
+    window.removeEventListener('keyup', this._onKeyUp);
+    document.removeEventListener('mousemove', this._onMouseMove);
+    document.removeEventListener('pointerlockchange', this._onPointerLockChange);
+    document.removeEventListener('click', this._tryLock);
+    document.removeEventListener('keydown', this._tryLock);
+    document.removeEventListener('mousedown', this._tryLock);
+    document.removeEventListener('mousedown', this._onMouseDown);
+    document.removeEventListener('mouseup', this._onMouseUp);
   }
 }

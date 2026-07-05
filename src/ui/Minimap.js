@@ -152,4 +152,5 @@ export class Minimap {
 
   show() { this._wrap.style.display = 'block'; }
   hide() { this._wrap.style.display = 'none'; }
+  dispose() { this._wrap?.remove(); }
 }

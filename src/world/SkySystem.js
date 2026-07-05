@@ -16,9 +16,9 @@
 
 import * as THREE from 'three';
 
-export const DAY_S   = 5 * 60;   // 300 s
-export const NIGHT_S = 5 * 60;   // 300 s
-export const CYCLE_S = DAY_S + NIGHT_S;  // 600 s
+const DAY_S   = 5 * 60;   // 300 s
+const NIGHT_S = 5 * 60;   // 300 s
+const CYCLE_S = DAY_S + NIGHT_S;  // 600 s
 
 // Start near the beginning of the day so the player first sees morning light.
 const START_OFFSET = 60;   // begin 1 min into the day cycle

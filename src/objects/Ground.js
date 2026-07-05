@@ -1,20 +1,10 @@
 import * as THREE from 'three';
 import { WorldObject } from './WorldObject.js';
-import { toonMat, toonGrad, C } from '../core/Materials.js';
+import { toonMat, toonGrad } from '../core/Materials.js';
 import { ROADS, ROAD_CLEAR } from '../world/zones.js';
 
 /** Wysokość krawężnika — używana też przez WorldBuilder do ustawiania obiektów. */
 export const SIDEWALK_H = 0.06;
-
-/**
- * Zwraca wysokość podłoża (y) dla danej pozycji XZ.
- * Chodnik: |x| ∈ (3, 4.5] lub |z| ∈ (3, 4.5].
- */
-export function getSidewalkHeight(x, z) {
-  const onNS = Math.abs(x) >= 3 && Math.abs(x) <= 4.5;
-  const onEW = Math.abs(z) >= 3 && Math.abs(z) <= 4.5;
-  return (onNS || onEW) ? SIDEWALK_H : 0;
-}
 
 /**
  * Teren: trawa + siatka dróg + chodniki + fizyczna podłoga.
