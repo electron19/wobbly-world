@@ -16,23 +16,36 @@ setTimeout(() => { loading.style.display = 'none'; }, 650);
 // ── 2. Game lifecycle ─────────────────────────────────────────────────────────
 let game    = null;
 let started = false;
+let starting = false;
 
 async function startGame(settings) {
+  if (starting) return;
   if (!started) {
-    started = true;
+    starting = true;
     loading.style.display = 'flex';
     loading.style.opacity = '1';
-    loading.querySelector('p').textContent = 'Ładowanie świata...';
+    loading.innerHTML = '🏘️ Wobbly World<p>Ładowanie świata...</p>';
     try {
       game = new Game();
       await game.init(settings);
+      started = true;
       loading.style.opacity = '0';
       setTimeout(() => { loading.style.display = 'none'; }, 650);
       menu.hide();
       game.start();
     } catch (err) {
       console.error('Błąd inicjalizacji:', err);
-      loading.innerHTML = `<span style="color:#ffdddd">❌ ${err.message}</span><p>Sprawdź konsolę (F12)</p>`;
+      game?.dispose?.();
+      game = null;
+      started = false;
+      const msg = err?.message ?? String(err);
+      loading.innerHTML = `<span style="color:#ffdddd">❌ ${msg}</span><p>Sprawdź konsolę (F12)</p>`;
+      setTimeout(() => {
+        loading.style.opacity = '0';
+        loading.style.display = 'none';
+      }, 2500);
+    } finally {
+      starting = false;
     }
   } else {
     menu.hide();

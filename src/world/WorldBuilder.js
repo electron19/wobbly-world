@@ -40,7 +40,7 @@ import { Bomber }                 from '../entities/Bomber.js';
 import { Airport }                from '../objects/Airport.js';
 import { Soldier }               from '../entities/Soldier.js';
 import { PanelBlock }             from '../objects/PanelBlock.js';
-import { isSafePoint, ROADS, ROAD_CLEAR } from '../world/zones.js';
+import { isSafePoint, ROADS, ROAD_CLEAR } from './zones.js';
 import { rand }                   from '../core/RNG.js';
 
 // Kierunki elewacji (rotation.y)

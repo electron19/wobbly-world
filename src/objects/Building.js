@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { WorldObject } from './WorldObject.js';
-import { toonMat, addOutline, C } from '../core/Materials.js';
+import { addOutline, C } from '../core/Materials.js';
 
 /**
  * Abstrakcyjna baza dla wszystkich budynków.

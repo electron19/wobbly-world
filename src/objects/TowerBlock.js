@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Building }            from './Building.js';
-import { toonMat, addOutline } from '../core/Materials.js';
+import { toonMat } from '../core/Materials.js';
 
 /**
  * Wieżowiec-blok — prosta prostopadłościenna wieża bez setbacków.

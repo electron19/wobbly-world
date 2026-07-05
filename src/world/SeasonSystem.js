@@ -19,7 +19,7 @@ import * as THREE from 'three';
 const SEASON_DURATION_MS = 24 * 60 * 60 * 1000;   // 24 real hours per season
 const LS_KEY = 'ww_season_start';
 
-export const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 
 const SEASON_CONFIG = {
   spring: {
@@ -136,6 +136,7 @@ export class SeasonSystem {
   }
 
   dispose() {
+    clearTimeout(this._badgeTimer);
     this._badge?.remove();
   }
 }

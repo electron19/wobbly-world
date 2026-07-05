@@ -3,7 +3,7 @@
  * Visual-only (no Rapier physics), same wander AI as NPC.
  */
 import * as THREE from 'three';
-import { toonMat, toonGrad } from '../core/Materials.js';
+import { toonMat } from '../core/Materials.js';
 
 // Dog colour palettes
 const DOG_PALETTES = [

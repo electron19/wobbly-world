@@ -14,7 +14,7 @@
 let R = null; // Rapier module
 
 export async function initRapier() {
-  R = await import('/lib/rapier3d-compat.mjs');
+  R = await import('../../lib/rapier3d-compat.mjs');
   await R.init();
 }
 

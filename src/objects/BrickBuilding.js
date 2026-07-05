@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { Building }            from './Building.js';
-import { toonMat, addOutline } from '../core/Materials.js';
+import { toonMat } from '../core/Materials.js';
 
 /**
  * Kamienica z cegły — styl amerykański XIX w. (brownstone / rowhouse).

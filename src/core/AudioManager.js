@@ -101,7 +101,9 @@ export class AudioManager {
 
   _ensureCtx() {
     if (!this._ctx) {
-      this._ctx = new AudioContext();
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) throw new Error('Web Audio API niedostępne w tej przeglądarce');
+      this._ctx = new AudioCtx();
       this._masterGain = this._ctx.createGain();
       this._masterGain.gain.value = this._volume;
       this._masterGain.connect(this._ctx.destination);
